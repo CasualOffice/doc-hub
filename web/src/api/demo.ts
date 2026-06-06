@@ -160,6 +160,15 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
   const url = new URL(path, "http://demo.local");
   const p = url.pathname;
 
+  // ─── Setup ───────────────────────────────────────────────────────────
+  if (p === "/api/setup/status" && method === "GET") {
+    // The demo seeds a workspace owner, so the wizard never fires.
+    return { needs_setup: false } as unknown as T;
+  }
+  if (p === "/api/setup/admin" && method === "POST") {
+    throw makeError(409, "setup already complete");
+  }
+
   // ─── Auth ────────────────────────────────────────────────────────────
   if (p === "/api/auth/sign-in" && method === "POST") {
     const body = init.json as { username?: string; password?: string };

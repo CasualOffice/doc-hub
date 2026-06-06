@@ -100,6 +100,15 @@ impl<'a> UserRepo<'a> {
         })
     }
 
+    /// Count rows in `users`. Backs the first-run admin-setup gate —
+    /// the wizard runs only when this is zero.
+    pub async fn count(&self) -> Result<i64, DbError> {
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+            .fetch_one(self.db.pool())
+            .await?;
+        Ok(n)
+    }
+
     /// Replace the stored password hash for an existing user. Returns
     /// `NotFound` if the user does not exist.
     pub async fn update_password(&self, id: &str, new_hash: &str) -> Result<(), DbError> {

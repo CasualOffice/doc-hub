@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use drive_db::{DbError, NewSession, SessionRepo, UserRepo};
+use drive_db::{DbError, NewSession, NewUser, SessionRepo, UserRepo};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -62,6 +62,101 @@ pub(crate) async fn sign_in(
             &sid,
             &NewSession {
                 user_id,
+                csrf_token: csrf.clone(),
+                ttl: state.session_ttl,
+            },
+        )
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+    let cookie = build_session_cookie(&sid, state.cookie_secure, state.session_ttl);
+    let mut resp = (StatusCode::OK, Json(SignInResp { csrf_token: csrf })).into_response();
+    resp.headers_mut()
+        .insert(header::SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
+    Ok(resp)
+}
+
+// ── First-run admin setup ──────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub(crate) struct SetupStatus {
+    pub needs_setup: bool,
+}
+
+/// Public — no auth, no session. Used by the SPA at boot to decide between
+/// the sign-in card and the setup wizard.
+pub(crate) async fn setup_status(
+    State(state): State<AuthState>,
+) -> Result<Json<SetupStatus>, AuthError> {
+    let users = UserRepo::new(&state.db);
+    let n = users
+        .count()
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+    Ok(Json(SetupStatus {
+        needs_setup: n == 0,
+    }))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetupAdminBody {
+    pub username: String,
+    pub password: String,
+}
+
+/// Public — no auth, no CSRF. The zero-users invariant *is* the auth here.
+/// Once the first admin exists, this endpoint returns 409 forever.
+pub(crate) async fn setup_admin(
+    State(state): State<AuthState>,
+    Json(body): Json<SetupAdminBody>,
+) -> Result<Response, AuthError> {
+    let username = body.username.trim();
+    if username.len() < 3 {
+        return Err(AuthError::PasswordPolicy(
+            "username must be at least 3 characters",
+        ));
+    }
+    if body.password.chars().count() < 12 {
+        return Err(AuthError::PasswordPolicy(
+            "password must be at least 12 characters",
+        ));
+    }
+
+    let users = UserRepo::new(&state.db);
+    let n = users
+        .count()
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+    if n > 0 {
+        // 409 lives in AuthError as a dedicated variant so the handler can be
+        // composed with the same IntoResponse machinery as the other auth flows.
+        return Err(AuthError::AlreadyInitialized);
+    }
+
+    let password_hash = hash_password(&body.password)?;
+    let user = users
+        .insert(&NewUser {
+            username: username.to_string(),
+            password_hash,
+            is_admin: true,
+        })
+        .await
+        .map_err(|e| match e {
+            // Lost a setup race — second caller sees 409.
+            DbError::UniqueViolation(_) => AuthError::AlreadyInitialized,
+            other => AuthError::Internal(other.to_string()),
+        })?;
+
+    // Auto-sign-in: mint a session for the freshly-created admin so the SPA
+    // can transition straight from wizard → shell.
+    let sid = generate_session_id();
+    let csrf = generate_csrf_token();
+    let sessions = SessionRepo::new(&state.db);
+    sessions
+        .insert(
+            &sid,
+            &NewSession {
+                user_id: user.id,
                 csrf_token: csrf.clone(),
                 ttl: state.session_ttl,
             },

@@ -120,6 +120,25 @@ export async function getAbout(): Promise<About> {
   return request<About>("/api/about");
 }
 
+// ─── First-run setup ─────────────────────────────────────────────────
+
+export interface SetupStatus {
+  needs_setup: boolean;
+}
+
+export async function setupStatus(): Promise<SetupStatus> {
+  return request<SetupStatus>("/api/setup/status");
+}
+
+export async function setupAdmin(username: string, password: string): Promise<SignInResp> {
+  const r = await request<SignInResp>("/api/setup/admin", {
+    method: "POST",
+    json: { username, password },
+  });
+  setCsrfToken(r.csrf_token);
+  return r;
+}
+
 export interface Me {
   admin: string;
   backend: string;

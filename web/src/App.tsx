@@ -1,6 +1,7 @@
 import { Toaster } from "sonner";
 
 import { AuthProvider, useAuth } from "./auth/AuthContext.tsx";
+import { Setup } from "./pages/Setup.tsx";
 import { SignIn } from "./pages/SignIn.tsx";
 import { Shell } from "./pages/Shell.tsx";
 
@@ -14,6 +15,7 @@ function Router() {
       />
     );
   }
+  if (status.kind === "needs-setup") return <Setup />;
   return status.kind === "authed" ? <Shell /> : <SignIn />;
 }
 
