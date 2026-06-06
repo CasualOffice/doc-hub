@@ -194,6 +194,13 @@ export async function renameFile(id: string, name: string): Promise<FileDto> {
   });
 }
 
+export async function renameFolder(id: string, name: string): Promise<FolderDto> {
+  return request<FolderDto>(`/api/folders/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    json: { name },
+  });
+}
+
 export async function trashFile(id: string): Promise<void> {
   return request<void>(`/api/files/${encodeURIComponent(id)}/trash`, {
     method: "POST",

@@ -1,13 +1,17 @@
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 
-import { ApiError } from "../api/client.ts";
+import { ApiError, DEMO_MODE } from "../api/client.ts";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { Logo } from "../components/Logo.tsx";
 
+const DEMO_USERNAME = "demo";
+const DEMO_PASSWORD = "demo";
+
 export function SignIn() {
   const { signIn } = useAuth();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(DEMO_MODE ? DEMO_USERNAME : "");
+  const [password, setPassword] = useState(DEMO_MODE ? DEMO_PASSWORD : "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
@@ -79,9 +83,38 @@ export function SignIn() {
             Casual Drive
           </h1>
           <p style={{ margin: 0, fontSize: "var(--text-base)", color: "var(--muted)" }}>
-            Sign in to continue.
+            {DEMO_MODE ? "Demo build · sign in with the pre-filled credentials." : "Sign in to continue."}
           </p>
         </div>
+
+        {DEMO_MODE && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 11,
+              padding: "11px 13px",
+              background: "var(--accent-muted)",
+              border: "1px solid rgba(200, 164, 92, 0.32)",
+              borderRadius: 12,
+              fontSize: "var(--text-xs)",
+              color: "var(--ink-soft)",
+              lineHeight: "var(--leading-normal)",
+            }}
+          >
+            <Sparkles size={14} strokeWidth={1.8} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1 }} />
+            <div>
+              Username{" "}
+              <code style={kbdStyle()}>{DEMO_USERNAME}</code>
+              {" · "}
+              Password{" "}
+              <code style={kbdStyle()}>{DEMO_PASSWORD}</code>
+              <div style={{ marginTop: 4, color: "var(--muted)" }}>
+                Any credentials work — this build has no real auth.
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <Input
@@ -160,6 +193,18 @@ export function SignIn() {
       </style>
     </div>
   );
+}
+
+function kbdStyle(): React.CSSProperties {
+  return {
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    background: "var(--card)",
+    border: "1px solid var(--line)",
+    borderRadius: 5,
+    padding: "1px 6px",
+    fontSize: 11,
+    color: "var(--ink)",
+  };
 }
 
 function Input({

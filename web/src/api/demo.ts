@@ -1,33 +1,72 @@
-// Demo-mode backend shim — no server, in-memory only.
+// Demo-mode backend shim — no server, browser-storage backed.
 //
 // Compiled in when VITE_DEMO_MODE=1 (GitHub Pages build at drive.schnsrw.live).
-// State lives in module-scope arrays and is lost on reload. Pipeline issue #12
-// will swap this for IndexedDB so demo data survives across visits.
+// Metadata persists across reloads via localStorage under `cd-demo-state-v1`.
+// Uploaded file blobs live in a module-scope Map (not persisted — too large
+// for localStorage). Pipeline issue #12 upgrades blob persistence to IndexedDB.
 //
 // Sign-in accepts any non-empty username + password — there is no security
-// boundary in demo mode; we just need the flow to feel real.
+// boundary in demo mode; we just need the flow to feel real. The pre-filled
+// `demo` / `demo` credentials shown on the SignIn page are just defaults.
 
-import type { About, FileDto, FolderDto, FolderDetail, ListResp, Me, SignInResp } from "./client.ts";
+import type { About, FileDto, FolderDto, FolderDetail, ListResp, Me } from "./client.ts";
 
-interface DemoFile extends FileDto {
-  blob?: Blob;
+interface DemoState {
+  signedIn: boolean;
+  folders: FolderDto[];
+  files: FileDto[];
+  nextId: number;
+  username?: string;
 }
 
-let signedIn = false;
-const folders: FolderDto[] = seedFolders();
-const files: DemoFile[] = seedFiles();
-let nextId = 1000;
+const STATE_KEY = "cd-demo-state-v1";
+const blobs: Map<string, Blob> = new Map();
 
-function id(prefix: string): string {
-  nextId += 1;
-  return `${prefix}_${nextId.toString(36)}`;
+const state: DemoState = loadState();
+persist();
+
+function loadState(): DemoState {
+  // localStorage may throw in private-mode Safari; never let it break boot.
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(STATE_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<DemoState>;
+      if (Array.isArray(parsed.folders) && Array.isArray(parsed.files)) {
+        return {
+          signedIn: parsed.signedIn ?? false,
+          folders: parsed.folders,
+          files: parsed.files,
+          nextId: typeof parsed.nextId === "number" ? parsed.nextId : 1000,
+          username: parsed.username,
+        };
+      }
+    }
+  } catch {
+    // Fall through to seed.
+  }
+  return {
+    signedIn: false,
+    folders: seedFolders(),
+    files: seedFiles(),
+    nextId: 1000,
+  };
+}
+
+function persist(): void {
+  try {
+    window.localStorage.setItem(STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Quota exhausted / private mode — silently degrade to ephemeral.
+  }
+}
+
+function nextId(prefix: string): string {
+  state.nextId += 1;
+  return `${prefix}_${state.nextId.toString(36)}`;
 }
 
 function nowIso(): string {
-  // Same fixed reference time as the seed so the relative-time ordering
-  // looks reasonable on first paint. Replaced live as the user edits.
-  const t = new Date();
-  return t.toISOString();
+  return new Date().toISOString();
 }
 
 function seedFolders(): FolderDto[] {
@@ -39,7 +78,7 @@ function seedFolders(): FolderDto[] {
   ];
 }
 
-function seedFiles(): DemoFile[] {
+function seedFiles(): FileDto[] {
   const t = (d: string) => `2026-${d}T15:30:00Z`;
   return [
     {
@@ -107,18 +146,9 @@ function seedFiles(): DemoFile[] {
 
 function listChildren(parentId: string | null): ListResp {
   return {
-    folders: folders.filter((f) => f.parent_id === parentId),
-    files: files
-      .filter((f) => f.parent_id === parentId)
-      .map(({ blob, ...rest }) => {
-        void blob;
-        return rest;
-      }),
+    folders: state.folders.filter((f) => f.parent_id === parentId),
+    files: state.files.filter((f) => f.parent_id === parentId),
   };
-}
-
-function jsonResp<T>(body: T): T {
-  return body;
 }
 
 export async function demoRequest<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
@@ -132,8 +162,11 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
 
   // ─── Auth ────────────────────────────────────────────────────────────
   if (p === "/api/auth/sign-in" && method === "POST") {
-    signedIn = true;
-    return jsonResp<SignInResp>({ csrf_token: "demo-csrf" }) as unknown as T;
+    const body = init.json as { username?: string; password?: string };
+    state.signedIn = true;
+    state.username = body?.username?.trim() || "demo";
+    persist();
+    return { csrf_token: "demo-csrf" } as unknown as T;
   }
   if (p === "/api/auth/change-password" && method === "POST") {
     const body = init.json as { old_password: string; new_password: string };
@@ -143,67 +176,81 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     if (body.new_password === body.old_password) {
       throw makeError(422, "new password must differ from the old one");
     }
-    // Demo doesn't persist credentials — accept and move on.
     return undefined as T;
   }
   if (p === "/api/about" && method === "GET") {
-    if (!signedIn) throw makeError(401, "not signed in");
-    return jsonResp<About>({
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    return {
       version: "0.0.1 (demo)",
       git_sha: "demo",
-      built_at: "2026-06-07T00:00:00Z",
+      built_at: new Date().toISOString(),
       license: "Apache-2.0",
       repository: "https://github.com/schnsrw/drive",
-      storage_backend: "Memory (demo)",
-      db_backend: "Memory (demo)",
-    }) as unknown as T;
+      storage_backend: "Browser (localStorage)",
+      db_backend: "Browser (localStorage)",
+    } satisfies About as unknown as T;
   }
   if (p === "/api/auth/sign-out" && method === "POST") {
-    signedIn = false;
+    state.signedIn = false;
+    persist();
     return undefined as T;
   }
   if (p === "/api/me" && method === "GET") {
-    if (!signedIn) throw makeError(401, "not signed in");
-    return jsonResp<Me>({
-      admin: "demo",
-      backend: "memory (demo)",
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    return {
+      admin: state.username ?? "demo",
+      backend: "Browser (localStorage)",
       user_id: "demo-user",
       is_admin: true,
-    }) as unknown as T;
+    } satisfies Me as unknown as T;
   }
 
   // ─── Folders ─────────────────────────────────────────────────────────
   if (p === "/api/folders/root/children" && method === "GET") {
-    return jsonResp(listChildren(null)) as unknown as T;
+    return listChildren(null) as unknown as T;
   }
   const folderMatch = p.match(/^\/api\/folders\/([^/]+)$/);
-  if (folderMatch && method === "GET") {
+  if (folderMatch) {
     const fid = decodeURIComponent(folderMatch[1]);
-    const folder = folders.find((f) => f.id === fid);
-    if (!folder) throw makeError(404, "folder not found");
-    return jsonResp<FolderDetail>({ folder, children: listChildren(fid) }) as unknown as T;
+    const idx = state.folders.findIndex((f) => f.id === fid);
+    if (idx === -1) throw makeError(404, "folder not found");
+    if (method === "GET") {
+      return { folder: state.folders[idx], children: listChildren(fid) } satisfies FolderDetail as unknown as T;
+    }
+    if (method === "PATCH") {
+      const body = init.json as { name?: string; parent_id?: string | null };
+      const updated: FolderDto = {
+        ...state.folders[idx],
+        name: body.name ?? state.folders[idx].name,
+        parent_id: body.parent_id ?? state.folders[idx].parent_id,
+        modified_at: nowIso(),
+      };
+      state.folders[idx] = updated;
+      persist();
+      return updated as unknown as T;
+    }
   }
   if (p === "/api/folders" && method === "POST") {
     const body = init.json as { name: string; parent_id: string | null };
     const f: FolderDto = {
-      id: id("fld"),
+      id: nextId("fld"),
       parent_id: body.parent_id ?? null,
       name: body.name,
       created_at: nowIso(),
       modified_at: nowIso(),
     };
-    folders.push(f);
-    return jsonResp(f) as unknown as T;
+    state.folders.push(f);
+    persist();
+    return f as unknown as T;
   }
 
   // ─── Files ───────────────────────────────────────────────────────────
   if (p === "/api/files" && method === "POST") {
-    // FormData uploads. Pull `file` and optional `parent_id`.
     const fd = init.body as FormData;
     const file = fd.get("file") as File;
     const parentId = (fd.get("parent_id") as string | null) ?? null;
-    const f: DemoFile = {
-      id: id("f"),
+    const fileDto: FileDto = {
+      id: nextId("f"),
       parent_id: parentId,
       name: file.name,
       size: file.size,
@@ -211,28 +258,35 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       version: 1,
       created_at: nowIso(),
       modified_at: nowIso(),
-      blob: file,
     };
-    files.push(f);
-    const { blob, ...dto } = f;
-    void blob;
-    return jsonResp(dto) as unknown as T;
+    blobs.set(fileDto.id, file);
+    state.files.push(fileDto);
+    persist();
+    return fileDto as unknown as T;
   }
   const fileMatch = p.match(/^\/api\/files\/([^/]+)(\/(trash|download))?$/);
   if (fileMatch) {
     const fid = decodeURIComponent(fileMatch[1]);
     const sub = fileMatch[3];
-    const fIdx = files.findIndex((f) => f.id === fid);
-    if (fIdx === -1) throw makeError(404, "file not found");
+    const idx = state.files.findIndex((f) => f.id === fid);
+    if (idx === -1) throw makeError(404, "file not found");
     if (method === "PATCH" && !sub) {
-      const body = init.json as { name: string };
-      files[fIdx] = { ...files[fIdx], name: body.name, modified_at: nowIso(), version: files[fIdx].version + 1 };
-      const { blob, ...dto } = files[fIdx];
-      void blob;
-      return jsonResp(dto) as unknown as T;
+      const body = init.json as { name?: string; parent_id?: string | null };
+      const next: FileDto = {
+        ...state.files[idx],
+        name: body.name ?? state.files[idx].name,
+        parent_id: body.parent_id ?? state.files[idx].parent_id,
+        modified_at: nowIso(),
+        version: state.files[idx].version + 1,
+      };
+      state.files[idx] = next;
+      persist();
+      return next as unknown as T;
     }
     if (method === "POST" && sub === "trash") {
-      files.splice(fIdx, 1);
+      state.files.splice(idx, 1);
+      blobs.delete(fid);
+      persist();
       return undefined as T;
     }
   }
@@ -241,15 +295,32 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
 }
 
 export function demoDownloadUrl(fileId: string): string {
-  const f = files.find((x) => x.id === fileId);
-  if (f?.blob) return URL.createObjectURL(f.blob);
-  // Seeded files have no blob — synthesize a trivial placeholder so the
-  // browser actually downloads something the user can open.
+  const file = state.files.find((f) => f.id === fileId);
+  const blob = blobs.get(fileId);
+  if (blob) return URL.createObjectURL(blob);
+  // Seeded files have no blob (and uploads don't survive a reload) —
+  // synthesize a tiny placeholder so the browser actually downloads
+  // something the user can open.
   const placeholder = new Blob(
-    [`Casual Drive demo · ${f?.name ?? fileId}\n\nThis is placeholder content. The live build serves real bytes.\n`],
+    [`Casual Drive demo · ${file?.name ?? fileId}\n\nThis is placeholder content. The live build serves real bytes.\n`],
     { type: "text/plain" },
   );
   return URL.createObjectURL(placeholder);
+}
+
+/** Hard-reset the demo. Wipes everything in localStorage and reloads.
+ * Exposed on window for ad-hoc debugging (`__cdResetDemo()` in DevTools). */
+export function resetDemo(): void {
+  try {
+    window.localStorage.removeItem(STATE_KEY);
+  } catch {
+    /* ignored */
+  }
+  window.location.reload();
+}
+
+if (typeof window !== "undefined") {
+  (window as unknown as { __cdResetDemo?: () => void }).__cdResetDemo = resetDemo;
 }
 
 function makeError(status: number, message: string) {

@@ -3,10 +3,12 @@ import { ChevronLeft, ChevronRight as ChevronRightSeparator, UploadCloud } from 
 import { toast } from "sonner";
 
 import * as api from "../api/client.ts";
-import { ApiError, type FileDto, type FolderDto } from "../api/client.ts";
+import { ApiError, downloadUrl, type FileDto, type FolderDto } from "../api/client.ts";
 import { EmptyState } from "../components/EmptyState.tsx";
+import { EntryContextMenu, EntryKebab, type Entry as MenuEntry, type EntryMenuHandlers } from "../components/EntryMenu.tsx";
 import { FileMiniIcon, FileThumb, inferKind } from "../components/FileThumb.tsx";
 import { PreviewModal } from "../components/PreviewModal.tsx";
+import { RenameDialog } from "../components/RenameDialog.tsx";
 import type { ViewMode } from "../components/TopBar.tsx";
 
 interface Crumb {
@@ -51,6 +53,9 @@ export function Files({
 
   // Preview modal
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
+
+  // Rename dialog
+  const [renaming, setRenaming] = useState<MenuEntry | null>(null);
 
   const refresh = useCallback(async () => {
     setState({ kind: "loading" });
@@ -167,6 +172,51 @@ export function Files({
     [filteredEntries],
   );
 
+  // Per-entry menu handlers — built once, accept the entry inline so the
+  // menu in every row/card binds to the right target.
+  function handlersFor(entry: MenuEntry): EntryMenuHandlers {
+    const openFile = (id: string) => {
+      const i = fileList.findIndex((f) => f.id === id);
+      if (i >= 0) setPreviewIdx(i);
+    };
+    if (entry.kind === "folder") {
+      return {
+        onOpen: () => enterFolder(entry.folder),
+        onRename: () => setRenaming(entry),
+        onTrash: () => {
+          toast.info("Folder trash is coming in v0.2.", {
+            description: "The recursive trash + restore flow ships alongside the Trash surface.",
+          });
+        },
+      };
+    }
+    const file = entry.file;
+    return {
+      onOpen: () => openFile(file.id),
+      onPreview: () => openFile(file.id),
+      onDetails: () => openFile(file.id),
+      onRename: () => setRenaming(entry),
+      onDownload: () => {
+        const url = downloadUrl(file.id);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      },
+      onTrash: async () => {
+        try {
+          await api.trashFile(file.id);
+          toast.success(`Moved "${file.name}" to trash`);
+          void refresh();
+        } catch {
+          toast.error("Couldn't trash the file.");
+        }
+      },
+    };
+  }
+
   // Backspace = back (when not typing)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -249,6 +299,7 @@ export function Files({
                 const i = fileList.findIndex((f) => f.id === id);
                 if (i >= 0) setPreviewIdx(i);
               }}
+              handlersFor={handlersFor}
             />
           ) : (
             <ListView
@@ -259,6 +310,7 @@ export function Files({
                 const i = fileList.findIndex((f) => f.id === id);
                 if (i >= 0) setPreviewIdx(i);
               }}
+              handlersFor={handlersFor}
             />
           ))}
         {state.kind === "error" && (
@@ -310,6 +362,24 @@ export function Files({
         onClose={() => setPreviewIdx(null)}
         onChangeIndex={(i) => setPreviewIdx(i)}
       />
+
+      {renaming && (
+        <RenameDialog
+          open
+          current={renaming.kind === "folder" ? renaming.folder.name : renaming.file.name}
+          label={renaming.kind === "folder" ? "Folder" : "File"}
+          onClose={() => setRenaming(null)}
+          onSubmit={async (newName) => {
+            if (renaming.kind === "folder") {
+              await api.renameFolder(renaming.folder.id, newName);
+            } else {
+              await api.renameFile(renaming.file.id, newName);
+            }
+            toast.success("Renamed");
+            void refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -469,11 +539,13 @@ function GridView({
   uploading,
   onOpenFolder,
   onOpenFile,
+  handlersFor,
 }: {
   entries: Entry[];
   uploading: string[];
   onOpenFolder: (f: FolderDto) => void;
   onOpenFile: (id: string) => void;
+  handlersFor: (entry: MenuEntry) => EntryMenuHandlers;
 }) {
   return (
     <div
@@ -485,9 +557,19 @@ function GridView({
     >
       {entries.map((e) =>
         e.kind === "folder" ? (
-          <FolderCard key={e.folder.id} folder={e.folder} onOpen={() => onOpenFolder(e.folder)} />
+          <FolderCard
+            key={e.folder.id}
+            folder={e.folder}
+            onOpen={() => onOpenFolder(e.folder)}
+            handlers={handlersFor(e)}
+          />
         ) : (
-          <FileCard key={e.file.id} file={e.file} onOpen={() => onOpenFile(e.file.id)} />
+          <FileCard
+            key={e.file.id}
+            file={e.file}
+            onOpen={() => onOpenFile(e.file.id)}
+            handlers={handlersFor(e)}
+          />
         ),
       )}
       {uploading.map((name) => (
@@ -497,26 +579,46 @@ function GridView({
   );
 }
 
-function FolderCard({ folder, onOpen }: { folder: FolderDto; onOpen: () => void }) {
+function FolderCard({
+  folder,
+  onOpen,
+  handlers,
+}: {
+  folder: FolderDto;
+  onOpen: () => void;
+  handlers: EntryMenuHandlers;
+}) {
   return (
-    <Card onClick={onOpen} folder>
-      <div style={{ height: 130, overflow: "hidden" }}>
-        <FileThumb name={folder.name} kind="fold" />
-      </div>
-      <CardMeta name={folder.name} kind="fold" sub={`Folder · ${relative(folder.modified_at)}`} />
-    </Card>
+    <EntryContextMenu entry={{ kind: "folder", folder }} handlers={handlers}>
+      <Card onClick={onOpen} folder kebab={<EntryKebab entry={{ kind: "folder", folder }} handlers={handlers} />}>
+        <div style={{ height: 130, overflow: "hidden" }}>
+          <FileThumb name={folder.name} kind="fold" />
+        </div>
+        <CardMeta name={folder.name} kind="fold" sub={`Folder · ${relative(folder.modified_at)}`} />
+      </Card>
+    </EntryContextMenu>
   );
 }
 
-function FileCard({ file, onOpen }: { file: FileDto; onOpen: () => void }) {
+function FileCard({
+  file,
+  onOpen,
+  handlers,
+}: {
+  file: FileDto;
+  onOpen: () => void;
+  handlers: EntryMenuHandlers;
+}) {
   const kind = inferKind(file.name, file.content_type);
   return (
-    <Card onClick={onOpen}>
-      <div style={{ height: 130, overflow: "hidden", borderBottom: "1px solid var(--line)" }}>
-        <FileThumb name={file.name} kind={kind} />
-      </div>
-      <CardMeta name={file.name} kind={kind} sub={`${labelForKind(kind)} · ${relative(file.modified_at)}`} />
-    </Card>
+    <EntryContextMenu entry={{ kind: "file", file }} handlers={handlers}>
+      <Card onClick={onOpen} kebab={<EntryKebab entry={{ kind: "file", file }} handlers={handlers} />}>
+        <div style={{ height: 130, overflow: "hidden", borderBottom: "1px solid var(--line)" }}>
+          <FileThumb name={file.name} kind={kind} />
+        </div>
+        <CardMeta name={file.name} kind={kind} sub={`${labelForKind(kind)} · ${relative(file.modified_at)}`} />
+      </Card>
+    </EntryContextMenu>
   );
 }
 
@@ -543,10 +645,12 @@ function Card({
   children,
   onClick,
   folder,
+  kebab,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   folder?: boolean;
+  kebab?: React.ReactNode;
 }) {
   return (
     <div
@@ -574,6 +678,21 @@ function Card({
       }}
     >
       {children}
+      {kebab && (
+        <span
+          className="cd-card-kebab"
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            opacity: 0,
+            transform: "translateY(-2px)",
+            transition: "opacity 180ms, transform 180ms",
+          }}
+        >
+          {kebab}
+        </span>
+      )}
       {folder && (
         <span
           aria-hidden
@@ -600,9 +719,11 @@ function Card({
         </span>
       )}
       <style>{`
-        .cd-folder-card:hover .cd-open-hint {
+        .cd-folder-card:hover .cd-open-hint,
+        .cd-folder-card:hover .cd-card-kebab,
+        .cd-file-card:hover .cd-card-kebab {
           opacity: 1;
-          transform: translateX(0);
+          transform: translateX(0) translateY(0);
         }
       `}</style>
     </div>
@@ -654,11 +775,13 @@ function ListView({
   uploading,
   onOpenFolder,
   onOpenFile,
+  handlersFor,
 }: {
   entries: Entry[];
   uploading: string[];
   onOpenFolder: (f: FolderDto) => void;
   onOpenFile: (id: string) => void;
+  handlersFor: (entry: MenuEntry) => EntryMenuHandlers;
 }) {
   return (
     <div
@@ -673,7 +796,7 @@ function ListView({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "2.5fr 1fr 1fr 80px",
+          gridTemplateColumns: "2.5fr 1fr 1fr 80px 42px",
           alignItems: "center",
           padding: "13px 22px",
           gap: 16,
@@ -689,35 +812,44 @@ function ListView({
         <span>Type</span>
         <span>Modified</span>
         <span style={{ textAlign: "right" }}>Size</span>
+        <span />
       </div>
       {entries.map((e, i) => {
         const last = i === entries.length - 1 && uploading.length === 0;
         if (e.kind === "folder") {
+          const entry: MenuEntry = { kind: "folder", folder: e.folder };
+          const handlers = handlersFor(entry);
           return (
-            <ListRow
-              key={e.folder.id}
-              name={e.folder.name}
-              kind="fold"
-              type="Folder"
-              modified={relative(e.folder.modified_at)}
-              size="—"
-              last={last}
-              onClick={() => onOpenFolder(e.folder)}
-            />
+            <EntryContextMenu key={e.folder.id} entry={entry} handlers={handlers}>
+              <ListRow
+                name={e.folder.name}
+                kind="fold"
+                type="Folder"
+                modified={relative(e.folder.modified_at)}
+                size="—"
+                last={last}
+                onClick={() => onOpenFolder(e.folder)}
+                kebab={<EntryKebab entry={entry} handlers={handlers} />}
+              />
+            </EntryContextMenu>
           );
         }
         const kind = inferKind(e.file.name, e.file.content_type);
+        const entry: MenuEntry = { kind: "file", file: e.file };
+        const handlers = handlersFor(entry);
         return (
-          <ListRow
-            key={e.file.id}
-            name={e.file.name}
-            kind={kind}
-            type={labelForKind(kind)}
-            modified={relative(e.file.modified_at)}
-            size={formatBytes(e.file.size)}
-            onClick={() => onOpenFile(e.file.id)}
-            last={last}
-          />
+          <EntryContextMenu key={e.file.id} entry={entry} handlers={handlers}>
+            <ListRow
+              name={e.file.name}
+              kind={kind}
+              type={labelForKind(kind)}
+              modified={relative(e.file.modified_at)}
+              size={formatBytes(e.file.size)}
+              onClick={() => onOpenFile(e.file.id)}
+              last={last}
+              kebab={<EntryKebab entry={entry} handlers={handlers} />}
+            />
+          </EntryContextMenu>
         );
       })}
       {uploading.map((name) => (
@@ -736,6 +868,7 @@ function ListRow({
   onClick,
   last,
   ghost,
+  kebab,
 }: {
   name: string;
   kind: "fold" | "doc" | "pdf" | "sheet" | "img" | "vid" | "generic";
@@ -745,13 +878,15 @@ function ListRow({
   onClick?: () => void;
   last?: boolean;
   ghost?: boolean;
+  kebab?: React.ReactNode;
 }) {
   return (
     <div
       onClick={onClick}
+      className="cd-list-row"
       style={{
         display: "grid",
-        gridTemplateColumns: "2.5fr 1fr 1fr 80px",
+        gridTemplateColumns: "2.5fr 1fr 1fr 80px 42px",
         alignItems: "center",
         padding: "13px 22px",
         gap: 16,
@@ -791,6 +926,21 @@ function ListRow({
       >
         {size}
       </span>
+      <span
+        className="cd-row-kebab"
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          opacity: 0,
+          transition: "opacity 180ms",
+        }}
+      >
+        {kebab}
+      </span>
+      <style>{`
+        .cd-list-row:hover .cd-row-kebab,
+        .cd-list-row:focus-within .cd-row-kebab { opacity: 1; }
+      `}</style>
     </div>
   );
 }
