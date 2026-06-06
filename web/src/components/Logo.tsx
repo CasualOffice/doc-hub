@@ -1,7 +1,10 @@
 /**
- * Casual Drive mark — black rounded square with a negative-space crescent.
+ * Casual Drive mark — black rounded square with a cloud silhouette.
  * `currentColor` paints the square so callers can flip light/dark via `color`.
- * The crescent fill (`--mark-fg`) defaults to the brand paper cream.
+ * The cloud fill (`--mark-fg`) defaults to the brand paper cream.
+ *
+ * Built from primitives (three bumps + flat baseline) rather than a single
+ * path so the geometry stays editable and renders cleanly at favicon size.
  */
 export function Logo({ size = 38, className }: { size?: number; className?: string }) {
   return (
@@ -21,9 +24,12 @@ export function Logo({ size = 38, className }: { size?: number; className?: stri
       </defs>
       <g clipPath="url(#cd-mark-clip)">
         <rect width="38" height="38" fill="currentColor" />
-        <circle cx="16.5" cy="19.5" r="11.5" fill="var(--mark-fg, #F2F0EA)" />
-        <circle cx="22.5" cy="16.5" r="11.5" fill="currentColor" />
-        <circle cx="24.3" cy="14.6" r="1.5" fill="var(--mark-fg, #F2F0EA)" />
+        <g fill="var(--mark-fg, #F2F0EA)">
+          <circle cx="12" cy="22" r="5" />
+          <circle cx="26" cy="22" r="5" />
+          <circle cx="19" cy="15" r="7.5" />
+          <rect x="12" y="22" width="14" height="5" />
+        </g>
       </g>
     </svg>
   );

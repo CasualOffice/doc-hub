@@ -7,8 +7,11 @@
   </defs>
   <g clip-path="url(#cd-fav)">
     <rect width="172" height="172" fill="#16161A"/>
-    <circle cx="78"  cy="86" r="52"  fill="#F5F3EE"/>
-    <circle cx="104" cy="72" r="52"  fill="#16161A"/>
-    <circle cx="112" cy="64" r="6.5" fill="#F5F3EE"/>
+    <g fill="#F5F3EE">
+      <circle cx="54"  cy="100" r="23"/>
+      <circle cx="118" cy="100" r="23"/>
+      <circle cx="86"  cy="68"  r="34"/>
+      <rect   x="54"   y="100"  width="64" height="23"/>
+    </g>
   </g>
 </svg>
