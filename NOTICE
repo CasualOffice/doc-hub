@@ -1,0 +1,27 @@
+Casual Drive
+Copyright 2026 Casual Drive contributors
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may
+not use this product except in compliance with the License. You may obtain
+a copy of the License in the accompanying LICENSE file or at
+http://www.apache.org/licenses/LICENSE-2.0.
+
+This product integrates with the WOPI (Web Application Open Platform
+Interface) protocol specification published by Microsoft Corporation
+under their documentation terms. WOPI is a documented protocol; no
+Microsoft source code is included.
+
+This product depends on the following Open Source software at runtime
+(non-exhaustive — see Cargo.toml and web/package.json for the full
+dependency list):
+
+  * axum            — MIT          (Tokio team)
+  * tokio           — MIT          (Tokio team)
+  * tower           — MIT          (Tower team)
+  * opendal         — Apache-2.0   (Apache Software Foundation)
+  * tower-sessions  — MIT          (Max Countryman)
+  * jsonwebtoken    — MIT          (Vincent Prouillet)
+  * argon2          — Apache-2.0/MIT (RustCrypto)
+  * react           — MIT          (Meta Platforms, Inc.)
+  * radix-ui        — MIT          (WorkOS)
+  * lucide-icons    — ISC          (Lucide contributors)

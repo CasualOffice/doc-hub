@@ -1,0 +1,40 @@
+# Default: text, LF, auto-detect.
+* text=auto eol=lf
+
+# Forced text formats.
+*.rs        text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.html      text eol=lf
+*.css       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.sh        text eol=lf
+*.sql       text eol=lf
+*.env.example text eol=lf
+
+# Treat lock files specially.
+Cargo.lock  text eol=lf merge=ours
+pnpm-lock.yaml text eol=lf merge=ours
+
+# Binary.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       text eol=lf
+*.woff      binary
+*.woff2     binary
+*.pdf       binary
+*.zip       binary
+*.tar.gz    binary
+
+# Hide vendored / generated from diffs by default.
+Cargo.lock  -diff
+pnpm-lock.yaml -diff

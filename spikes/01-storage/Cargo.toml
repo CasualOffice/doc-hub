@@ -1,0 +1,25 @@
+[package]
+name    = "spike-01-storage"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+opendal = { version = "0.54", default-features = false, features = ["services-fs", "services-memory", "services-s3"] }
+tokio   = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
+bytes   = "1"
+futures = "0.3"
+thiserror = "2"
+anyhow  = "1"
+time    = { version = "0.3", features = ["serde", "formatting"] }
+url     = "2"
+hmac    = "0.12"
+sha2    = "0.10"
+base64  = "0.22"
+subtle  = "2"
+hex     = "0.4"
+
+[dev-dependencies]
+tokio   = { version = "1", features = ["macros", "rt-multi-thread", "io-util", "test-util"] }
+tempfile = "3"
+rstest  = "0.23"

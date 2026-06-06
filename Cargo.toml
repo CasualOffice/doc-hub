@@ -1,0 +1,95 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/drive-core",
+    "crates/drive-storage",
+    "crates/drive-wopi",
+    "crates/drive-auth",
+    "crates/drive-http",
+    "crates/drive-bin",
+]
+# Spike crates are intentionally OUT of the production workspace.
+# They are PoCs documented under docs/spikes/ and live under spikes/ as
+# standalone Cargo projects. `cargo test -p spike-XX-name --manifest-path spikes/...`
+# runs them on demand; CI runs them via a dedicated job.
+exclude = [
+    "spikes/01-storage",
+    "spikes/02-wopi-host",
+    "spikes/04-two-origin",
+]
+
+[workspace.package]
+version      = "0.0.1"
+edition      = "2021"
+license      = "Apache-2.0"
+authors      = ["Casual Drive contributors"]
+repository   = "https://github.com/schnsrw/drive"
+homepage     = "https://schnsrw.live"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# HTTP / async runtime
+axum              = { version = "0.8", features = ["macros", "multipart"] }
+tokio             = { version = "1",   features = ["full"] }
+tower             = "0.5"
+tower-http        = { version = "0.6", features = ["trace", "cors", "limit", "compression-gzip", "set-header"] }
+hyper             = "1"
+
+# Data / serde
+serde             = { version = "1", features = ["derive"] }
+serde_json        = "1"
+bytes             = "1"
+futures           = "0.3"
+time              = { version = "0.3", features = ["serde", "formatting", "macros"] }
+url               = "2"
+ulid              = { version = "1", features = ["serde"] }
+
+# Errors / logging
+anyhow            = "1"
+thiserror         = "2"
+tracing           = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Storage
+opendal           = { version = "0.54", default-features = false, features = ["services-fs", "services-memory", "services-s3"] }
+
+# Auth / crypto
+argon2            = "0.5"
+jsonwebtoken      = { version = "10", default-features = false, features = ["aws_lc_rs"] }
+tower-sessions    = "0.15"
+hmac              = "0.12"
+sha2              = "0.10"
+subtle            = "2"
+base64            = "0.22"
+
+# Database
+sqlx              = { version = "0.8", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "time", "uuid"] }
+
+# Frontend embedding
+rust-embed        = { version = "8", features = ["mime-guess"] }
+mime_guess        = "2"
+
+# Dev / test
+http-body-util    = "0.1"
+tempfile          = "3"
+rstest            = "0.23"
+
+[workspace.lints.rust]
+unused_must_use      = "deny"
+unsafe_code          = "deny"
+missing_debug_implementations = "warn"
+unreachable_pub      = "warn"
+
+[workspace.lints.clippy]
+pedantic             = { level = "warn", priority = -1 }
+missing_errors_doc   = "allow"
+missing_panics_doc   = "allow"
+module_name_repetitions = "allow"
+must_use_candidate   = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+opt-level = 3

@@ -1,0 +1,63 @@
+services:
+  drive:
+    build: .
+    image: casual-drive:dev
+    environment:
+      DRIVE_APP_ORIGIN: "http://127.0.0.1:8080"
+      DRIVE_USERCONTENT_ORIGIN: "http://127.0.0.1:8081"
+      DRIVE_BIND: "0.0.0.0:8080"
+      DRIVE_BACKEND: "minio"
+      DRIVE_S3_BUCKET: "drive-dev"
+      DRIVE_S3_ENDPOINT: "http://minio:9000"
+      DRIVE_S3_REGION: "auto"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      DRIVE_DB_URL: "sqlite:///data/drive.db"
+      # Dev-only secrets — DO NOT use these in prod.
+      DRIVE_SESSION_SECRET: "dev-only-32-byte-secret-DO-NOT-USE-aa"
+      DRIVE_WOPI_HMAC_SECRET: "dev-only-32-byte-secret-DO-NOT-USE-bb"
+      DRIVE_SIGNED_URL_HMAC_SECRET: "dev-only-32-byte-secret-DO-NOT-USE-cc"
+      DRIVE_ADMIN_USER: "admin"
+      # argon2id of "admin" — generated with `argon2 -t 2 -m 14 -p 1 -e`
+      DRIVE_ADMIN_PASSWORD_HASH: "$$argon2id$$v=19$$m=19456,t=2,p=1$$ZGV2c2FsdGRldnNhbHQ$$REPLACE_BEFORE_PROD"
+      RUST_LOG: "info,drive=debug"
+    ports:
+      - "8080:8080"
+    volumes:
+      - drive_data:/data
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # One-shot bucket creation.
+  minio-init:
+    image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >-
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      (mc mb local/drive-dev || true) &&
+      echo bucket-ready"
+
+volumes:
+  drive_data:
+  minio_data:

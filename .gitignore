@@ -1,0 +1,72 @@
+# --- Rust ---
+/target
+**/target
+Cargo.lock.bak
+*.profraw
+*.bk
+*.swp
+
+# --- Node / web ---
+node_modules
+.pnpm-store
+dist
+.parcel-cache
+*.tsbuildinfo
+.next
+out
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- IDE ---
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/shelf
+.idea/httpRequests
+.idea/dictionaries
+.idea/contentModel.xml
+.idea/dataSources/
+.idea/dataSources.ids
+.idea/dataSources.local.xml
+.idea/sqlDataSources.xml
+.idea/dynamic.xml
+.idea/uiDesigner.xml
+.idea/dbnavigator.xml
+.idea/jsLibraryMappings.xml
+.idea/sonarlint
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.iml
+
+# --- OS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Test artifacts ---
+test-results
+playwright-report
+coverage
+*.lcov
+
+# --- Drive runtime artifacts ---
+/data
+/var
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- Claude memory cache (lives outside the repo, but belt) ---
+.claude/cache
