@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use drive_db::{DbError, NewSession, NewUser, SessionRepo, UserRepo};
+use drive_db::{AuditRepo, DbError, NewAuditEvent, NewSession, NewUser, SessionRepo, UserRepo};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -50,7 +50,22 @@ pub(crate) async fn sign_in(
     let ok = verify_password(&hash_for_verify, &body.password).unwrap_or(false);
     let user_id = match (ok, user_id_opt) {
         (true, Some(id)) => id,
-        _ => return Err(AuthError::InvalidCredentials),
+        _ => {
+            AuditRepo::emit(
+                &state.db,
+                NewAuditEvent {
+                    actor_id: None,
+                    actor_username: None,
+                    action: "auth.sign_in_failed".into(),
+                    target_kind: Some("user".into()),
+                    target_id: None,
+                    target_name: Some(body.username.clone()),
+                    ip_address: None,
+                    metadata: None,
+                },
+            );
+            return Err(AuthError::InvalidCredentials);
+        }
     };
 
     // Mint session
@@ -61,13 +76,27 @@ pub(crate) async fn sign_in(
         .insert(
             &sid,
             &NewSession {
-                user_id,
+                user_id: user_id.clone(),
                 csrf_token: csrf.clone(),
                 ttl: state.session_ttl,
             },
         )
         .await
         .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+    AuditRepo::emit(
+        &state.db,
+        NewAuditEvent {
+            actor_id: Some(user_id),
+            actor_username: Some(body.username.clone()),
+            action: "auth.sign_in".into(),
+            target_kind: Some("session".into()),
+            target_id: Some(sid.clone()),
+            target_name: None,
+            ip_address: None,
+            metadata: None,
+        },
+    );
 
     let cookie = build_session_cookie(&sid, state.cookie_secure, state.session_ttl);
     let mut resp = (StatusCode::OK, Json(SignInResp { csrf_token: csrf })).into_response();
@@ -156,13 +185,27 @@ pub(crate) async fn setup_admin(
         .insert(
             &sid,
             &NewSession {
-                user_id: user.id,
+                user_id: user.id.clone(),
                 csrf_token: csrf.clone(),
                 ttl: state.session_ttl,
             },
         )
         .await
         .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+    AuditRepo::emit(
+        &state.db,
+        NewAuditEvent {
+            actor_id: Some(user.id.clone()),
+            actor_username: Some(user.username.clone()),
+            action: "setup.admin_created".into(),
+            target_kind: Some("user".into()),
+            target_id: Some(user.id.clone()),
+            target_name: Some(user.username.clone()),
+            ip_address: None,
+            metadata: None,
+        },
+    );
 
     let cookie = build_session_cookie(&sid, state.cookie_secure, state.session_ttl);
     let mut resp = (StatusCode::OK, Json(SignInResp { csrf_token: csrf })).into_response();
@@ -222,6 +265,20 @@ pub(crate) async fn change_password(
         .await
         .map_err(|e| AuthError::Internal(e.to_string()))?;
 
+    AuditRepo::emit(
+        &state.db,
+        NewAuditEvent {
+            actor_id: Some(user.id.clone()),
+            actor_username: Some(user.username.clone()),
+            action: "auth.password_changed".into(),
+            target_kind: Some("user".into()),
+            target_id: Some(user.id),
+            target_name: Some(user.username),
+            ip_address: None,
+            metadata: None,
+        },
+    );
+
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -236,6 +293,19 @@ pub(crate) async fn sign_out(
         .delete(&session.session_id)
         .await
         .map_err(|e| AuthError::Internal(e.to_string()))?;
+    AuditRepo::emit(
+        &state.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "auth.sign_out".into(),
+            target_kind: Some("session".into()),
+            target_id: Some(session.session_id),
+            target_name: None,
+            ip_address: None,
+            metadata: None,
+        },
+    );
     let clear = clear_session_cookie(state.cookie_secure);
     let mut resp = StatusCode::NO_CONTENT.into_response();
     resp.headers_mut()

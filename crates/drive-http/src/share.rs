@@ -23,7 +23,7 @@ use axum::{
 };
 use base64::Engine as _;
 use drive_auth::{hash_password, verify_password, AuthSession};
-use drive_db::{FileRepo, NewShareLink, ShareLink, ShareLinkRepo};
+use drive_db::{AuditRepo, FileRepo, NewAuditEvent, NewShareLink, ShareLink, ShareLinkRepo};
 use drive_storage::SignedUrl;
 use serde::{Deserialize, Serialize};
 
@@ -116,10 +116,11 @@ async fn create_share(
         .map(|secs| time::OffsetDateTime::now_utc() + time::Duration::seconds(secs));
 
     let token = mint_token();
+    let file_name = file.name.clone();
     let link = ShareLinkRepo::new(&s.db)
         .insert(&NewShareLink {
             token,
-            file_id: Some(file.id),
+            file_id: Some(file.id.clone()),
             folder_id: None,
             password_hash,
             permissions: perms.to_string(),
@@ -128,6 +129,24 @@ async fn create_share(
         })
         .await
         .map_err(|e| ShareError::Internal(e.to_string()))?;
+
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "share.create".into(),
+            target_kind: Some("share_link".into()),
+            target_id: Some(link.id.clone()),
+            target_name: Some(file_name),
+            ip_address: None,
+            metadata: Some(format!(
+                r#"{{"file_id":"{}","has_password":{}}}"#,
+                file.id,
+                link.password_hash.is_some()
+            )),
+        },
+    );
 
     Ok((
         StatusCode::CREATED,
@@ -180,9 +199,35 @@ async fn revoke_share(
         // missing links rather than 403 so they can't probe existence.
         return Err(ShareError::NotFound);
     }
+    // Look up the target file name (denormalised so the audit row survives
+    // file deletion). Best-effort — missing file just yields a None name.
+    let file_name = if let Some(fid) = link.file_id.as_deref() {
+        FileRepo::new(&s.db)
+            .find_by_id(fid)
+            .await
+            .ok()
+            .map(|f| f.name)
+    } else {
+        None
+    };
+
     repo.delete(&share_id)
         .await
         .map_err(|e| ShareError::Internal(e.to_string()))?;
+
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "share.revoke".into(),
+            target_kind: Some("share_link".into()),
+            target_id: Some(link.id),
+            target_name: file_name,
+            ip_address: None,
+            metadata: None,
+        },
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -245,6 +290,20 @@ async fn resolve_share(
 
     // Best-effort touch — failure is non-fatal.
     let _ = repo.touch(&link.id).await;
+
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: None, // recipient is anonymous
+            actor_username: None,
+            action: "share.access".into(),
+            target_kind: Some("share_link".into()),
+            target_id: Some(link.id.clone()),
+            target_name: Some(file.name.clone()),
+            ip_address: None,
+            metadata: Some(format!(r#"{{"token":"{}"}}"#, link.token)),
+        },
+    );
 
     Ok(Json(Resolved {
         file: RecipientFile {

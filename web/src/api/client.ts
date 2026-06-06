@@ -192,6 +192,33 @@ export async function resolveShare(token: string, password?: string | null): Pro
   });
 }
 
+// ─── Activity feed ──────────────────────────────────────────────────
+
+export interface ActivityEvent {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  action: string;
+  target_kind: string | null;
+  target_id: string | null;
+  target_name: string | null;
+  ip_address: string | null;
+  metadata: string | null;
+}
+
+export interface ActivityPage {
+  events: ActivityEvent[];
+  next_before: string | null;
+}
+
+export async function getActivity(before?: string | null, limit = 50): Promise<ActivityPage> {
+  const params = new URLSearchParams();
+  if (before) params.set("before", before);
+  params.set("limit", String(limit));
+  return request<ActivityPage>(`/api/activity?${params.toString()}`);
+}
+
 export function shareDownloadUrl(token: string): string {
   if (DEMO_MODE) {
     return demoShareDownload(token) ?? `/api/share/${encodeURIComponent(token)}/download`;

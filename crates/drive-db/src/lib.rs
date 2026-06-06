@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod audit;
 mod error;
 mod files;
 mod folders;
@@ -15,6 +16,7 @@ mod sessions;
 mod share_links;
 mod users;
 
+pub use audit::{AuditEvent, AuditRepo, NewAuditEvent};
 pub use error::DbError;
 pub use files::{File, FileRepo, NewFile};
 pub use folders::{Folder, FolderRepo, NewFolder};

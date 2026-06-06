@@ -7,6 +7,7 @@ import { DemoBanner } from "../components/DemoBanner.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { Sidebar, type NavId } from "../components/Sidebar.tsx";
 import { TopBar, type ViewMode } from "../components/TopBar.tsx";
+import { Activity } from "./Activity.tsx";
 import { Files } from "./Files.tsx";
 import { Settings } from "./Settings.tsx";
 
@@ -97,19 +98,7 @@ export function Shell() {
               />
             </CenteredPane>
           )}
-          {nav === "activity" && (
-            <CenteredPane>
-              <ComingSoon
-                title="Activity & audit log"
-                description="Tamper-evident event feed for everything that happens in your Drive — sign-ins, uploads, downloads, shares, deletions."
-                bullets={[
-                  "Grouped by day, type-tagged, owner-filterable",
-                  "Append-only audit_log table — required for compliance",
-                  "Per-action exportable JSON for downstream SIEMs",
-                ]}
-              />
-            </CenteredPane>
-          )}
+          {nav === "activity" && <Activity />}
           {nav === "admin" && (
             <CenteredPane>
               <ComingSoon

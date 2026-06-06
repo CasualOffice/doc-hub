@@ -30,8 +30,22 @@ interface DemoState {
   folders: FolderDto[];
   files: FileDto[];
   shares: DemoShare[];
+  events: DemoEvent[];
   nextId: number;
   username?: string;
+}
+
+interface DemoEvent {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  action: string;
+  target_kind: string | null;
+  target_id: string | null;
+  target_name: string | null;
+  ip_address: string | null;
+  metadata: string | null;
 }
 
 const STATE_KEY = "cd-demo-state-v1";
@@ -52,6 +66,11 @@ function loadState(): DemoState {
           folders: parsed.folders,
           files: parsed.files,
           shares: Array.isArray(parsed.shares) ? parsed.shares : [],
+          events:
+            Array.isArray((parsed as { events?: DemoEvent[] }).events) &&
+            (parsed as { events: DemoEvent[] }).events.length > 0
+              ? (parsed as { events: DemoEvent[] }).events
+              : seedEvents(),
           nextId: typeof parsed.nextId === "number" ? parsed.nextId : 1000,
           username: parsed.username,
         };
@@ -65,8 +84,84 @@ function loadState(): DemoState {
     folders: seedFolders(),
     files: seedFiles(),
     shares: [],
+    events: seedEvents(),
     nextId: 1000,
   };
+}
+
+function seedEvents(): DemoEvent[] {
+  // Backdated to make the timeline read like real history when the visitor
+  // opens the Activity page on first visit. Times in UTC; the SPA converts
+  // them to local for display.
+  const evt = (
+    minutesAgo: number,
+    action: string,
+    extras: Partial<DemoEvent> = {},
+  ): DemoEvent => ({
+    id: `evt_seed_${minutesAgo}`,
+    created_at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    actor_id: "demo-user",
+    actor_username: "demo",
+    action,
+    target_kind: null,
+    target_id: null,
+    target_name: null,
+    ip_address: null,
+    metadata: null,
+    ...extras,
+  });
+  return [
+    evt(2, "auth.sign_in", { target_kind: "session", target_id: "demo-sid" }),
+    evt(8, "files.upload", {
+      target_kind: "file",
+      target_id: "f_brief",
+      target_name: "Product brief.docx",
+      metadata: '{"size":41200}',
+    }),
+    evt(34, "share.create", {
+      target_kind: "share_link",
+      target_id: "shl_demo",
+      target_name: "Q2 planning.xlsx",
+      metadata: '{"has_password":false}',
+    }),
+    evt(70, "folders.create", {
+      target_kind: "folder",
+      target_id: "fld_designs",
+      target_name: "Design references",
+    }),
+    evt(165, "share.access", {
+      actor_id: null,
+      actor_username: null,
+      target_kind: "share_link",
+      target_id: "shl_demo",
+      target_name: "Q2 planning.xlsx",
+      metadata: '{"token":"Z3kQaB"}',
+    }),
+    evt(1380, "auth.sign_in_failed", {
+      actor_id: null,
+      actor_username: null,
+      target_kind: "user",
+      target_id: null,
+      target_name: "owner",
+    }),
+    evt(1500, "files.rename", {
+      target_kind: "file",
+      target_id: "f_readme",
+      target_name: "README.md",
+    }),
+  ];
+}
+
+function emitDemo(event: Omit<DemoEvent, "id" | "created_at">) {
+  state.events.unshift({
+    id: nextId("evt"),
+    created_at: nowIso(),
+    ...event,
+  });
+  // Cap the in-memory event log so localStorage doesn't grow without bound
+  // in long-lived demo sessions.
+  if (state.events.length > 500) state.events.length = 500;
+  persist();
 }
 
 function persist(): void {
@@ -191,7 +286,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     const body = init.json as { username?: string; password?: string };
     state.signedIn = true;
     state.username = body?.username?.trim() || "demo";
-    persist();
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username,
+      action: "auth.sign_in",
+      target_kind: "session",
+      target_id: "demo-sid",
+      target_name: null,
+      ip_address: null,
+      metadata: null,
+    });
     return { csrf_token: "demo-csrf" } as unknown as T;
   }
   if (p === "/api/auth/change-password" && method === "POST") {
@@ -217,9 +321,33 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     } satisfies About as unknown as T;
   }
   if (p === "/api/auth/sign-out" && method === "POST") {
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "auth.sign_out",
+      target_kind: "session",
+      target_id: "demo-sid",
+      target_name: null,
+      ip_address: null,
+      metadata: null,
+    });
     state.signedIn = false;
     persist();
     return undefined as T;
+  }
+  if (p === "/api/activity" && method === "GET") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    const before = url.searchParams.get("before");
+    const limit = Math.max(
+      1,
+      Math.min(200, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50),
+    );
+    const filtered = before
+      ? state.events.filter((e) => e.created_at < before)
+      : state.events.slice();
+    const page = filtered.slice(0, limit);
+    const next_before = page.length === limit && filtered.length > limit ? page[page.length - 1].created_at : null;
+    return { events: page, next_before } as unknown as T;
   }
   if (p === "/api/me" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
@@ -266,6 +394,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       modified_at: nowIso(),
     };
     state.folders.push(f);
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "folders.create",
+      target_kind: "folder",
+      target_id: f.id,
+      target_name: f.name,
+      ip_address: null,
+      metadata: null,
+    });
     persist();
     return f as unknown as T;
   }
@@ -287,6 +425,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     };
     blobs.set(fileDto.id, file);
     state.files.push(fileDto);
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "files.upload",
+      target_kind: "file",
+      target_id: fileDto.id,
+      target_name: fileDto.name,
+      ip_address: null,
+      metadata: JSON.stringify({ size: fileDto.size }),
+    });
     persist();
     return fileDto as unknown as T;
   }
@@ -306,12 +454,35 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
         version: state.files[idx].version + 1,
       };
       state.files[idx] = next;
+      if (body.name) {
+        emitDemo({
+          actor_id: "demo-user",
+          actor_username: state.username ?? "demo",
+          action: "files.rename",
+          target_kind: "file",
+          target_id: next.id,
+          target_name: next.name,
+          ip_address: null,
+          metadata: null,
+        });
+      }
       persist();
       return next as unknown as T;
     }
     if (method === "POST" && sub === "trash") {
+      const f = state.files[idx];
       state.files.splice(idx, 1);
       blobs.delete(fid);
+      emitDemo({
+        actor_id: "demo-user",
+        actor_username: state.username ?? "demo",
+        action: "files.trash",
+        target_kind: "file",
+        target_id: f.id,
+        target_name: f.name,
+        ip_address: null,
+        metadata: null,
+      });
       persist();
       return undefined as T;
     }
@@ -352,6 +523,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       file_id: fid,
     };
     state.shares.unshift(share);
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "share.create",
+      target_kind: "share_link",
+      target_id: share.id,
+      target_name: file.name,
+      ip_address: null,
+      metadata: JSON.stringify({ file_id: fid, has_password: share.has_password }),
+    });
     persist();
     const { password: _pwd, file_id: _fid, ...dto } = share;
     void _pwd;
@@ -375,9 +556,20 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
   if (shareRevokeMatch && method === "DELETE") {
     if (!state.signedIn) throw makeError(401, "not signed in");
     const sid = decodeURIComponent(shareRevokeMatch[1]);
-    const before = state.shares.length;
+    const revoked = state.shares.find((s) => s.id === sid);
+    if (!revoked) throw makeError(404, "not found");
     state.shares = state.shares.filter((s) => s.id !== sid);
-    if (state.shares.length === before) throw makeError(404, "not found");
+    const fileName = state.files.find((f) => f.id === revoked.file_id)?.name ?? null;
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "share.revoke",
+      target_kind: "share_link",
+      target_id: revoked.id,
+      target_name: fileName,
+      ip_address: null,
+      metadata: null,
+    });
     persist();
     return undefined as T;
   }
@@ -400,6 +592,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     if (!file) throw makeError(404, "file gone");
     share.access_count += 1;
     share.last_accessed_at = nowIso();
+    emitDemo({
+      actor_id: null,
+      actor_username: null,
+      action: "share.access",
+      target_kind: "share_link",
+      target_id: share.id,
+      target_name: file.name,
+      ip_address: null,
+      metadata: JSON.stringify({ token: share.token }),
+    });
     persist();
     return {
       file: {

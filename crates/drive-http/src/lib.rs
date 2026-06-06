@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod about;
+mod activity;
 mod files;
 pub mod headers;
 mod host_dispatch;
@@ -84,6 +85,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .route("/healthz", get(healthz))
         .route("/api/me", get(api_me))
         .route("/api/about", get(about::about))
+        .route("/api/activity", get(activity::list_activity))
         .with_state(state.clone())
         .merge(wopi_router)
         .merge(auth_router)

@@ -23,7 +23,7 @@ use axum::{
 };
 use bytes::Bytes;
 use drive_auth::AuthSession;
-use drive_db::{File, FileRepo, Folder, FolderRepo, NewFile, NewFolder};
+use drive_db::{AuditRepo, File, FileRepo, Folder, FolderRepo, NewAuditEvent, NewFile, NewFolder};
 use drive_storage::SignedUrl;
 use serde::{Deserialize, Serialize};
 
@@ -251,10 +251,23 @@ async fn create_folder(
         .insert(&NewFolder {
             parent_id: body.parent_id,
             name,
-            owner_id: session.user_id,
+            owner_id: session.user_id.clone(),
         })
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "folders.create".into(),
+            target_kind: Some("folder".into()),
+            target_id: Some(f.id.clone()),
+            target_name: Some(f.name.clone()),
+            ip_address: None,
+            metadata: None,
+        },
+    );
     Ok(Json(f.into()))
 }
 
@@ -329,10 +342,23 @@ async fn upload_file(
             size,
             content_type: meta.content_type.or(content_type),
             etag: meta.etag,
-            owner_id: session.user_id,
+            owner_id: session.user_id.clone(),
         })
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "files.upload".into(),
+            target_kind: Some("file".into()),
+            target_id: Some(file.id.clone()),
+            target_name: Some(file.name.clone()),
+            ip_address: None,
+            metadata: Some(format!(r#"{{"size":{}}}"#, file.size)),
+        },
+    );
     Ok(Json(file.into()))
 }
 
@@ -366,12 +392,14 @@ async fn patch_file(
         .map_err(|_| FilesError::NotFound)?;
     ensure_owner(&file.owner_id, &session)?;
 
+    let mut renamed = false;
     if let Some(name) = body.name {
         let sane = sanitise_display_name(&name)?;
         files
             .rename(&id, &sane)
             .await
             .map_err(|e| FilesError::Internal(e.to_string()))?;
+        renamed = true;
     }
     if let Some(parent) = body.parent_id {
         if let Some(pid) = parent.as_deref() {
@@ -395,6 +423,21 @@ async fn patch_file(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
+    if renamed {
+        AuditRepo::emit(
+            &s.db,
+            NewAuditEvent {
+                actor_id: Some(session.user_id.clone()),
+                actor_username: Some(session.username.clone()),
+                action: "files.rename".into(),
+                target_kind: Some("file".into()),
+                target_id: Some(updated.id.clone()),
+                target_name: Some(updated.name.clone()),
+                ip_address: None,
+                metadata: None,
+            },
+        );
+    }
     Ok(Json(updated.into()))
 }
 
@@ -411,11 +454,13 @@ async fn patch_folder(
         .map_err(|_| FilesError::NotFound)?;
     ensure_owner(&folder.owner_id, &session)?;
 
+    let mut renamed_folder = false;
     if let Some(name) = body.name {
         let sane = sanitise_display_name(&name)?;
         repo.rename(&id, &sane)
             .await
             .map_err(|e| FilesError::Internal(e.to_string()))?;
+        renamed_folder = true;
     }
     if let Some(parent) = body.parent_id {
         if let Some(pid) = parent.as_deref() {
@@ -443,6 +488,21 @@ async fn patch_folder(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
+    if renamed_folder {
+        AuditRepo::emit(
+            &s.db,
+            NewAuditEvent {
+                actor_id: Some(session.user_id.clone()),
+                actor_username: Some(session.username.clone()),
+                action: "folders.rename".into(),
+                target_kind: Some("folder".into()),
+                target_id: Some(updated.id.clone()),
+                target_name: Some(updated.name.clone()),
+                ip_address: None,
+                metadata: None,
+            },
+        );
+    }
     Ok(Json(updated.into()))
 }
 
@@ -461,6 +521,19 @@ async fn trash_file(
         .trash(&id)
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "files.trash".into(),
+            target_kind: Some("file".into()),
+            target_id: Some(file.id),
+            target_name: Some(file.name),
+            ip_address: None,
+            metadata: None,
+        },
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -479,6 +552,19 @@ async fn restore_file(
         .restore(&id)
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "files.restore".into(),
+            target_kind: Some("file".into()),
+            target_id: Some(file.id),
+            target_name: Some(file.name),
+            ip_address: None,
+            metadata: None,
+        },
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -493,6 +579,20 @@ async fn download_file(
         .await
         .map_err(|_| FilesError::NotFound)?;
     ensure_owner(&file.owner_id, &session)?;
+
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "files.download".into(),
+            target_kind: Some("file".into()),
+            target_id: Some(file.id.clone()),
+            target_name: Some(file.name.clone()),
+            ip_address: None,
+            metadata: None,
+        },
+    );
 
     let signed = s
         .storage
