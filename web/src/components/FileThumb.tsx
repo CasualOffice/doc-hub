@@ -5,7 +5,20 @@
  */
 import { Folder } from "lucide-react";
 
-type FileKind = "fold" | "doc" | "pdf" | "sheet" | "img" | "vid" | "generic";
+export type FileKind = "fold" | "doc" | "pdf" | "sheet" | "img" | "vid" | "aud" | "text" | "md" | "generic";
+
+/** Source/code/data extensions rendered as monospaced text. */
+const TEXT_EXTS = new Set([
+  "txt", "log", "csv", "tsv",
+  "json", "yaml", "yml", "toml", "ini", "conf",
+  "xml", "html", "htm", "svg",
+  "css", "scss", "sass", "less",
+  "js", "jsx", "mjs", "cjs", "ts", "tsx",
+  "py", "rb", "rs", "go", "java", "kt", "swift",
+  "c", "h", "cpp", "hpp", "cc", "m", "mm",
+  "php", "pl", "lua", "sql",
+  "diff", "patch", "env", "lock",
+]);
 
 const GRADIENTS = [
   "linear-gradient(135deg,#f6d365,#fda085)",
@@ -26,11 +39,19 @@ export function inferKind(name: string, contentType: string | null): FileKind {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   const ct = contentType ?? "";
   if (ct === "__folder__") return "fold";
-  if (ct.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) return "img";
-  if (ct.startsWith("video/") || ["mp4", "mov", "webm"].includes(ext)) return "vid";
-  if (["xlsx", "ods", "csv", "tsv"].includes(ext) || ct.includes("spreadsheet")) return "sheet";
+  if (ext === "md" || ext === "markdown" || ct === "text/markdown") return "md";
+  if (
+    ct.startsWith("image/") ||
+    ["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "heic"].includes(ext)
+  )
+    return "img";
+  if (ct.startsWith("video/") || ["mp4", "mov", "webm", "m4v"].includes(ext)) return "vid";
+  if (ct.startsWith("audio/") || ["mp3", "wav", "ogg", "flac", "m4a", "aac"].includes(ext))
+    return "aud";
+  if (["xlsx", "ods"].includes(ext) || ct.includes("spreadsheet")) return "sheet";
   if (["docx"].includes(ext) || ct.includes("wordprocessingml")) return "doc";
   if (ext === "pdf" || ct === "application/pdf") return "pdf";
+  if (TEXT_EXTS.has(ext) || ct.startsWith("text/")) return "text";
   return "generic";
 }
 
@@ -195,6 +216,9 @@ export function FileMiniIcon({ kind }: { kind: FileKind }) {
     img: "M4 4h16v16H4zM9 9.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM5 17l4-3.5 3 2 3-3 4 4.5",
     pdf: "M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5",
     vid: "M3 5h18v14H3zM10 9.5l5 2.5-5 2.5z",
+    aud: "M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+    text: "M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M9 17h4",
+    md: "M3 5h18v14H3zM6 16V8l3 4 3-4v8M16 8v8M14 13l2 3 2-3",
     sheet: "M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M12 11v8",
     generic: "M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5",
   };

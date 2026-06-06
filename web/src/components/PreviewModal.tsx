@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, Download, Share2, Star, X } from "lucide-rea
 
 import { downloadUrl, type FileDto } from "../api/client.ts";
 import { FileThumb, inferKind } from "./FileThumb.tsx";
+import { PreviewStage } from "./preview/PreviewStage.tsx";
 
 export function PreviewModal({
   files,
@@ -90,25 +91,12 @@ export function PreviewModal({
           {/* Stage */}
           <div
             style={{
-              background: "#E7E4DC",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 46,
               position: "relative",
+              overflow: "hidden",
+              background: "#E7E4DC",
             }}
           >
-            <div
-              style={{
-                width: "min(340px, 74%)",
-                aspectRatio: kind === "img" || kind === "vid" ? "16/10" : "1 / 1.3",
-                borderRadius: 10,
-                overflow: "hidden",
-                boxShadow: "0 10px 40px rgba(26,26,30,.2)",
-              }}
-            >
-              <FileThumb name={file.name} kind={kind} size="big" />
-            </div>
+            <PreviewStage file={file} kind={kind} />
 
             {hasNav && (
               <>
@@ -382,6 +370,12 @@ function labelForKind(k: ReturnType<typeof inferKind>): string {
       return "Image";
     case "vid":
       return "Video";
+    case "aud":
+      return "Audio";
+    case "md":
+      return "Markdown";
+    case "text":
+      return "Text";
     default:
       return "File";
   }

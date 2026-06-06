@@ -4,9 +4,10 @@ import { toast } from "sonner";
 
 import * as api from "../api/client.ts";
 import { ApiError, downloadUrl, type FileDto, type FolderDto } from "../api/client.ts";
+import { forbiddenUploadExtension } from "../api/uploadPolicy.ts";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { EntryContextMenu, EntryKebab, type Entry as MenuEntry, type EntryMenuHandlers } from "../components/EntryMenu.tsx";
-import { FileMiniIcon, FileThumb, inferKind } from "../components/FileThumb.tsx";
+import { FileMiniIcon, FileThumb, inferKind, type FileKind } from "../components/FileThumb.tsx";
 import { PreviewModal } from "../components/PreviewModal.tsx";
 import { RenameDialog } from "../components/RenameDialog.tsx";
 import { ShareDialog } from "../components/ShareDialog.tsx";
@@ -120,18 +121,42 @@ export function Files({
 
   const uploadAll = useCallback(
     async (files: FileList | File[]) => {
-      const list = Array.from(files);
+      const all = Array.from(files);
+      if (all.length === 0) return;
+
+      // Client-side blocklist — save the round-trip when we already know
+      // the server will refuse. The server enforces the same list.
+      const blocked = all.filter((f) => forbiddenUploadExtension(f.name) !== null);
+      const list = all.filter((f) => forbiddenUploadExtension(f.name) === null);
+      if (blocked.length > 0) {
+        const exts = Array.from(
+          new Set(blocked.map((f) => `.${forbiddenUploadExtension(f.name)}`)),
+        ).join(", ");
+        toast.error(
+          `${blocked.length} blocked: ${exts}`,
+          { description: "These file types can't be uploaded for security reasons." },
+        );
+      }
       if (list.length === 0) return;
+
       setUploading(list.map((f) => f.name));
       const results = await Promise.allSettled(list.map((f) => api.uploadFile(f, current.id)));
       setUploading([]);
       const ok = results.filter((r) => r.status === "fulfilled").length;
+      // Any failure here is server-side (network, quota, magic-byte sniff
+      // once it lands). Surface the first explanatory error inline.
+      const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
       if (ok === list.length) {
         toast.success(`Uploaded ${ok} ${ok === 1 ? "file" : "files"}`);
       } else if (ok > 0) {
         toast.warning(`Uploaded ${ok} of ${list.length}, ${list.length - ok} failed`);
-      } else {
-        toast.error("Upload failed");
+      } else if (firstErr) {
+        const e = firstErr.reason as { status?: number; body?: { error?: string; extension?: string } };
+        if (e?.status === 415 && e?.body?.extension) {
+          toast.error(`.${e.body.extension} files aren't allowed.`);
+        } else {
+          toast.error(e?.body?.error ?? "Upload failed");
+        }
       }
       void refresh();
     },
@@ -743,7 +768,7 @@ function CardMeta({
   sub,
 }: {
   name: string;
-  kind: "fold" | "doc" | "pdf" | "sheet" | "img" | "vid" | "generic";
+  kind: FileKind;
   sub: string;
 }) {
   return (
@@ -878,7 +903,7 @@ function ListRow({
   kebab,
 }: {
   name: string;
-  kind: "fold" | "doc" | "pdf" | "sheet" | "img" | "vid" | "generic";
+  kind: FileKind;
   type: string;
   modified: string;
   size: string;

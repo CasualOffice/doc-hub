@@ -52,7 +52,61 @@ const STATE_KEY = "cd-demo-state-v1";
 const blobs: Map<string, Blob> = new Map();
 
 const state: DemoState = loadState();
+// Seed in-memory content for the seeded files so the Preview Modal has
+// real bytes to render. Uploads add their own blobs as the user goes.
+seedBlobs();
 persist();
+
+function seedBlobs() {
+  blobs.set(
+    "f_readme",
+    new Blob(
+      [
+        `# Welcome to Casual Drive\n\n` +
+          `This is a **demo build** running entirely in your browser — there is\n` +
+          `no server. Your changes persist in localStorage and reset only when\n` +
+          `you clear browser data.\n\n` +
+          `## Try it\n\n` +
+          `- Right-click any file for the **context menu**.\n` +
+          `- Open *Q2 planning.xlsx* to see the "Open in Casual Sheets" handoff.\n` +
+          `- Pick **Share…** to mint a real share link with optional password and\n` +
+          `  expiry. Open the link in another tab to see the recipient page.\n` +
+          `- Drag a file into the window to upload it (some extensions are\n` +
+          `  blocked for safety — try a \`.sh\`).\n` +
+          `- Switch to the **Activity** tab to see every action recorded.\n\n` +
+          `## What works in the real build\n\n` +
+          `1. Multi-backend storage (filesystem, S3, MinIO) via OpenDAL.\n` +
+          `2. Argon2id passwords + tower-sessions cookies.\n` +
+          `3. WOPI handoff to [Casual Sheets](https://schnsrw.live) and\n` +
+          `   Casual Editor for live co-editing.\n` +
+          `4. Two-origin model — app bytes and file bytes never share an\n` +
+          `   origin, so a malicious upload can't talk back to the SPA.\n\n` +
+          `> Self-host the real thing from\n` +
+          `> [github.com/schnsrw/drive](https://github.com/schnsrw/drive).\n`,
+      ],
+      { type: "text/markdown" },
+    ),
+  );
+
+  blobs.set(
+    "f_logo",
+    new Blob(
+      [
+        `<svg viewBox="0 0 172 172" xmlns="http://www.w3.org/2000/svg">` +
+          `<defs><clipPath id="c"><rect width="172" height="172" rx="40"/></clipPath></defs>` +
+          `<g clip-path="url(#c)">` +
+          `<rect width="172" height="172" fill="#16161A"/>` +
+          `<g fill="#F5F3EE">` +
+          `<circle cx="54" cy="100" r="23"/>` +
+          `<circle cx="118" cy="100" r="23"/>` +
+          `<circle cx="86" cy="68" r="34"/>` +
+          `<rect x="54" y="100" width="64" height="23"/>` +
+          `</g></g></svg>`,
+      ],
+      { type: "image/svg+xml" },
+    ),
+  );
+}
 
 function loadState(): DemoState {
   // localStorage may throw in private-mode Safari; never let it break boot.

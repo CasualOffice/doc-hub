@@ -258,6 +258,77 @@ async fn upload_file_then_list_root_shows_it() {
 }
 
 #[tokio::test]
+async fn upload_rejects_forbidden_extension() {
+    let app = router(fixture().await);
+    let cookie = sign_in(&app).await;
+
+    for name in ["malware.exe", "install.sh", "auto.bat", "setup.tar.gz.cmd"] {
+        let boundary = "----testboundary-blk";
+        let body = build_multipart(
+            boundary,
+            &[MultipartField::File(
+                "file",
+                name,
+                "application/octet-stream",
+                b"junk",
+            )],
+        );
+        let r = app
+            .clone()
+            .oneshot(auth_req(
+                "POST",
+                "/api/files",
+                &cookie,
+                Some(&format!("multipart/form-data; boundary={boundary}")),
+                Body::from(body),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            r.status(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "{name} should be 415"
+        );
+        let body = json_body(r).await;
+        assert_eq!(body["error"], "file type not allowed");
+        let ext = body["extension"].as_str().unwrap();
+        assert!(["exe", "sh", "bat", "cmd"].contains(&ext));
+    }
+}
+
+#[tokio::test]
+async fn upload_still_accepts_macro_enabled_office_files() {
+    // .docm / .xlsm / .pptm are intentionally allowed per CLAUDE.md —
+    // accepted as opaque blobs, never auto-opened in the editor.
+    let app = router(fixture().await);
+    let cookie = sign_in(&app).await;
+    for name in ["doc.docm", "sheet.xlsm", "deck.pptm"] {
+        let boundary = "----testboundary-macro";
+        let body = build_multipart(
+            boundary,
+            &[MultipartField::File(
+                "file",
+                name,
+                "application/octet-stream",
+                b"blob",
+            )],
+        );
+        let r = app
+            .clone()
+            .oneshot(auth_req(
+                "POST",
+                "/api/files",
+                &cookie,
+                Some(&format!("multipart/form-data; boundary={boundary}")),
+                Body::from(body),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::OK, "{name} should upload OK");
+    }
+}
+
+#[tokio::test]
 async fn rename_then_move_then_trash_then_restore() {
     let app = router(fixture().await);
     let cookie = sign_in(&app).await;

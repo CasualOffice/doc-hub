@@ -39,24 +39,53 @@ pub(crate) enum FilesError {
     Validation(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("forbidden extension: {0}")]
+    ForbiddenExtension(String),
     #[error("internal: {0}")]
     Internal(String),
 }
 
 impl IntoResponse for FilesError {
     fn into_response(self) -> Response {
-        let (status, body) = match &self {
-            Self::NotFound => (StatusCode::NOT_FOUND, "not found"),
-            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-            Self::Validation(m) => (StatusCode::BAD_REQUEST, m.as_str()),
-            Self::Conflict(m) => (StatusCode::CONFLICT, m.as_str()),
+        match self {
+            Self::NotFound => {
+                (StatusCode::NOT_FOUND, Json(ErrBody { error: "not found" })).into_response()
+            }
+            Self::Forbidden => {
+                (StatusCode::FORBIDDEN, Json(ErrBody { error: "forbidden" })).into_response()
+            }
+            Self::Validation(m) => {
+                (StatusCode::BAD_REQUEST, Json(ErrBody { error: &m })).into_response()
+            }
+            Self::Conflict(m) => {
+                (StatusCode::CONFLICT, Json(ErrBody { error: &m })).into_response()
+            }
+            Self::ForbiddenExtension(ext) => (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                Json(ExtErrBody {
+                    error: "file type not allowed",
+                    extension: ext,
+                }),
+            )
+                .into_response(),
             Self::Internal(m) => {
                 tracing::error!(error = %m, "files internal error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal error")
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrBody {
+                        error: "internal error",
+                    }),
+                )
+                    .into_response()
             }
-        };
-        (status, Json(ErrBody { error: body })).into_response()
+        }
     }
+}
+
+#[derive(Serialize)]
+struct ExtErrBody {
+    error: &'static str,
+    extension: String,
 }
 
 #[derive(Serialize)]
@@ -170,6 +199,37 @@ fn ensure_owner(folder_owner: &str, session: &AuthSession) -> Result<(), FilesEr
 
 pub(crate) fn storage_key(file_id: &str) -> String {
     format!("files/{file_id}")
+}
+
+/// Extensions refused at upload time. See docs/ux/07-preview-surface.md
+/// §"Upload restrictions". Office macro-enabled formats (.docm/.xlsm/.pptm)
+/// are intentionally NOT here — per CLAUDE.md they're allowed as opaque
+/// blobs and never auto-opened in an editor.
+const FORBIDDEN_UPLOAD_EXTENSIONS: &[&str] = &[
+    // Windows scripts / executables
+    "exe", "com", "scr", "bat", "cmd", "msi", "msp", "ps1", "psm1", "vbs", "vbe", "wsf", "wsh",
+    "jse", "reg", "lnk", "scf", // POSIX shells / runnable bundles
+    "sh", "bash", "zsh", "fish", "csh", "ksh", "command", "app", "dmg", "pkg",
+    // Runtime artefacts
+    "jar", "class", "dll", "so", "dylib", // Shortcut-style files that resolve elsewhere
+    "url", "desktop",
+];
+
+/// Returns `Err(FilesError::ForbiddenExtension)` if the last dotted
+/// extension of `filename` is in the upload blocklist. Case-insensitive.
+pub(crate) fn check_upload_extension(filename: &str) -> Result<(), FilesError> {
+    let lower = filename.to_ascii_lowercase();
+    let Some(idx) = lower.rfind('.') else {
+        return Ok(());
+    };
+    let ext = &lower[idx + 1..];
+    if ext.is_empty() {
+        return Ok(());
+    }
+    if FORBIDDEN_UPLOAD_EXTENSIONS.contains(&ext) {
+        return Err(FilesError::ForbiddenExtension(ext.to_string()));
+    }
+    Ok(())
 }
 
 // ─── Handlers ───────────────────────────────────────────────────────────
@@ -317,6 +377,7 @@ async fn upload_file(
         .ok_or_else(|| FilesError::Validation("missing file field with filename".into()))?;
     let bytes = file_bytes.ok_or_else(|| FilesError::Validation("missing file bytes".into()))?;
     let name = sanitise_display_name(&filename)?;
+    check_upload_extension(&name)?;
 
     if let Some(pid) = &parent_id {
         let parent = FolderRepo::new(&s.db)

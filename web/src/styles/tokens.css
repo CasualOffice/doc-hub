@@ -91,19 +91,27 @@
   --info:    #3A5CA8;
 
   /* File-type tints */
-  --tint-fold:  rgba(26, 26, 30, 0.04);
-  --tint-doc:   rgba(67, 107, 177, 0.07);
-  --tint-pdf:   rgba(200, 76, 76, 0.06);
-  --tint-sheet: rgba(46, 140, 90, 0.06);
-  --tint-img:   transparent;
-  --tint-vid:   rgba(122, 79, 154, 0.06);
+  --tint-fold:    rgba(26, 26, 30, 0.04);
+  --tint-doc:     rgba(67, 107, 177, 0.07);
+  --tint-pdf:     rgba(200, 76, 76, 0.06);
+  --tint-sheet:   rgba(46, 140, 90, 0.06);
+  --tint-img:     transparent;
+  --tint-vid:     rgba(122, 79, 154, 0.06);
+  --tint-aud:     rgba(200, 164, 92, 0.08);
+  --tint-text:    rgba(26, 26, 30, 0.05);
+  --tint-md:      rgba(26, 26, 30, 0.05);
+  --tint-generic: rgba(26, 26, 30, 0.04);
 
-  --ic-fold:  var(--ink);
-  --ic-doc:   #3A5CA8;
-  --ic-img:   #3C7D57;
-  --ic-pdf:   #B04545;
-  --ic-vid:   #7A4F9A;
-  --ic-sheet: #2E8C5A;
+  --ic-fold:    var(--ink);
+  --ic-doc:     #3A5CA8;
+  --ic-img:     #3C7D57;
+  --ic-pdf:     #B04545;
+  --ic-vid:     #7A4F9A;
+  --ic-sheet:   #2E8C5A;
+  --ic-aud:     #C8A45C;
+  --ic-text:    var(--ink);
+  --ic-md:      var(--ink);
+  --ic-generic: var(--muted);
 
   /* Shadows */
   --shadow:        0 1px 2px rgba(26, 26, 30, 0.04), 0 8px 30px rgba(26, 26, 30, 0.05);
