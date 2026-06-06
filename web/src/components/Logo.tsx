@@ -1,12 +1,12 @@
 /**
- * Inline Casual Drive mark. Uses currentColor for the dark background so the
- * caller can flip light/dark via `color`. `--mark-fg` overrides the crescent
- * tint if needed (defaults to the brand cream).
+ * Casual Drive mark — black rounded square with a negative-space crescent.
+ * `currentColor` paints the square so callers can flip light/dark via `color`.
+ * The crescent fill (`--mark-fg`) defaults to the brand paper cream.
  */
-export function Logo({ size = 20, className }: { size?: number; className?: string }) {
+export function Logo({ size = 38, className }: { size?: number; className?: string }) {
   return (
     <svg
-      viewBox="0 0 172 172"
+      viewBox="0 0 38 38"
       width={size}
       height={size}
       role="img"
@@ -16,15 +16,49 @@ export function Logo({ size = 20, className }: { size?: number; className?: stri
     >
       <defs>
         <clipPath id="cd-mark-clip">
-          <rect x="0" y="0" width="172" height="172" rx="40" />
+          <rect width="38" height="38" rx="10" />
         </clipPath>
       </defs>
       <g clipPath="url(#cd-mark-clip)">
-        <rect width="172" height="172" fill="currentColor" />
-        <circle cx="78" cy="86" r="52" fill="var(--mark-fg, #F5F3EE)" />
-        <circle cx="104" cy="72" r="52" fill="currentColor" />
-        <circle cx="112" cy="64" r="6.5" fill="var(--mark-fg, #F5F3EE)" />
+        <rect width="38" height="38" fill="currentColor" />
+        <circle cx="16.5" cy="19.5" r="11.5" fill="var(--mark-fg, #F2F0EA)" />
+        <circle cx="22.5" cy="16.5" r="11.5" fill="currentColor" />
+        <circle cx="24.3" cy="14.6" r="1.5" fill="var(--mark-fg, #F2F0EA)" />
       </g>
     </svg>
+  );
+}
+
+/** The wordmark — Fraunces "Casual" over uppercase letter-spaced "DRIVE". */
+export function Wordmark() {
+  return (
+    <span style={{ display: "inline-block", lineHeight: 1 }}>
+      <span
+        style={{
+          fontFamily: "var(--font-display)",
+          fontWeight: 500,
+          fontSize: 18,
+          letterSpacing: "0.5px",
+          display: "block",
+          color: "var(--ink)",
+        }}
+      >
+        Casual
+      </span>
+      <span
+        style={{
+          fontFamily: "var(--font-sans)",
+          fontSize: 10,
+          letterSpacing: "4px",
+          textTransform: "uppercase",
+          color: "var(--muted)",
+          fontWeight: 500,
+          marginTop: 3,
+          display: "block",
+        }}
+      >
+        Drive
+      </span>
+    </span>
   );
 }

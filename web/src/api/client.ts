@@ -31,7 +31,6 @@ async function request<T>(
     body = JSON.stringify(init.json);
   }
 
-  // Attach CSRF on non-safe methods.
   const method = (init.method ?? "GET").toUpperCase();
   if (method !== "GET" && method !== "HEAD" && csrfToken) {
     headers.set("x-csrf-token", csrfToken);
@@ -87,6 +86,8 @@ export async function signOut(): Promise<void> {
 export interface Me {
   admin: string;
   backend: string;
+  user_id?: string;
+  is_admin?: boolean;
 }
 
 export async function me(): Promise<Me> {

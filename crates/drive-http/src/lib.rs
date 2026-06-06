@@ -24,6 +24,7 @@ use axum::{
     routing::get,
     Router,
 };
+use drive_auth::AuthSession;
 use drive_wopi::WopiAppState;
 use tower_http::set_header::SetResponseHeaderLayer;
 
@@ -47,12 +48,22 @@ async fn healthz() -> impl IntoResponse {
 struct Me {
     admin: String,
     backend: String,
+    user_id: String,
+    is_admin: bool,
 }
 
-async fn api_me(State(s): State<HttpState>) -> axum::Json<Me> {
+/// `/api/me` requires an authenticated session — returns 401 for the SPA's
+/// initial bootstrap when no cookie is present, so AuthContext falls back
+/// to the SignIn page instead of going straight to the shell.
+async fn api_me(
+    State(s): State<HttpState>,
+    session: AuthSession,
+) -> axum::Json<Me> {
     axum::Json(Me {
-        admin: s.config.admin_user.clone(),
+        admin: session.username.clone(),
         backend: format!("{:?}", s.config.backend),
+        user_id: session.user_id,
+        is_admin: session.is_admin,
     })
 }
 

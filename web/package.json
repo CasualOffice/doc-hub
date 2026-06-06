@@ -12,10 +12,20 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "^5.2.5",
+    "@fontsource-variable/fraunces": "^5.2.9",
+    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@formkit/auto-animate": "^0.9.0",
+    "@radix-ui/react-dialog": "^1.1.16",
+    "cmdk": "^1.1.1",
     "lucide-react": "^0.469.0",
+    "motion": "^12.40.0",
+    "radix-ui": "^1.5.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.77.0",
+    "sonner": "^2.0.7",
+    "vaul": "^1.1.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

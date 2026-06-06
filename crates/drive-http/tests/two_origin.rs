@@ -269,11 +269,14 @@ async fn sign_in_with_unknown_username_returns_401() {
 #[tokio::test]
 async fn app_origin_carries_strict_csp() {
     let app = router(fixture().await);
+    // Hit /healthz (unauthenticated) to verify the CSP middleware applies
+    // to every response, not just authed ones. /api/me requires AuthSession
+    // and would return 401 here.
     let r = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/me")
+                .uri("/healthz")
                 .header("host", APP)
                 .body(Body::empty())
                 .unwrap(),

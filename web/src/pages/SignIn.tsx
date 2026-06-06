@@ -1,11 +1,12 @@
 import { useState } from "react";
 
-import { Logo } from "../components/Logo.tsx";
 import { ApiError } from "../api/client.ts";
 import { useAuth } from "../auth/AuthContext.tsx";
+import { Logo } from "../components/Logo.tsx";
 
 export function SignIn() {
   const { signIn } = useAuth();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,100 +18,100 @@ export function SignIn() {
     setBusy(true);
     setError(null);
     try {
-      // Username is fixed in v0 (single-tenant admin); the binary's
-      // /api/auth/sign-in still expects it in the body.
-      await signIn("admin", password);
+      await signIn(username.trim(), password);
     } catch (err) {
       const msg =
         err instanceof ApiError
           ? err.status === 429
             ? "Too many attempts. Try again in 10 minutes."
-            : "Wrong password."
+            : "Wrong username or password."
           : "Couldn't reach the server.";
       setError(msg);
       setShake(true);
-      setTimeout(() => setShake(false), 280);
+      setTimeout(() => setShake(false), 300);
     } finally {
       setBusy(false);
     }
   }
 
+  const submitDisabled = busy || !password || !username.trim();
+
   return (
     <div
-      className="h-full w-full flex items-center justify-center"
-      style={{ background: "var(--bg-canvas)" }}
+      style={{
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--paper)",
+      }}
     >
       <form
         onSubmit={onSubmit}
-        className="flex flex-col items-stretch text-center"
         style={{
-          width: "360px",
-          padding: "var(--space-8) var(--space-6)",
-          background: "var(--bg-default)",
-          border: "1px solid var(--border-default)",
+          width: 360,
+          padding: "32px 26px 26px",
+          background: "var(--card)",
+          border: "1px solid var(--line)",
           borderRadius: "var(--radius-xl)",
-          boxShadow: "var(--shadow-md)",
-          transform: shake ? "translateX(0)" : undefined,
-          animation: shake ? "cd-shake 280ms cubic-bezier(0.32, 0.72, 0, 1)" : undefined,
+          boxShadow: "var(--shadow-soft, var(--shadow))",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+          animation: shake ? "cd-shake 300ms var(--ease)" : undefined,
         }}
       >
-        <div style={{ color: "var(--fg-default)", marginBottom: "var(--space-3)" }}>
-          <div style={{ display: "inline-block" }}>
-            <Logo size={32} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div style={{ color: "var(--ink)", marginBottom: 4 }}>
+            <Logo size={36} />
           </div>
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--text-2xl)",
+              fontWeight: 500,
+              letterSpacing: "var(--tracking-tight)",
+              color: "var(--ink)",
+            }}
+          >
+            Casual Drive
+          </h1>
+          <p style={{ margin: 0, fontSize: "var(--text-base)", color: "var(--muted)" }}>
+            Sign in to continue.
+          </p>
         </div>
 
-        <h1
-          style={{
-            margin: 0,
-            fontSize: "var(--text-xl)",
-            fontWeight: "var(--weight-semibold)",
-            color: "var(--fg-default)",
-            letterSpacing: "var(--tracking-tight)",
-          }}
-        >
-          Casual Drive
-        </h1>
-        <p
-          style={{
-            marginTop: "var(--space-2)",
-            marginBottom: "var(--space-6)",
-            fontSize: "var(--text-md)",
-            color: "var(--fg-muted)",
-          }}
-        >
-          Sign in to continue.
-        </p>
-
-        <input
-          type="password"
-          name="password"
-          autoFocus
-          autoComplete="current-password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy}
-          aria-invalid={error !== null}
-          style={{
-            width: "100%",
-            padding: "var(--space-3) var(--space-3)",
-            fontSize: "var(--text-base)",
-            fontFamily: "var(--font-sans)",
-            color: "var(--fg-default)",
-            background: "var(--bg-default)",
-            border: `1px solid ${error ? "var(--danger)" : "var(--border-default)"}`,
-            borderRadius: "var(--radius-md)",
-            outline: "none",
-            transition: `border-color var(--dur-fast) var(--ease-out)`,
-          }}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Input
+            type="text"
+            name="username"
+            autoComplete="username"
+            placeholder="Username"
+            autoFocus
+            disabled={busy}
+            invalid={error !== null}
+            value={username}
+            onChange={(v) => setUsername(v)}
+          />
+          <Input
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            placeholder="Password"
+            disabled={busy}
+            invalid={error !== null}
+            value={password}
+            onChange={(v) => setPassword(v)}
+          />
+        </div>
 
         {error && (
           <div
             role="alert"
             style={{
-              marginTop: "var(--space-2)",
+              marginTop: -8,
               fontSize: "var(--text-xs)",
               color: "var(--danger)",
               textAlign: "left",
@@ -122,21 +123,24 @@ export function SignIn() {
 
         <button
           type="submit"
-          disabled={busy || password.length === 0}
+          disabled={submitDisabled}
           style={{
             width: "100%",
-            marginTop: "var(--space-4)",
-            padding: "var(--space-3)",
-            fontSize: "var(--text-sm)",
-            fontWeight: "var(--weight-medium)",
+            padding: "12px",
             fontFamily: "var(--font-sans)",
-            color: "var(--fg-onAccent)",
-            background: busy || !password ? "var(--accent-muted)" : "var(--accent)",
+            fontSize: "var(--text-sm)",
+            fontWeight: 500,
+            color: "var(--paper)",
+            background: submitDisabled ? "rgba(26,26,30,.35)" : "var(--ink)",
             border: "none",
-            borderRadius: "var(--radius-md)",
-            cursor: busy || !password ? "default" : "pointer",
-            transition: `background var(--dur-fast) var(--ease-out)`,
+            borderRadius: 12,
+            cursor: submitDisabled ? "default" : "pointer",
+            transition: "background 200ms var(--ease), transform 200ms",
           }}
+          onMouseOver={(e) => {
+            if (!submitDisabled) e.currentTarget.style.transform = "translateY(-1px)";
+          }}
+          onMouseOut={(e) => (e.currentTarget.style.transform = "")}
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
@@ -149,15 +153,67 @@ export function SignIn() {
             25%     { transform: translateX(-6px); }
             75%     { transform: translateX(6px); }
           }
-          input:focus-visible {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-muted);
-          }
           @media (prefers-reduced-motion: reduce) {
             form { animation: none !important; }
           }
         `}
       </style>
     </div>
+  );
+}
+
+function Input({
+  type,
+  name,
+  autoComplete,
+  placeholder,
+  autoFocus,
+  disabled,
+  invalid,
+  value,
+  onChange,
+}: {
+  type: "text" | "password";
+  name: string;
+  autoComplete: string;
+  placeholder: string;
+  autoFocus?: boolean;
+  disabled?: boolean;
+  invalid?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <input
+      type={type}
+      name={name}
+      autoFocus={autoFocus}
+      autoComplete={autoComplete}
+      placeholder={placeholder}
+      disabled={disabled}
+      aria-invalid={invalid || undefined}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        width: "100%",
+        padding: "12px 14px",
+        fontFamily: "var(--font-sans)",
+        fontSize: "var(--text-base)",
+        color: "var(--ink)",
+        background: "var(--paper)",
+        border: `1px solid ${invalid ? "var(--danger)" : "var(--line)"}`,
+        borderRadius: 12,
+        outline: "none",
+        transition: "border-color 150ms, box-shadow 150ms",
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.borderColor = invalid ? "var(--danger)" : "var(--line-strong)";
+        e.currentTarget.style.boxShadow = "0 0 0 4px rgba(26,26,30,.04)";
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.borderColor = invalid ? "var(--danger)" : "var(--line)";
+        e.currentTarget.style.boxShadow = "";
+      }}
+    />
   );
 }

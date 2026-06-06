@@ -1,42 +1,43 @@
-/* Casual Drive design tokens — copied verbatim from
-   docs/research/04-polish-principles.md § "Starter Token Set".
-
-   Tailwind v4 uses CSS-only config via the @theme directive. Tokens declared
-   here become available as Tailwind utilities (e.g. `bg-[--bg-default]`
-   or the named ones below). */
+/* Casual Drive — v2 design tokens.
+   Authoritative source: docs/ux/02-surface-v2.md §1.
+   Palette: warm paper + ink + gold accent. Typography: Fraunces (display) +
+   Hanken Grotesk (body). Motion: cubic-bezier(.2,.8,.2,1). */
 
 @import "tailwindcss";
 
-/* ───────── Light theme (default) ───────── */
 :root {
-  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
-  --font-display: "Inter Variable", "Inter", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* Type families */
+  --font-sans:    "Hanken Grotesk Variable", "Hanken Grotesk", system-ui,
+                  -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces Variable", "Fraunces", "Hoefler Text", "Cambria",
+                  "Times New Roman", serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
   /* Type scale */
   --text-xs:   11px;
   --text-sm:   13px;
-  --text-base: 14px;
-  --text-md:   15px;
-  --text-lg:   17px;
-  --text-xl:   20px;
-  --text-2xl:  24px;
+  --text-base: 13.5px;
+  --text-md:   14px;
+  --text-lg:   18px;
+  --text-xl:   19px;
+  --text-2xl:  26px;
   --text-3xl:  30px;
-  --text-4xl:  38px;
 
   --leading-tight:  1.2;
   --leading-snug:   1.35;
   --leading-normal: 1.5;
 
+  --weight-light:    300;
   --weight-regular:  400;
   --weight-medium:   500;
   --weight-semibold: 600;
   --weight-bold:     700;
 
-  --tracking-tight:  -0.01em;
-  --tracking-normal: 0;
-  --tracking-wide:   0.02em;
+  --tracking-tighter: -0.02em;
+  --tracking-tight:   -0.01em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.02em;
+  --tracking-wider:   0.04em;
 
   /* Spacing (4 / 8 grid) */
   --space-0:  0;
@@ -46,67 +47,83 @@
   --space-4:  16px;
   --space-5:  20px;
   --space-6:  24px;
+  --space-7:  26px;
   --space-8:  32px;
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
 
-  /* Concentric radii */
+  /* Radii — concentric */
   --radius-xs:   4px;
   --radius-sm:   6px;
   --radius-md:   8px;
-  --radius-lg:  12px;
-  --radius-xl:  16px;
-  --radius-2xl: 20px;
-  --radius-full: 9999px;
+  --radius:     18px;
+  --radius-lg:  14px;
+  --radius-xl:  18px;
+  --radius-2xl: 24px;
+  --radius-pill: 9999px;
 
-  /* Color — light */
-  --bg-canvas:    #FAFAFA;
-  --bg-default:   #FFFFFF;
-  --bg-elevated:  #FFFFFF;
-  --bg-subtle:    #F4F4F5;
-  --bg-hover:     rgba(0, 0, 0, 0.04);
-  --bg-selected:  rgba(10, 132, 255, 0.10);
+  /* Color — light (warm paper) */
+  --ink:        #1A1A1E;
+  --ink-soft:   #3A3A42;
+  --paper:      #F2F0EA;
+  --card:       #FBFAF6;
+  --muted:      #8A8A92;
+  --muted-2:    #A6A6AD;
+  --accent:     #C8A45C;
+  --accent-hover: #B8924A;
+  --accent-muted: rgba(200, 164, 92, 0.12);
 
-  --fg-default:   #18181B;
-  --fg-muted:     #52525B;
-  --fg-subtle:    #A1A1AA;
-  --fg-onAccent:  #FFFFFF;
+  --line:        rgba(26, 26, 30, 0.08);
+  --line-strong: rgba(26, 26, 30, 0.14);
 
-  --border-default: rgba(0, 0, 0, 0.08);
-  --border-strong:  rgba(0, 0, 0, 0.14);
+  --bg-hover:    rgba(26, 26, 30, 0.05);
+  --bg-row-hover: rgba(26, 26, 30, 0.03);
+  --bg-selected: rgba(200, 164, 92, 0.12);
+  --bg-overlay:  rgba(26, 26, 30, 0.42);
 
-  --accent:       #0A84FF;
-  --accent-hover: #0070E0;
-  --accent-muted: rgba(10, 132, 255, 0.12);
+  --fg-onAccent: #FFFFFF;
 
-  --success: #34C759;
-  --warning: #FF9F0A;
-  --danger:  #FF3B30;
-  --info:    #5AC8FA;
+  --success: #2E8C5A;
+  --warning: #C8A45C;
+  --danger:  #B04545;
+  --info:    #3A5CA8;
+
+  /* File-type tints */
+  --tint-fold:  rgba(26, 26, 30, 0.04);
+  --tint-doc:   rgba(67, 107, 177, 0.07);
+  --tint-pdf:   rgba(200, 76, 76, 0.06);
+  --tint-sheet: rgba(46, 140, 90, 0.06);
+  --tint-img:   transparent;
+  --tint-vid:   rgba(122, 79, 154, 0.06);
+
+  --ic-fold:  var(--ink);
+  --ic-doc:   #3A5CA8;
+  --ic-img:   #3C7D57;
+  --ic-pdf:   #B04545;
+  --ic-vid:   #7A4F9A;
+  --ic-sheet: #2E8C5A;
 
   /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
-  --shadow-xl: 0 24px 60px rgba(0, 0, 0, 0.16);
-  --shadow-inner-input: inset 0 1px 1px rgba(0, 0, 0, 0.04);
+  --shadow:        0 1px 2px rgba(26, 26, 30, 0.04), 0 8px 30px rgba(26, 26, 30, 0.05);
+  --shadow-hover:  0 2px 4px rgba(26, 26, 30, 0.06), 0 16px 44px rgba(26, 26, 30, 0.10);
+  --shadow-md:     0 4px 12px rgba(26, 26, 30, 0.08);
+  --shadow-lg:     0 10px 30px rgba(26, 26, 30, 0.15);
+  --shadow-xl:     0 30px 80px rgba(26, 26, 30, 0.40);
+  --shadow-button: 0 10px 24px rgba(26, 26, 30, 0.22);
 
   /* Motion */
-  --ease-out:   cubic-bezier(0.32, 0.72, 0,    1);
-  --ease-in:    cubic-bezier(0.45, 0,    0.55, 1);
-  --ease-inout: cubic-bezier(0.65, 0,    0.35, 1);
+  --ease:       cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out:   cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in:    cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
 
   --dur-fast:   120ms;
   --dur-base:   200ms;
-  --dur-slow:   400ms;
-  --dur-slower: 600ms;
+  --dur-slow:   300ms;
+  --dur-slower: 420ms;
 
-  /* Focus */
-  --focus-ring: 0 0 0 2px var(--bg-default), 0 0 0 4px rgba(10, 132, 255, 0.6);
-
-  /* z-index scale */
+  /* Z-index */
   --z-dropdown: 1000;
   --z-sticky:   1100;
   --z-overlay:  1200;
@@ -116,57 +133,18 @@
   --z-tooltip:  1600;
 }
 
-/* ───────── Dark theme ───────── */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg-canvas:   #0A0A0B;
-    --bg-default:  #131316;
-    --bg-elevated: #1A1A1F;
-    --bg-subtle:   #1F1F25;
-    --bg-hover:    rgba(255, 255, 255, 0.06);
-    --bg-selected: rgba(10, 132, 255, 0.18);
-
-    --fg-default:  #F4F4F5;
-    --fg-muted:    #A1A1AA;
-    --fg-subtle:   #71717A;
-
-    --border-default: rgba(255, 255, 255, 0.08);
-    --border-strong:  rgba(255, 255, 255, 0.14);
-
-    --focus-ring: 0 0 0 2px var(--bg-default), 0 0 0 4px rgba(10, 132, 255, 0.7);
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg-canvas:   #0A0A0B;
-  --bg-default:  #131316;
-  --bg-elevated: #1A1A1F;
-  --bg-subtle:   #1F1F25;
-  --bg-hover:    rgba(255, 255, 255, 0.06);
-  --bg-selected: rgba(10, 132, 255, 0.18);
-
-  --fg-default:  #F4F4F5;
-  --fg-muted:    #A1A1AA;
-  --fg-subtle:   #71717A;
-
-  --border-default: rgba(255, 255, 255, 0.08);
-  --border-strong:  rgba(255, 255, 255, 0.14);
-
-  --focus-ring: 0 0 0 2px var(--bg-default), 0 0 0 4px rgba(10, 132, 255, 0.7);
-}
-
-/* ───────── Tailwind v4 @theme bridge ─────────
-   These map our CSS vars into Tailwind-consumable utilities like
-   `bg-canvas`, `text-fg-default`, `rounded-lg`, `shadow-md`, etc. */
+/* Tailwind v4 @theme bridge */
 @theme {
-  --color-canvas:    var(--bg-canvas);
-  --color-default:   var(--bg-default);
-  --color-elevated:  var(--bg-elevated);
-  --color-subtle:    var(--bg-subtle);
-  --color-fg:        var(--fg-default);
-  --color-fg-muted:  var(--fg-muted);
-  --color-fg-subtle: var(--fg-subtle);
-  --color-accent:    var(--accent);
+  --color-ink:        var(--ink);
+  --color-ink-soft:   var(--ink-soft);
+  --color-paper:      var(--paper);
+  --color-card:       var(--card);
+  --color-muted:      var(--muted);
+  --color-muted-2:    var(--muted-2);
+  --color-accent:     var(--accent);
+  --color-success:    var(--success);
+  --color-warning:    var(--warning);
+  --color-danger:     var(--danger);
 
   --radius-xs:  var(--radius-xs);
   --radius-sm:  var(--radius-sm);
@@ -175,17 +153,15 @@
   --radius-xl:  var(--radius-xl);
   --radius-2xl: var(--radius-2xl);
 
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
+  --shadow-soft:  var(--shadow);
+  --shadow-hover: var(--shadow-hover);
 
   --font-sans:    var(--font-sans);
   --font-display: var(--font-display);
   --font-mono:    var(--font-mono);
 }
 
-/* ───────── Base resets ───────── */
+/* Base */
 html, body, #root {
   height: 100%;
   margin: 0;
@@ -194,25 +170,32 @@ html, body, #root {
 body {
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  color: var(--fg-default);
-  background: var(--bg-canvas);
+  color: var(--ink);
+  background: var(--paper);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-/* Tabular numerals on numeric columns (file size, dates) */
-.tabular-nums { font-variant-numeric: tabular-nums; }
+::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
 
-/* Hairline border helper */
-.hairline { border: 1px solid var(--border-default); }
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 
-/* Respect reduced-motion everywhere — commandment #8 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
+    transition-duration: 50ms !important;
     scroll-behavior: auto !important;
   }
 }
+
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.hairline     { border: 1px solid var(--line); }

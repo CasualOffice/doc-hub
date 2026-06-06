@@ -4,51 +4,64 @@ export function EmptyState({
   title,
   subtitle,
   cta,
+  icon = <FolderOpen size={42} strokeWidth={1.4} />,
 }: {
   title: string;
   subtitle?: string;
   cta?: React.ReactNode;
+  icon?: React.ReactNode;
 }) {
   return (
     <div
-      className="flex flex-col items-center text-center"
       style={{
-        maxWidth: "480px",
-        margin: "0 auto",
-        padding: "var(--space-6)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        padding: "70px 0",
       }}
     >
-      <div style={{ marginBottom: "var(--space-6)", color: "var(--fg-subtle)" }}>
-        <FolderOpen size={56} strokeWidth={1.5} />
-      </div>
-
-      <h1
+      <div
         style={{
-          fontSize: "var(--text-xl)",
-          fontWeight: "var(--weight-semibold)",
-          lineHeight: "var(--leading-tight)",
-          color: "var(--fg-default)",
-          letterSpacing: "var(--tracking-tight)",
+          width: 96,
+          height: 96,
+          borderRadius: 24,
+          background: "rgba(26,26,30,.035)",
+          border: "1px solid var(--line)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 18,
+          color: "var(--muted-2)",
+        }}
+      >
+        {icon}
+      </div>
+      <h3
+        style={{
           margin: 0,
+          fontFamily: "var(--font-display)",
+          fontWeight: 400,
+          fontSize: "var(--text-lg)",
+          color: "var(--ink)",
+          letterSpacing: "var(--tracking-tight)",
         }}
       >
         {title}
-      </h1>
-
+      </h3>
       {subtitle && (
         <p
           style={{
-            marginTop: "var(--space-2)",
-            marginBottom: cta ? "var(--space-6)" : 0,
-            fontSize: "var(--text-md)",
-            color: "var(--fg-muted)",
-            lineHeight: "var(--leading-normal)",
+            marginTop: 6,
+            marginBottom: cta ? 18 : 0,
+            fontSize: "var(--text-base)",
+            color: "var(--muted)",
           }}
         >
           {subtitle}
         </p>
       )}
-
       {cta}
     </div>
   );
