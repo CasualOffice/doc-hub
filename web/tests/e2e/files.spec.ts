@@ -72,6 +72,22 @@ test("sort menu reverses item order", async ({ page }) => {
   await expect(sortBtn).toContainText(/Name/);
 });
 
+test("global search narrows the result set", async ({ page }) => {
+  const search = page.getByPlaceholder("Search files and folders");
+  await search.fill("planning");
+  // Debounce is 200ms; allow generous slack for demo latency.
+  await expect(page.getByText("Q2 planning.xlsx")).toBeVisible({ timeout: 3_000 });
+  // README.md is not a match — should be gone from the rendered grid.
+  await expect(page.getByText("README.md")).toBeHidden();
+  // Title flips.
+  await expect(page.getByRole("heading", { name: "Search results" })).toBeVisible();
+
+  // Clearing returns the full listing.
+  await search.fill("");
+  await expect(page.getByText("README.md")).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByRole("heading", { name: "My Drive" })).toBeVisible();
+});
+
 test("multi-select shows the selection bar with bulk actions", async ({ page }) => {
   // Single click on README clears any selection and opens — instead use
   // cmd+click which toggles.

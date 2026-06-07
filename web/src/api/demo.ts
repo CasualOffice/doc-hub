@@ -389,6 +389,25 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     persist();
     return undefined as T;
   }
+  if (p === "/api/search" && method === "GET") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    const q = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
+    if (!q) {
+      return { folders: [], files: [] } as unknown as T;
+    }
+    const limit = Math.max(
+      1,
+      Math.min(200, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50),
+    );
+    return {
+      folders: state.folders
+        .filter((f) => f.name.toLowerCase().includes(q))
+        .slice(0, limit),
+      files: state.files
+        .filter((f) => f.name.toLowerCase().includes(q))
+        .slice(0, limit),
+    } as unknown as T;
+  }
   if (p === "/api/admin/system" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
     const recent = state.events

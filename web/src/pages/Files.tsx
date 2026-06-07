@@ -113,8 +113,13 @@ export function Files({
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
 
+  // Track whether the latest load was a search vs a folder listing so we
+  // know if the user's `query` is "live" against the rendered set.
+  const [searched, setSearched] = useState(false);
+
   const refresh = useCallback(async () => {
     setState({ kind: "loading" });
+    setSearched(false);
     try {
       if (current.id === null) {
         const data = await api.listRoot();
@@ -143,6 +148,46 @@ export function Files({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Switch to global search when the query gets long enough; otherwise
+  // fall back to the current folder listing. 200ms debounce + abort the
+  // in-flight request on the next keystroke so we don't flash stale data.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      // Returned to a too-short query and we were previously in search
+      // mode → re-list the current folder.
+      if (searched) void refresh();
+      return;
+    }
+    const controller = new AbortController();
+    const handle = setTimeout(async () => {
+      setState({ kind: "loading" });
+      try {
+        const data = await api.searchAll(q, controller.signal);
+        setState({ kind: "ready", folders: data.folders, files: data.files });
+        setSearched(true);
+        onItemCount(data.folders.length + data.files.length);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        const msg =
+          err instanceof ApiError
+            ? err.status === 401
+              ? "Signed out for security."
+              : `Search failed (${err.status}).`
+            : "Couldn't reach the server.";
+        setState({ kind: "error", message: msg });
+      }
+    }, 200);
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
+    // refresh + searched are intentionally not in the dep set — they
+    // would re-fire the effect every render. Only the live query string
+    // should re-trigger search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, onItemCount]);
 
   // Parent-triggered upload
   useEffect(() => {

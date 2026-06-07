@@ -111,6 +111,31 @@ impl<'a> FolderRepo<'a> {
         rows.iter().map(row_to_folder).collect()
     }
 
+    /// Case-insensitive substring search by display `name`. Owner-scoped,
+    /// excludes trashed folders. Returns up to `limit` rows, name-sorted.
+    /// Spec: docs/ux/12-search-surface.md.
+    pub async fn search(
+        &self,
+        owner_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<Folder>, DbError> {
+        let pattern = format!("%{}%", query.to_lowercase());
+        let rows = sqlx::query(
+            "SELECT id, parent_id, name, owner_id, trashed_at, original_parent_id, \
+                    created_at, modified_at \
+             FROM folders \
+             WHERE owner_id = ? AND trashed_at IS NULL AND LOWER(name) LIKE ? \
+             ORDER BY name ASC LIMIT ?",
+        )
+        .bind(owner_id)
+        .bind(pattern)
+        .bind(limit.clamp(1, 200))
+        .fetch_all(self.db.pool())
+        .await?;
+        rows.iter().map(row_to_folder).collect()
+    }
+
     pub async fn rename(&self, id: &str, new_name: &str) -> Result<(), DbError> {
         let now_s = ts(time::OffsetDateTime::now_utc());
         sqlx::query("UPDATE folders SET name = ?, modified_at = ? WHERE id = ?")

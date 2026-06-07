@@ -363,3 +363,13 @@ export interface AdminSystem {
 export async function getAdminSystem(): Promise<AdminSystem> {
   return request<AdminSystem>("/api/admin/system");
 }
+
+// ─── Global search ────────────────────────────────────────────────────
+
+export async function searchAll(
+  query: string,
+  signal?: AbortSignal,
+): Promise<ListResp> {
+  const params = new URLSearchParams({ q: query, limit: "50" });
+  return request<ListResp>(`/api/search?${params.toString()}`, { signal });
+}
