@@ -189,16 +189,26 @@ export function Files({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, onItemCount]);
 
-  // Parent-triggered upload
+  // Parent-triggered upload + new-folder. Both use a "tick" counter
+  // that the parent increments on action. We track the last seen tick
+  // in a ref so the effect only fires when the prop CHANGES — not on
+  // mount with a carried-over value. Without this, switching tabs and
+  // returning re-mounts <Files/> with the old tick still > 0 and the
+  // file picker keeps popping open unprompted.
+  const lastUploadTickRef = useRef(uploadRequested);
   useEffect(() => {
+    if (uploadRequested === lastUploadTickRef.current) return;
+    lastUploadTickRef.current = uploadRequested;
     if (uploadRequested > 0) {
       fileInputRef.current?.click();
       onUploadHandled();
     }
   }, [uploadRequested, onUploadHandled]);
 
-  // Parent-triggered new folder
+  const lastNewFolderTickRef = useRef(newFolderRequested);
   useEffect(() => {
+    if (newFolderRequested === lastNewFolderTickRef.current) return;
+    lastNewFolderTickRef.current = newFolderRequested;
     if (newFolderRequested === 0) return;
     (async () => {
       const name = window.prompt("Folder name", "Untitled folder");
