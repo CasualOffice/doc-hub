@@ -210,8 +210,9 @@ Spec: [[07-marketing-site]] + [[14-marketing-surface]]. Astro 5, multi-page docs
 | 15.5 | `/demo` route (iframe → /demo-app/ bundle) | ✅ done | P0 | noindex; SPA built with `VITE_BASE=/demo-app/` |
 | 15.6 | GitHub Actions workflow (build SPA + Astro, deploy Pages) | ✅ done | P0 | replaces prior SPA-only deploy; fetches Inter fonts in CI |
 | 15.7 | Capture + commit real screenshots | ✅ done | P1 | Playwright harness `web/tests/e2e/marketing-screenshots.mjs` (also exposed as `pnpm screenshots` from web/) drives the demo SPA across Files / Notes / Sharing / Settings / Admin / Activity, light theme + mobile viewport. 7 PNGs in `marketing/public/screenshots/`; gallery + landing showcase wired to them |
-| 15.8 | Pre-built OG image at `/og/default.png` (1200×630) | ⬜ todo | P1 | links currently fall back to text card |
-| 15.9 | Lighthouse CI job in workflow (target P/A/B/S ≥ 95) | ⬜ todo | P2 | enforces the perf budget in CR |
+| 15.8 | Pre-built OG image at `/og/default.png` (1200×630) | ✅ done | P1 | `marketing/scripts/build-og.mjs` rasterises an inline SVG via sharp (no browser). Brand cloud mark + headline + bullets + hostname. ~140 KB PNG. `pnpm og` from marketing/; wired into the CI workflow before `astro build` |
+| 15.9 | Lighthouse CI job in workflow (target P/A/B/S ≥ 95) | ✅ done | P2 | `marketing/lighthouserc.json` + `@lhci/cli` in pages.yml. Mobile profile, 4× CPU slowdown, runs against landing + /docs/install. Performance/Accessibility/SEO ≥ 0.95 hard-fail; best-practices + color-contrast warn-only. Build break catches perf regressions in CR |
+| 15.13a | Dynamic `robots.txt` keyed to `ASTRO_SITE` | ✅ done | P1 | converted from static `public/robots.txt` to `src/pages/robots.txt.ts` so preview / custom-domain deploys emit the right Sitemap URL automatically |
 | 15.10 | Pagefind-powered docs search | ⏸ v0.2+ | — | pages are few enough for Cmd-F today |
 | 15.11 | `/blog` route | ⏸ v0.2+ | — | slot reserved in footer |
 | 15.12 | i18n | ⏸ v0.2+ | — | English-only; structure leaves room for astro-i18n |
