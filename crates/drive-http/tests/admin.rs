@@ -44,6 +44,7 @@ async fn fixture_with(admin: bool) -> HttpState {
         aws_secret_access_key: None,
         db_url: "sqlite::memory:".into(),
         body_limit_mb: 100,
+        signed_url_ttl_secs: 300,
         session_secret: vec![0u8; 32],
         wopi_hmac_secret: [2u8; 32],
         signed_url_hmac_secret: [1u8; 32],

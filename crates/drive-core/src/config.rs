@@ -37,6 +37,10 @@ pub struct Config {
     pub aws_secret_access_key: Option<String>,
     pub db_url: String,
     pub body_limit_mb: u64,
+    /// Signed download URL lifetime, in seconds. Surfaced under
+    /// Settings → Storage so operators see the contract they configured.
+    /// Default 300s (5 min). `DRIVE_SIGNED_URL_TTL_SECS` overrides.
+    pub signed_url_ttl_secs: u64,
     pub session_secret: Vec<u8>,
     pub wopi_hmac_secret: [u8; 32],
     pub signed_url_hmac_secret: [u8; 32],
@@ -131,6 +135,18 @@ impl Config {
                 ConfigError::Invalid("DRIVE_BODY_LIMIT_MB", e.to_string())
             })?;
 
+        // 300s (5 min) matches the signed_get callers in drive-http and
+        // is what most production setups want. Clamp at the bottom so a
+        // misconfigured 0/1 doesn't silently invalidate every URL faster
+        // than the SPA can use it.
+        let signed_url_ttl_secs: u64 = std::env::var("DRIVE_SIGNED_URL_TTL_SECS")
+            .unwrap_or_else(|_| "300".into())
+            .parse::<u64>()
+            .map_err(|e: std::num::ParseIntError| {
+                ConfigError::Invalid("DRIVE_SIGNED_URL_TTL_SECS", e.to_string())
+            })?
+            .max(30);
+
         let session_secret = env_secret_bytes("DRIVE_SESSION_SECRET", is_prod)?;
         let wopi_hmac_secret = env_secret_32("DRIVE_WOPI_HMAC_SECRET", is_prod)?;
         let signed_url_hmac_secret = env_secret_32("DRIVE_SIGNED_URL_HMAC_SECRET", is_prod)?;
@@ -169,6 +185,7 @@ impl Config {
             aws_secret_access_key,
             db_url,
             body_limit_mb,
+            signed_url_ttl_secs,
             session_secret,
             wopi_hmac_secret,
             signed_url_hmac_secret,

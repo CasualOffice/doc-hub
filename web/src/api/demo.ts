@@ -423,6 +423,8 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       repository: "https://github.com/schnsrw/drive",
       storage_backend: "Browser (localStorage)",
       db_backend: "Browser (localStorage)",
+      signed_url_ttl_secs: 300,
+      body_limit_mb: 100,
     } satisfies About as unknown as T;
   }
   if (p === "/api/auth/sign-out" && method === "POST") {

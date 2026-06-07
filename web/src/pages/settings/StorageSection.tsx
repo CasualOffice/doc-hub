@@ -3,19 +3,29 @@
  * Quota math arrives once `/api/storage/usage` lands (see PIPELINE.md §6.4).
  */
 import { useEffect, useState } from "react";
-import { ArrowUpCircle, HardDrive, Server } from "lucide-react";
+import { ArrowUpCircle, Clock, HardDrive, Server } from "lucide-react";
 import { toast } from "sonner";
 
-import { me as fetchMe, requestQuotaUpgrade, type Me } from "../../api/client.ts";
+import {
+  type About,
+  getAbout,
+  me as fetchMe,
+  requestQuotaUpgrade,
+  type Me,
+} from "../../api/client.ts";
 import { WorkspaceStorageCard } from "../../components/WorkspaceStorageCard.tsx";
 import { SettingsCard, SettingsHeader } from "./SettingsHeader.tsx";
 
 export function StorageSection() {
   const [me, setMe] = useState<Me | null>(null);
+  const [about, setAbout] = useState<About | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMe().then(setMe).catch((e) => setErr(String(e?.message ?? e)));
+    getAbout().then(setAbout).catch(() => {
+      /* about is informational — silent on failure */
+    });
   }, []);
 
   return (
@@ -34,11 +44,19 @@ export function StorageSection() {
         ) : !me ? (
           <Skeleton />
         ) : (
-          <ReadoutRow
-            icon={<Server size={16} strokeWidth={1.7} />}
-            label="Backend in use"
-            value={me.backend}
-          />
+          <>
+            <ReadoutRow
+              icon={<Server size={16} strokeWidth={1.7} />}
+              label="Backend in use"
+              value={me.backend}
+            />
+            <ReadoutRow
+              icon={<Clock size={16} strokeWidth={1.7} />}
+              label="Signed-URL lifetime"
+              value={about ? formatTtl(about.signed_url_ttl_secs) : "—"}
+              hint="How long a /download link stays valid before the server re-signs. Set via DRIVE_SIGNED_URL_TTL_SECS."
+            />
+          </>
         )}
       </SettingsCard>
 
@@ -208,6 +226,17 @@ function Skeleton() {
       }}
     />
   );
+}
+
+function formatTtl(secs: number): string {
+  if (!Number.isFinite(secs) || secs <= 0) return "—";
+  if (secs < 60) return `${secs} sec`;
+  if (secs < 3600) {
+    const m = Math.round(secs / 60);
+    return `${m} min`;
+  }
+  const h = Math.round((secs / 3600) * 10) / 10;
+  return `${h} h`;
 }
 
 function formatBytes(b: number): string {

@@ -1015,7 +1015,10 @@ async fn download_file(
 
     let signed = s
         .storage
-        .signed_get(&storage_key(&id), Duration::from_secs(300))
+        .signed_get(
+            &storage_key(&id),
+            Duration::from_secs(s.config.signed_url_ttl_secs),
+        )
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
 

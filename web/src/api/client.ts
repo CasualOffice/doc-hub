@@ -114,6 +114,10 @@ export interface About {
   repository: string;
   storage_backend: string;
   db_backend: string;
+  /** Signed-download URL TTL in seconds — surfaced on Settings → Storage. */
+  signed_url_ttl_secs: number;
+  /** Per-request body cap in MB — informational. */
+  body_limit_mb: number;
 }
 
 export async function getAbout(): Promise<About> {
