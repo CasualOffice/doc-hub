@@ -2,138 +2,137 @@
 
 <img src="./logo.svg" alt="Casual Drive" width="420" />
 
-**Open-source self-hosted file manager that opens `.xlsx` and `.docx` in real-time, in-browser editors — an alternative to Google Drive and Microsoft OneDrive you run on your own server.**
+**Open-source, self-hosted Drive that opens `.xlsx` and `.docx` in the browser. A drop-in alternative to Google Drive or OneDrive — your storage, your editors, your server.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/schnsrw/drive/ci.yml?branch=main&label=CI)](./.github/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
-[![Status](https://img.shields.io/badge/status-Phase%201%20walking%20skeleton-yellow)](./PLAN.md)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?logo=rust)](https://www.rust-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-60%20passing-brightgreen)](#)
-[![Polish bar](https://img.shields.io/badge/polish-Things%203%20%E2%80%A2%20Linear%20%E2%80%A2%20Raycast-blueviolet)](./docs/research/04-polish-principles.md)
+[![Tests](https://img.shields.io/badge/tests-29%20suites%20green-brightgreen)](#)
 
-[Architecture](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Plan](./PLAN.md) &nbsp;·&nbsp; [UX Flows](./docs/ux/01-flows.md) &nbsp;·&nbsp; [Surface Spec](./docs/ux/02-surface.md) &nbsp;·&nbsp; [Research](./docs/research/00-synthesis.md)
+[Live demo](https://drive.schnsrw.live/demo) &nbsp;·&nbsp; [Docs](https://drive.schnsrw.live/docs/install) &nbsp;·&nbsp; [Architecture](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Pipeline](./PIPELINE.md)
 
 </div>
 
 ---
 
-Casual Drive is the file-centric front door for the [Casual Office](https://schnsrw.live) suite. A single Rust binary, a single Docker container, four pluggable storage backends, a polished web UI. Files live in *your* storage (filesystem / S3 / MinIO); editing happens in our [Casual Sheets](https://github.com/schnsrw/sheets) and [Casual Editor](https://github.com/schnsrw/docx) — wired together via the [WOPI](https://learn.microsoft.com/en-us/microsoft-365/cloud-storage-partner-program/online/) protocol.
+Casual Drive is a small, sharp file manager built around two ideas:
 
-> **Status — Phase 1 walking skeleton.** Research, planning, UX/surface specs, and four Phase-0 spikes are complete. The production crates are stubbed and runnable: Drive boots, serves both origins, signs URLs, validates WOPI tokens, and rejects cross-origin requests with 421. SPA wiring, SQLite schema, admin auth, and the full file API are the next layers — see [`PLAN.md`](./PLAN.md).
+1. **Your files belong on your server.** Filesystem, S3, MinIO, Cloudflare R2, Backblaze B2 — pick any. Per-workspace bring-your-own-bucket too.
+2. **Office files belong in the browser.** Click a `.xlsx` and it opens in [Casual Sheet](https://github.com/schnsrw/sheet); click a `.docx` and it opens in [Casual Document](https://github.com/schnsrw/document) — handed off via [WOPI](https://learn.microsoft.com/en-us/microsoft-365/cloud-storage-partner-program/online/), the same protocol Microsoft uses.
 
----
+One Rust binary, one Docker container, a polished React SPA, and a marketing site that doubles as live documentation.
 
-## What's inside
+## Quickstart
 
-### File manager (planned for v0)
+```bash
+docker run -d --name drive \
+  -p 8080:8080 \
+  -v $HOME/drive-data:/data \
+  -e DRIVE_BIND=0.0.0.0:8080 \
+  -e DRIVE_APP_ORIGIN=https://drive.your-server \
+  -e DRIVE_USERCONTENT_ORIGIN=https://usercontent-drive.your-server \
+  -e DRIVE_STORAGE_BACKEND=fs \
+  -e DRIVE_FS_ROOT=/data \
+  ghcr.io/schnsrw/casual-drive:latest
+```
 
-- **Macos-app-grade polished UI** — restraint over decoration; sub-100 ms feedback on every direct manipulation; full keyboard navigation; optimistic UI; light + dark themes day one. The polish bar is Things 3 / Linear / Raycast tier — see [`docs/research/04-polish-principles.md`](./docs/research/04-polish-principles.md).
-- **Upload** (button, drag-drop, folder upload — multi-MB streaming with real progress).
-- **Browse** root → nested folders with breadcrumbs, sort, list + grid views.
-- **Open `.xlsx` / `.docx` in the editor** via WOPI handoff (new tab, same tab, or read-only).
-- **Rename, create folder, move (drag + picker), trash + restore.**
-- **Search** via Cmd-K command palette.
-- **Share-links** (Phase 2) with optional password, expiry, view-only / edit perms.
-- **Download** single file or selection-as-zip.
+Visit `https://drive.your-server`, complete the one-time admin setup, upload a file, click it. That's the demo. Full env-var matrix at <https://drive.schnsrw.live/docs/configuration>.
 
-### Infrastructure (the unglamorous-but-important parts)
+## What it does
 
-- **Single static Rust binary**, ~20–40 MB Debian-slim image, runs on a $5 VPS.
-- **Pluggable storage** behind one `Storage` facade — filesystem, in-memory (tests), AWS S3, MinIO. Add Azure / GCS / B2 later by changing one line.
-- **Two-origin security model** — app and user-uploaded content served from different registrable origins so a malicious upload can never XSS the app. Boot refuses to start if origins match in production.
-- **WOPI 1.0 host** — the seven required endpoints, 30-min lock semantics, 10-min HMAC access tokens, per-call file-id scoping.
-- **Single-tenant admin auth** for v0 — Argon2id passwords, server-side sessions, `__Host-` cookie, rate-limited login. Multi-user OIDC slot reserved for Phase 3.
-- **OWASP-grounded security baseline** — magic-byte content sniffing, opaque storage IDs, strict CSP per origin, `nosniff`, `Content-Disposition: attachment`, signed URLs with constant-time verify, `cargo audit` + `cargo deny` in CI.
-
-## What's planned out of scope
-
-- MS365 / Office Online federation (proof-key RSA hook reserved).
-- Multi-user accounts beyond a single admin (Phase 3).
-- Casual Slides (`.pptx`) — MIME slot reserved; wiring lands when the Slides editor does.
-- Macro-enabled Office files (accepted as opaque blobs; never auto-opened).
-- Sync clients / desktop apps (browser-only).
-
-## Quick links
-
-| Topic | Doc |
+| Surface | Feature |
 |---|---|
-| Phased delivery plan | [`PLAN.md`](./PLAN.md) |
-| How Claude Code works in this repo | [`CLAUDE.md`](./CLAUDE.md) |
-| Architecture | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
-| Research briefs (WOPI, auth, storage, polish, Rust stack, security) | [`docs/research/`](./docs/research/) |
-| UX flows | [`docs/ux/01-flows.md`](./docs/ux/01-flows.md) |
-| UI surface spec | [`docs/ux/02-surface.md`](./docs/ux/02-surface.md) |
-| Phase 0 spike write-ups | [`docs/spikes/`](./docs/spikes/) |
-| Changelog | [`CHANGELOG.md`](./CHANGELOG.md) |
+| **Files** | Grid + list views, search, sort, drag-to-upload, multi-select, context menus, breadcrumbs, trash + restore, inline previews for images / PDFs / video / audio / text / markdown. |
+| **Notes / Wiki** | Workspace-scoped pages with markdown source + live preview, `[[wiki-link]]` backlinks, drag-to-reorder tree, search across title + body. |
+| **Editor handoff** | Click `.xlsx` → opens in Casual Sheet; click `.docx` → opens in Casual Document. WOPI access tokens, 30-min locks. |
+| **Sharing** | Per-file share links with optional password (Argon2id) and expiry. Stripped-chrome recipient page. |
+| **Cmd-K** | One keyboard surface for files + notes + nav. ⌘K from anywhere. |
+| **Workspaces** | Personal (auto-created, untransferable) + Team workspaces with Owner/Member roles and atomic ownership transfer. |
+| **Per-workspace storage** | Bring-your-own S3 / MinIO / R2 / B2 bucket. AES-256-GCM secret envelope, SSRF guard, test-connection flow. |
+| **Quotas + admin** | Per-user storage caps, in-app quota upgrade requests, admin user-management UI, audit feed. |
+| **Direct upload** | Files ≥ 8 MiB on S3-compatible backends PUT straight to the bucket, bypassing the Drive process. |
+| **Server thumbnails** | 96 / 256 / 1024 px PNG thumbnails generated lazily on first access (images in v0; PDF/video need the v0.2 sandboxed worker). |
+| **Settings + Activity + Admin** | Full surfaces, real data, with stubs ("Coming in v0.2 — …") only for features that haven't shipped. |
 
-## Build and run (today)
+## What's locked in v0
 
-The Phase 0 spikes are runnable now; the production binary is a stub until Phase 1 fills in the crates.
+Two-origin model, WOPI handoff, OpenDAL storage, tower-sessions, Argon2id passwords, Rust 1.85 + Axum 0.8, React 19 + Vite 7 + Tailwind v4, Astro 5 for the marketing site. Reopening any of these requires new research + a synthesis update — see [`CLAUDE.md`](./CLAUDE.md).
+
+## What's deferred to v0.2+
+
+MS365 / Office Online federation (RSA proof-key hook is wired but stubbed), multi-tenant OIDC (sketch lands in [`docs/research/12-oidc.md`](./docs/research/12-oidc.md)), sandboxed PDF/video thumbnail worker, post-finalize magic-byte sniff for direct uploads, resumable uploads, multipart upload protocol, EXIF strip, server-mediated invitations + email, Pagefind docs search, i18n. See [`PIPELINE.md`](./PIPELINE.md) for the full table.
+
+## Repo layout
+
+```
+drive/
+  crates/                Production Rust workspace
+    drive-core/          Domain types, Config, errors
+    drive-db/            SQLx repos + migrations (SQLite + Postgres portable)
+    drive-storage/       OpenDAL facade, BYO secret envelope, thumbnail worker
+    drive-wopi/          WOPI host (7 endpoints, lock state)
+    drive-auth/          Sessions, Argon2id, share links
+    drive-http/          Axum router, two-origin middleware, every API surface
+    drive-bin/           Binary entry point
+  web/                   React 19 SPA, embedded into the binary via rust-embed
+  marketing/             Astro 5 site (drive.schnsrw.live) + the /demo SPA
+  docs/
+    ARCHITECTURE.md      System-level architecture
+    research/            12 grounded research briefs + synthesis
+    ux/                  17 surface specs and numbered flows
+  .github/workflows/     CI: fmt, clippy, audit, deny, tests; Pages deploy
+  PIPELINE.md            Single source of truth for what ships + status
+  CLAUDE.md              Working rules for AI assistants in this repo
+```
+
+## Build + dev loop
 
 ```bash
-# Workspace compiles + clippy clean + (stub) binary runs
-cargo build --workspace
-cargo run -p drive
+# Backend
+cargo run -p drive               # Rust binary on :8080
 
-# Spike conformance
-cargo test --manifest-path spikes/01-storage/Cargo.toml
-cargo test --manifest-path spikes/02-wopi-host/Cargo.toml
-cargo test --manifest-path spikes/04-two-origin/Cargo.toml
+# SPA dev server (HMR; proxies /api to the backend)
+cd web && pnpm install && pnpm dev
+
+# Marketing site
+cd marketing && pnpm install && pnpm dev
 ```
 
-Once Phase 1 lands, the production flow is:
-
-```bash
-cp .env.example .env
-# Fill in DRIVE_ADMIN_PASSWORD_HASH and three 32-byte secrets
-
-docker compose -f docker-compose.dev.yml up --build
-# Drive on http://127.0.0.1:8080, MinIO console on http://127.0.0.1:9001
-```
-
-## Project layout
+Required env for `cargo run -p drive`:
 
 ```
-.
-├── crates/                # Production workspace
-│   ├── drive-core/        # Domain types, IDs, errors
-│   ├── drive-storage/     # Storage facade over OpenDAL
-│   ├── drive-wopi/        # WOPI host
-│   ├── drive-auth/        # Sessions + share-links
-│   ├── drive-http/        # Router + two-origin middleware + SPA mount
-│   └── drive-bin/         # Binary entry point
-├── spikes/                # Phase 0 proof-of-concept code (outside workspace)
-│   ├── 01-storage/
-│   ├── 02-wopi-host/
-│   └── 04-two-origin/
-├── web/                   # SPA (added in Phase 1)
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── research/          # 6 grounded research briefs + 00 synthesis
-│   ├── ux/                # Flows + surface spec
-│   └── spikes/            # Spike write-ups
-├── .github/workflows/     # CI: fmt, clippy, test, spikes, audit, deny, docker
-├── Cargo.toml             # Workspace
-├── Dockerfile             # Multi-stage cargo-chef
-├── docker-compose.dev.yml # Drive + MinIO
-├── deny.toml              # cargo-deny policy
-├── rustfmt.toml           # Style
-├── .env.example           # Configuration contract
-├── CHANGELOG.md
-├── CLAUDE.md              # Claude Code working rules
-├── PLAN.md                # Phased delivery
-├── LICENSE                # Apache-2.0
-└── NOTICE
+DRIVE_BIND=127.0.0.1:8080
+DRIVE_APP_ORIGIN=http://127.0.0.1:8080
+DRIVE_USERCONTENT_ORIGIN=http://127.0.0.1:18090
+DRIVE_DB_URL=sqlite:///tmp/drive.db
+DRIVE_STORAGE_BACKEND=fs
+DRIVE_FS_ROOT=/tmp/drive-files
+DRIVE_SESSION_SECRET=<32+ bytes>
+DRIVE_WOPI_HMAC_SECRET=<32 bytes>
+DRIVE_SIGNED_URL_HMAC_SECRET=<32 bytes>
+DRIVE_ADMIN_USER=admin
+DRIVE_ADMIN_PASSWORD_HASH=<argon2id$...>
 ```
+
+Full env-var contract in `.env.example` and on the docs site.
+
+## CI gates
+
+Every PR runs `cargo fmt --check`, `cargo clippy -- -Dwarnings`, `cargo test --workspace`, `cargo audit --deny warnings`, `cargo deny check`. Marketing site has its own Lighthouse CI on landing + `/docs/install` with hard-fail thresholds (Performance / Accessibility / SEO ≥ 0.95 mobile profile).
+
+## Demo
+
+- **Live demo** (in-memory, no backend, resets on reload): <https://drive.schnsrw.live/demo>
+- **Marketing site** (install + configuration + architecture + contributing docs): <https://drive.schnsrw.live>
+
+The same SPA bundle is served in both places — the demo just runs against a localStorage-backed shim. Drop your own files in, sign in as `demo` / `demo`, click around.
 
 ## Contributing
 
-The repo is in Phase 0 (planning + spikes). Phase 1 work begins after the planning package is reviewed. If you want to contribute:
-
-1. Read [`CLAUDE.md`](./CLAUDE.md) and [`PLAN.md`](./PLAN.md) first.
-2. Open an issue describing what you'd like to take on before sending a PR.
-3. PRs must pass `cargo fmt --check`, `cargo clippy -- -Dwarnings`, `cargo test --workspace`, `cargo audit`, `cargo deny check`.
-4. UI work must honour the **10 commandments** at the bottom of [`docs/research/04-polish-principles.md`](./docs/research/04-polish-principles.md) — every commandment-break in a PR has to be explicitly called out and justified.
+1. Read [`CLAUDE.md`](./CLAUDE.md) — the five inviolable rules + locked decisions.
+2. Read the [Contributing docs](https://drive.schnsrw.live/docs/contributing) and the relevant `docs/research/` brief for whatever area you're touching.
+3. Open an issue describing what you'd like to take on before sending a PR.
+4. PRs must pass the CI gates above. UI work must honour the [10 polish commandments](./docs/research/04-polish-principles.md) — every commandment-break needs explicit justification in the PR description.
 
 ## License
 
@@ -141,8 +140,8 @@ Apache-2.0 — see [`LICENSE`](./LICENSE) and [`NOTICE`](./NOTICE).
 
 ## Sister projects
 
-- [Casual Sheets](https://github.com/schnsrw/sheets) — self-hosted `.xlsx` editor.
-- [Casual Editor](https://github.com/schnsrw/docx) — self-hosted `.docx` editor.
+- [Casual Sheet](https://github.com/schnsrw/sheet) — self-hosted `.xlsx` editor.
+- [Casual Document](https://github.com/schnsrw/document) — self-hosted `.docx` editor.
 - [Casual Office](https://schnsrw.live) — umbrella site.
 
 Drive is the file-centric front door that wraps them into a coherent suite.

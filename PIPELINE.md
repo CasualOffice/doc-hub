@@ -34,7 +34,7 @@
 | 1.4 | Argon2id passwords (OWASP min) | ✅ done | P0 | drive-auth |
 | 1.5 | Sign-out (cookie clear + 401 on session expiry → re-auth flow) | ✅ done | P0 | wired via AuthContext |
 | 1.6 | Caps-lock detection on password | ✅ done | P2 | `Input` listens to `keydown`/`keyup`/`blur` and forwards the `getModifierState("CapsLock")` value; SignIn shows a one-line ⇪ warning under the field when on |
-| 1.7 | "Sign in with [SSO]" stub | ⏸ v0.2+ | — | OIDC is Phase 3 |
+| 1.7 | "Sign in with [SSO]" stub | ⏸ v0.2+ | — | OIDC is Phase 3 — design + locked decisions in [[12-oidc]] |
 | 1.8 | First-run admin-setup wizard (no env-only) | ✅ done | P1 | `Setup.tsx` flips on `/api/setup/status` → `needs_setup: true`; `/api/setup/admin` creates the first admin + their Personal workspace |
 
 ## 2 — Shell chrome (sidebar, top bar, layout)
