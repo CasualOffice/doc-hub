@@ -139,6 +139,21 @@ const SHOTS = [
       await page.waitForTimeout(600); // let preview + debounce settle
     },
   },
+  {
+    // Cmd-K command palette — pipeline §2.8. Pop the palette, type a
+    // partial query that hits "notes" + "admin" + "settings".
+    id: "command-palette",
+    viewport: "desktop",
+    setup: async (page) => {
+      await signInDemo(page);
+      await page.waitForTimeout(300);
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+      await page.waitForTimeout(200);
+      const input = page.getByPlaceholder(/Search files, notes/);
+      if (await input.count()) await input.fill("se");
+      await page.waitForTimeout(400);
+    },
+  },
 ];
 
 const browser = await chromium.launch();
