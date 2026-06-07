@@ -49,6 +49,33 @@ function persistSort(s: StoredSort) {
   }
 }
 
+/**
+ * Run `worker` over `items` with at most `n` in flight at once. Returns
+ * the same shape as `Promise.allSettled` so the call site keeps working
+ * the same way for partial-failure handling. Pipeline §6.6.
+ */
+async function mapWithConcurrency<I, O>(
+  items: I[],
+  n: number,
+  worker: (item: I, index: number) => Promise<O>,
+): Promise<PromiseSettledResult<O>[]> {
+  const results: PromiseSettledResult<O>[] = new Array(items.length);
+  let next = 0;
+  const lane = async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      try {
+        results[i] = { status: "fulfilled", value: await worker(items[i], i) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, lane));
+  return results;
+}
+
 function entryId(e: Entry): string {
   return e.kind === "folder" ? e.folder.id : e.file.id;
 }
@@ -294,15 +321,14 @@ export function Files({
       if (list.length === 0) return;
 
       setUploading(list.map((f) => f.name));
-      // Thumbnail generation runs in parallel with upload start — keeps
-      // the wait the same as the network round-trip for non-image files
-      // (which return null instantly).
-      const results = await Promise.allSettled(
-        list.map(async (f) => {
-          const thumb = await generateThumbnail(f).catch(() => null);
-          return api.uploadFile(f, current.id, thumb, workspaceId);
-        }),
-      );
+      // Pipeline §6.6 — concurrent upload cap. Dragging in 20 files
+      // shouldn't open 20 multipart connections + spin 20 thumbnail
+      // canvases at once. Cap at 4; mirrors the server's per-user upload
+      // rate limit so we batch instead of bursting.
+      const results = await mapWithConcurrency(list, 4, async (f) => {
+        const thumb = await generateThumbnail(f).catch(() => null);
+        return api.uploadFile(f, current.id, thumb, workspaceId);
+      });
       setUploading([]);
       const ok = results.filter((r) => r.status === "fulfilled").length;
       // Any failure here is server-side (network, quota, magic-byte sniff
