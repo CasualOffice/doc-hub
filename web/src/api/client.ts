@@ -366,6 +366,56 @@ export async function getAdminSystem(): Promise<AdminSystem> {
   return request<AdminSystem>("/api/admin/system");
 }
 
+// ─── Admin: user management + quota allocation ────────────────────────
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  is_admin: boolean;
+  created_at: string;
+  used_bytes: number;
+  quota_bytes: number | null;
+}
+
+export async function listAdminUsers(): Promise<{ users: AdminUser[] }> {
+  return request<{ users: AdminUser[] }>("/api/admin/users");
+}
+
+export async function createAdminUser(input: {
+  username: string;
+  password: string;
+  is_admin?: boolean;
+  quota_bytes?: number | null;
+}): Promise<AdminUser> {
+  return request<AdminUser>("/api/admin/users", {
+    method: "POST",
+    json: input,
+  });
+}
+
+export async function setUserQuota(
+  userId: string,
+  quotaBytes: number | null,
+): Promise<void> {
+  await request<void>(`/api/admin/users/${encodeURIComponent(userId)}/quota`, {
+    method: "PATCH",
+    json: { quota_bytes: quotaBytes },
+  });
+}
+
+export async function requestQuotaUpgrade(
+  requestedBytes?: number | null,
+  reason?: string | null,
+): Promise<void> {
+  await request<void>("/api/me/quota/request", {
+    method: "POST",
+    json: {
+      requested_bytes: requestedBytes ?? null,
+      reason: reason ?? null,
+    },
+  });
+}
+
 // ─── Workspaces ───────────────────────────────────────────────────────
 
 export interface Workspace {

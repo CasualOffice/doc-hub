@@ -171,6 +171,124 @@ async fn system_returns_snapshot_for_admin() {
 }
 
 #[tokio::test]
+async fn admin_can_create_user_with_quota() {
+    let state = fixture_with(true).await;
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/users")
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"username":"alice","password":"correct-horse-batt","quota_bytes":1048576}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::CREATED);
+    let body: Value =
+        serde_json::from_slice(&r.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["username"], "alice");
+    assert_eq!(body["quota_bytes"], 1_048_576);
+}
+
+#[tokio::test]
+async fn non_admin_cannot_create_user() {
+    let state = fixture_with(false).await;
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/users")
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"username":"alice","password":"correct-horse-batt"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn admin_can_set_user_quota_and_then_clear_it() {
+    use drive_db::UserRepo;
+    let state = fixture_with(true).await;
+    let target = UserRepo::new(&state.db)
+        .find_by_username("user")
+        .await
+        .unwrap();
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/admin/users/{}/quota", target.id))
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"quota_bytes":5000}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::NO_CONTENT);
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/admin/users/{}/quota", target.id))
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"quota_bytes":null}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn quota_upgrade_request_returns_204() {
+    let state = fixture_with(false).await;
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/me/quota/request")
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"requested_bytes":10737418240,"reason":"need to upload our backups"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
 async fn system_records_failed_sign_in_in_recent() {
     let state = fixture_with(true).await;
     let app = router(state);

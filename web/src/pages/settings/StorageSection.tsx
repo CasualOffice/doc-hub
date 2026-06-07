@@ -3,9 +3,10 @@
  * Quota math arrives once `/api/storage/usage` lands (see PIPELINE.md §6.4).
  */
 import { useEffect, useState } from "react";
-import { HardDrive, Server } from "lucide-react";
+import { ArrowUpCircle, HardDrive, Server } from "lucide-react";
+import { toast } from "sonner";
 
-import { me as fetchMe, type Me } from "../../api/client.ts";
+import { me as fetchMe, requestQuotaUpgrade, type Me } from "../../api/client.ts";
 import { SettingsCard, SettingsHeader } from "./SettingsHeader.tsx";
 
 export function StorageSection() {
@@ -64,13 +65,82 @@ export function StorageSection() {
               hint={
                 me.quota_bytes
                   ? `${pctUsed(me.used_bytes, me.quota_bytes)}% used`
-                  : "Set DRIVE_DEFAULT_QUOTA via env to enforce a cap."
+                  : "An admin can allocate a cap via the Admin → Users surface."
               }
             />
+            {me.quota_bytes && me.quota_bytes > 0 && (
+              <RequestUpgradeRow currentQuota={me.quota_bytes} />
+            )}
           </>
         )}
       </SettingsCard>
     </>
+  );
+}
+
+function RequestUpgradeRow({ currentQuota }: { currentQuota: number }) {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function submit() {
+    if (busy || sent) return;
+    setBusy(true);
+    try {
+      // Suggest doubling the current cap as a reasonable default.
+      await requestQuotaUpgrade(currentQuota * 2);
+      setSent(true);
+      toast.success("Request sent to your admin", {
+        description: "It'll show up in their Activity feed.",
+      });
+    } catch {
+      toast.error("Couldn't send the request");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: "12px 14px",
+        background: "var(--accent-muted)",
+        border: "1px solid rgba(200,164,92,.32)",
+        borderRadius: 12,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <ArrowUpCircle size={16} strokeWidth={1.8} style={{ color: "var(--accent)" }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--ink)" }}>
+          Need more storage?
+        </div>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>
+          Send a request — your admin sees it in the Activity feed and can
+          raise your cap from Admin → Users.
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => void submit()}
+        disabled={busy || sent}
+        style={{
+          padding: "8px 14px",
+          borderRadius: 9,
+          border: "none",
+          background: sent ? "var(--success)" : busy ? "var(--line-strong)" : "var(--ink)",
+          color: "var(--paper)",
+          fontFamily: "var(--font-sans)",
+          fontSize: "var(--text-sm)",
+          fontWeight: 500,
+          cursor: busy || sent ? "default" : "pointer",
+        }}
+      >
+        {sent ? "Sent" : busy ? "Sending…" : "Request upgrade"}
+      </button>
+    </div>
   );
 }
 

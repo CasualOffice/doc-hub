@@ -466,6 +466,54 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     demoWorkspaces.push(w);
     return w as unknown as T;
   }
+  // Admin user management — demo just acks the calls so the UI is
+  // navigable. No second user actually exists.
+  if (p === "/api/admin/users" && method === "GET") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    return {
+      users: [
+        {
+          id: "demo-user",
+          username: state.username ?? "demo",
+          is_admin: true,
+          created_at: "2026-06-01T00:00:00Z",
+          used_bytes: state.files.reduce((acc, f) => acc + (f.size ?? 0), 0),
+          quota_bytes: null,
+        },
+      ],
+    } as unknown as T;
+  }
+  if (p === "/api/admin/users" && method === "POST") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    return {
+      id: "demo-user-2",
+      username: ((init.json as { username?: string })?.username ?? "alice").trim(),
+      is_admin: false,
+      created_at: nowIso(),
+      used_bytes: 0,
+      quota_bytes: (init.json as { quota_bytes?: number | null })?.quota_bytes ?? null,
+    } as unknown as T;
+  }
+  const setQuotaMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/quota$/);
+  if (setQuotaMatch && method === "PATCH") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    return undefined as T;
+  }
+  if (p === "/api/me/quota/request" && method === "POST") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "quota.upgrade_request",
+      target_kind: "user",
+      target_id: "demo-user",
+      target_name: state.username ?? "demo",
+      ip_address: null,
+      metadata: init.json ? JSON.stringify(init.json) : null,
+    });
+    return undefined as T;
+  }
+
   if (p === "/api/admin/system" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
     const recent = state.events

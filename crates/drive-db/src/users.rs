@@ -120,6 +120,33 @@ impl<'a> UserRepo<'a> {
         })
     }
 
+    /// All users in the table, newest first. Backs the Admin → Users
+    /// card.
+    pub async fn list_all(&self) -> Result<Vec<User>, DbError> {
+        let rows = sqlx::query(
+            "SELECT id, username, password_hash, is_admin, created_at, quota_bytes \
+             FROM users ORDER BY created_at DESC",
+        )
+        .fetch_all(self.db.pool())
+        .await?;
+        rows.iter()
+            .map(|row| {
+                Ok(User {
+                    id: row.get("id"),
+                    username: row.get("username"),
+                    password_hash: row.get("password_hash"),
+                    is_admin: row.get::<i64, _>("is_admin") != 0,
+                    created_at: parse_ts(row.get::<String, _>("created_at"))?,
+                    quota_bytes: row
+                        .try_get::<Option<i64>, _>("quota_bytes")
+                        .ok()
+                        .flatten()
+                        .and_then(|n| u64::try_from(n).ok()),
+                })
+            })
+            .collect()
+    }
+
     /// Sum of non-trashed file sizes owned by `user_id`. Drives the
     /// quota check on upload (pipeline §6.4) and the Settings →
     /// Storage card. Returns 0 when the user owns no files.

@@ -99,6 +99,7 @@ fn app_origin_router(state: HttpState) -> Router {
     let files_router: Router = files::router(state.clone(), body_limit_bytes);
     let share_router: Router = share::router(state.clone());
     let workspaces_router: Router = workspaces::router(state.clone());
+    let admin_users_router: Router = admin::admin_router(state.clone());
 
     Router::new()
         .route("/healthz", get(healthz))
@@ -113,6 +114,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(files_router)
         .merge(share_router)
         .merge(workspaces_router)
+        .merge(admin_users_router)
         // SPA fallback — `/`, `/sign-in`, `/files/...`, hashed asset paths
         // — anything not matched above is served from the embedded `web/dist/`.
         .fallback(spa::serve)

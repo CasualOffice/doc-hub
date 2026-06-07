@@ -127,9 +127,14 @@
 | 8.1 | `users` table (multi-row shape) | ✅ done | P0 | schema is multi-user already |
 | 8.2 | Member list under Settings → Members | 🟦 stub | P1 | "Coming in v0.2 — invite teammates …" |
 | 8.3 | Invitation API + email send | ⏸ v0.2+ | — | Phase 3 |
-| 8.4 | Workspace table + workspace switcher | 🟦 stub | P1 | sidebar dropdown shows "Personal" only |
-| 8.5 | RBAC (roles + permissions) | 🟦 stub | P1 | only `is_admin` bool today |
-| 8.6 | Per-workspace storage quota | ⏸ v0.2+ | — | |
+| 8.4 | Workspace table + workspace switcher | ✅ done | P1 | spec [[13-workspaces-surface]], phase 1 shipped — phase 2 below |
+| 8.5 | RBAC (roles + permissions) | 🟡 wip | P1 | Owner+Member today; Admin/Editor/Viewer split + per-action checks in §8.8 |
+| 8.6 | Per-workspace storage quota | ⏸ v0.2+ | — | per-user quota done; workspace-level cap rolls in with phase 2 |
+| 8.7 | Admin user management UI (create / list / quota allocation) | 🟡 wip | P1 | backend done; Admin → Users table + inline quota edit UI pending |
+| 8.8 | **Phase 2** — file/folder `workspace_id` column + scoped queries + full RBAC checks | ⬜ todo | P0 | the big one — every file handler gets workspace permission gate |
+| 8.9 | Bring-your-own storage per workspace (S3 / MinIO endpoint + bucket + creds + test-connection flow) | ⬜ todo | P1 | per-workspace `Storage` adapter override; storage credentials encrypted with `DRIVE_STORAGE_SECRET_KEY` |
+| 8.10 | Quota upgrade request flow | ✅ done | P2 | `POST /api/me/quota/request` emits audit event; admin sees in Activity |
+| 8.11 | Notes / Wiki (personal + workspace scope) | ⬜ todo | P1 | rich-text editor (lexical) **or** plain `.md` files stored as file blobs with a markdown-aware editor. Pages tree, backlinks, search. New left-rail surface beside My Drive |
 
 ## 9 — Settings
 
