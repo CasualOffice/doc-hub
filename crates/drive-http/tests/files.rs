@@ -64,6 +64,7 @@ async fn fixture() -> HttpState {
         auth,
         jwt_secret: Arc::new([2u8; 32]),
         config: Arc::new(cfg),
+        upload_limiter: HttpState::default_upload_limiter(),
     }
 }
 
@@ -328,6 +329,89 @@ async fn upload_still_accepts_macro_enabled_office_files() {
             .unwrap();
         assert_eq!(r.status(), StatusCode::OK, "{name} should upload OK");
     }
+}
+
+#[tokio::test]
+async fn upload_rejects_when_over_quota() {
+    use drive_db::UserRepo;
+    let state = fixture().await;
+    let user = UserRepo::new(&state.db)
+        .find_by_username("admin")
+        .await
+        .unwrap();
+    UserRepo::new(&state.db)
+        .set_quota(&user.id, Some(100))
+        .await
+        .unwrap();
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+
+    let boundary = "----testboundary-quota";
+    let payload = vec![b'x'; 200];
+    let body = build_multipart(
+        boundary,
+        &[MultipartField::File(
+            "file",
+            "big.txt",
+            "text/plain",
+            &payload,
+        )],
+    );
+    let r = app
+        .clone()
+        .oneshot(auth_req(
+            "POST",
+            "/api/files",
+            &cookie,
+            Some(&format!("multipart/form-data; boundary={boundary}")),
+            Body::from(body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body = json_body(r).await;
+    assert_eq!(body["error"], "quota exceeded");
+    assert_eq!(body["quota"], 100);
+}
+
+#[tokio::test]
+async fn upload_throttles_burst_with_429_and_retry_after() {
+    use drive_http::{RateLimitConfig, RateLimiter};
+    use std::sync::Arc;
+    let mut state = fixture().await;
+    state.upload_limiter = Arc::new(RateLimiter::new(RateLimitConfig {
+        capacity: 2.0,
+        refill_per_sec: 0.01,
+    }));
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+
+    async fn upload(app: &axum::Router, cookie: &str, idx: usize) -> axum::http::Response<Body> {
+        let boundary = format!("----rate{idx}");
+        let body = build_multipart(
+            &boundary,
+            &[MultipartField::File("file", "a.txt", "text/plain", b"hi")],
+        );
+        app.clone()
+            .oneshot(auth_req(
+                "POST",
+                "/api/files",
+                cookie,
+                Some(&format!("multipart/form-data; boundary={boundary}")),
+                Body::from(body),
+            ))
+            .await
+            .unwrap()
+    }
+
+    assert_eq!(upload(&app, &cookie, 0).await.status(), StatusCode::OK);
+    assert_eq!(upload(&app, &cookie, 1).await.status(), StatusCode::OK);
+    let r = upload(&app, &cookie, 2).await;
+    assert_eq!(r.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(r.headers().get("retry-after").is_some());
+    let body = json_body(r).await;
+    assert_eq!(body["error"], "rate limited");
+    assert!(body["retry_after_seconds"].as_u64().unwrap() >= 1);
 }
 
 #[tokio::test]

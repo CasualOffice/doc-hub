@@ -45,6 +45,7 @@ async fn main() -> anyhow::Result<()> {
         auth,
         jwt_secret: Arc::new(cfg.wopi_hmac_secret),
         config: Arc::new(cfg),
+        upload_limiter: HttpState::default_upload_limiter(),
     };
 
     let app = router(state).layer(tower_http::trace::TraceLayer::new_for_http());

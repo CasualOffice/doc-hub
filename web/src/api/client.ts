@@ -231,6 +231,8 @@ export interface Me {
   backend: string;
   user_id?: string;
   is_admin?: boolean;
+  used_bytes?: number;
+  quota_bytes?: number | null;
 }
 
 export async function me(): Promise<Me> {

@@ -43,6 +43,14 @@ pub(crate) enum FilesError {
     ForbiddenExtension(String),
     #[error("editor not configured: {0}")]
     EditorUnconfigured(&'static str),
+    /// 413 — would exceed the per-user storage cap. Carries the cap so
+    /// the SPA can show "You've used 9.8 GB of 10 GB" inline.
+    #[error("quota exceeded ({used}/{quota})")]
+    QuotaExceeded { used: u64, quota: u64 },
+    /// 429 — upload throttle hit. Seconds the caller should wait before
+    /// trying again, mirrored in the `Retry-After` header.
+    #[error("rate limited, retry in {0}s")]
+    RateLimited(u64),
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -78,6 +86,30 @@ impl IntoResponse for FilesError {
                 }),
             )
                 .into_response(),
+            Self::QuotaExceeded { used, quota } => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(QuotaErrBody {
+                    error: "quota exceeded",
+                    used,
+                    quota,
+                }),
+            )
+                .into_response(),
+            Self::RateLimited(secs) => {
+                let mut r = (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(RetryErrBody {
+                        error: "rate limited",
+                        retry_after_seconds: secs,
+                    }),
+                )
+                    .into_response();
+                r.headers_mut().insert(
+                    axum::http::header::RETRY_AFTER,
+                    HeaderValue::from_str(&secs.to_string()).unwrap(),
+                );
+                r
+            }
             Self::Internal(m) => {
                 tracing::error!(error = %m, "files internal error");
                 (
@@ -96,6 +128,19 @@ impl IntoResponse for FilesError {
 struct ExtErrBody {
     error: &'static str,
     extension: String,
+}
+
+#[derive(Serialize)]
+struct QuotaErrBody {
+    error: &'static str,
+    used: u64,
+    quota: u64,
+}
+
+#[derive(Serialize)]
+struct RetryErrBody {
+    error: &'static str,
+    retry_after_seconds: u64,
 }
 
 #[derive(Serialize)]
@@ -527,6 +572,11 @@ async fn upload_file(
     session: AuthSession,
     mut multipart: Multipart,
 ) -> Result<Json<FileDto>, FilesError> {
+    // Rate limit BEFORE we read the body — cheap upfront check.
+    if let Err(retry) = s.upload_limiter.check(&session.user_id) {
+        return Err(FilesError::RateLimited(retry));
+    }
+
     let mut parent_id: Option<String> = None;
     let mut file_bytes: Option<Bytes> = None;
     let mut filename: Option<String> = None;
@@ -592,8 +642,26 @@ async fn upload_file(
         ensure_owner(&parent.owner_id, &session)?;
     }
 
-    let id = ulid::Ulid::new().to_string();
     let size = bytes.len() as u64;
+
+    // Quota check — only when the caller's user row carries one (None
+    // means unlimited, the v0 default for the seeded admin).
+    let users = drive_db::UserRepo::new(&s.db);
+    let me = users
+        .find_by_id(&session.user_id)
+        .await
+        .map_err(|e| FilesError::Internal(e.to_string()))?;
+    if let Some(quota) = me.quota_bytes {
+        let used = users
+            .used_bytes(&session.user_id)
+            .await
+            .map_err(|e| FilesError::Internal(e.to_string()))?;
+        if used + size > quota {
+            return Err(FilesError::QuotaExceeded { used, quota });
+        }
+    }
+
+    let id = ulid::Ulid::new().to_string();
     let meta = s
         .storage
         .put(&storage_key(&id), bytes, content_type.as_deref())

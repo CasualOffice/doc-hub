@@ -448,11 +448,14 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
   }
   if (p === "/api/me" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
+    const used = state.files.reduce((acc, f) => acc + (f.size ?? 0), 0);
     return {
       admin: state.username ?? "demo",
       backend: "Browser (localStorage)",
       user_id: "demo-user",
       is_admin: true,
+      used_bytes: used,
+      quota_bytes: null,
     } satisfies Me as unknown as T;
   }
 

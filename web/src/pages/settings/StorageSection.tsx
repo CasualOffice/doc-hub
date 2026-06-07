@@ -42,20 +42,33 @@ export function StorageSection() {
 
       <SettingsCard
         title="Usage"
-        subtitle="Per-workspace quota and live usage. Quota enforcement lands in v0.2."
+        subtitle="Live storage consumed by your non-trashed files."
       >
-        <ReadoutRow
-          icon={<HardDrive size={16} strokeWidth={1.7} />}
-          label="Used"
-          value="—"
-          hint="Live counter ships in v0.2."
-        />
-        <ReadoutRow
-          icon={<HardDrive size={16} strokeWidth={1.7} />}
-          label="Quota"
-          value="Unlimited"
-          hint="Per-workspace quotas ship in v0.2."
-        />
+        {!me ? (
+          <Skeleton />
+        ) : (
+          <>
+            <ReadoutRow
+              icon={<HardDrive size={16} strokeWidth={1.7} />}
+              label="Used"
+              value={typeof me.used_bytes === "number" ? formatBytes(me.used_bytes) : "—"}
+            />
+            <ReadoutRow
+              icon={<HardDrive size={16} strokeWidth={1.7} />}
+              label="Quota"
+              value={
+                me.quota_bytes && me.quota_bytes > 0
+                  ? formatBytes(me.quota_bytes)
+                  : "Unlimited"
+              }
+              hint={
+                me.quota_bytes
+                  ? `${pctUsed(me.used_bytes, me.quota_bytes)}% used`
+                  : "Set DRIVE_DEFAULT_QUOTA via env to enforce a cap."
+              }
+            />
+          </>
+        )}
       </SettingsCard>
     </>
   );
@@ -122,6 +135,23 @@ function Skeleton() {
       }}
     />
   );
+}
+
+function formatBytes(b: number): string {
+  if (b === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = b;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${i === 0 ? v : v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+function pctUsed(used: number | undefined, quota: number | null | undefined): number {
+  if (!used || !quota || quota <= 0) return 0;
+  return Math.round((used / quota) * 100);
 }
 
 function Inline({ children, danger }: { children: React.ReactNode; danger?: boolean }) {

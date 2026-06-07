@@ -9,6 +9,8 @@ use drive_db::Db;
 use drive_storage::Storage;
 use drive_wopi::WopiState;
 
+use crate::rate_limit::{RateLimitConfig, RateLimiter};
+
 /// Process start instant, captured at first state construction. Drives the
 /// Admin → System → Uptime readout. Static so we get "real" uptime even
 /// across cheap HttpState clones in tests.
@@ -26,6 +28,24 @@ pub struct HttpState {
     pub auth: AuthState,
     pub jwt_secret: Arc<[u8; 32]>,
     pub config: Arc<Config>,
+    /// Upload-throttle bucket per user (pipeline §6.5). Cheap to clone
+    /// — the limiter is `Arc<Mutex<HashMap>>`. Constructed via
+    /// `HttpState::with_default_upload_limit` so call sites don't have
+    /// to know the numbers.
+    pub upload_limiter: Arc<RateLimiter>,
+}
+
+impl HttpState {
+    /// Default upload limiter: 30 uploads per minute per user (burst of
+    /// 30, refill at 0.5 / sec). Adjust via the constructor below when
+    /// the operator dials it down for shared instances.
+    #[must_use]
+    pub fn default_upload_limiter() -> Arc<RateLimiter> {
+        Arc::new(RateLimiter::new(RateLimitConfig {
+            capacity: 30.0,
+            refill_per_sec: 0.5,
+        }))
+    }
 }
 
 impl HttpState {

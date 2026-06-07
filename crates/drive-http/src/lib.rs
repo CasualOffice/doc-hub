@@ -13,12 +13,14 @@ mod admin;
 mod files;
 pub mod headers;
 mod host_dispatch;
+mod rate_limit;
 mod raw;
 mod search;
 mod share;
 mod spa;
 mod state;
 
+pub use rate_limit::{RateLimitConfig, RateLimiter};
 pub use state::HttpState;
 
 use axum::{
@@ -55,17 +57,30 @@ struct Me {
     backend: String,
     user_id: String,
     is_admin: bool,
+    /// Bytes the caller has stored, summed over their non-trashed files.
+    used_bytes: u64,
+    /// Per-user storage cap; `None` means unlimited.
+    quota_bytes: Option<u64>,
 }
 
 /// `/api/me` requires an authenticated session — returns 401 for the SPA's
 /// initial bootstrap when no cookie is present, so AuthContext falls back
 /// to the SignIn page instead of going straight to the shell.
 async fn api_me(State(s): State<HttpState>, session: AuthSession) -> axum::Json<Me> {
+    let users = drive_db::UserRepo::new(&s.db);
+    let used_bytes = users.used_bytes(&session.user_id).await.unwrap_or(0);
+    let quota_bytes = users
+        .find_by_id(&session.user_id)
+        .await
+        .ok()
+        .and_then(|u| u.quota_bytes);
     axum::Json(Me {
         admin: session.username.clone(),
         backend: format!("{:?}", s.config.backend),
         user_id: session.user_id,
         is_admin: session.is_admin,
+        used_bytes,
+        quota_bytes,
     })
 }
 

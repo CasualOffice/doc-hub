@@ -62,6 +62,7 @@ async fn fixture_with(admin: bool) -> HttpState {
         auth,
         jwt_secret: Arc::new([2u8; 32]),
         config: Arc::new(cfg),
+        upload_limiter: HttpState::default_upload_limiter(),
     }
 }
 

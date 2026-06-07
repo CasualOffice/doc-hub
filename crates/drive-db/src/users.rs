@@ -13,6 +13,8 @@ pub struct User {
     pub password_hash: String,
     pub is_admin: bool,
     pub created_at: time::OffsetDateTime,
+    /// Per-user storage cap in bytes. None = unlimited.
+    pub quota_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,13 +61,14 @@ impl<'a> UserRepo<'a> {
             password_hash: new.password_hash.clone(),
             is_admin: new.is_admin,
             created_at,
+            quota_bytes: None,
         })
     }
 
     /// Look up a user by username. Returns `NotFound` if no row.
     pub async fn find_by_username(&self, username: &str) -> Result<User, DbError> {
         let row = sqlx::query(
-            "SELECT id, username, password_hash, is_admin, created_at \
+            "SELECT id, username, password_hash, is_admin, created_at, quota_bytes \
              FROM users WHERE username = ?",
         )
         .bind(username)
@@ -78,13 +81,18 @@ impl<'a> UserRepo<'a> {
             password_hash: row.get("password_hash"),
             is_admin: row.get::<i64, _>("is_admin") != 0,
             created_at: parse_ts(row.get::<String, _>("created_at"))?,
+            quota_bytes: row
+                .try_get::<Option<i64>, _>("quota_bytes")
+                .ok()
+                .flatten()
+                .and_then(|n| u64::try_from(n).ok()),
         })
     }
 
     /// Look up a user by id. Returns `NotFound` if no row.
     pub async fn find_by_id(&self, id: &str) -> Result<User, DbError> {
         let row = sqlx::query(
-            "SELECT id, username, password_hash, is_admin, created_at \
+            "SELECT id, username, password_hash, is_admin, created_at, quota_bytes \
              FROM users WHERE id = ?",
         )
         .bind(id)
@@ -97,7 +105,37 @@ impl<'a> UserRepo<'a> {
             password_hash: row.get("password_hash"),
             is_admin: row.get::<i64, _>("is_admin") != 0,
             created_at: parse_ts(row.get::<String, _>("created_at"))?,
+            quota_bytes: row
+                .try_get::<Option<i64>, _>("quota_bytes")
+                .ok()
+                .flatten()
+                .and_then(|n| u64::try_from(n).ok()),
         })
+    }
+
+    /// Sum of non-trashed file sizes owned by `user_id`. Drives the
+    /// quota check on upload (pipeline §6.4) and the Settings →
+    /// Storage card. Returns 0 when the user owns no files.
+    pub async fn used_bytes(&self, user_id: &str) -> Result<u64, DbError> {
+        let n: Option<i64> = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(size), 0) FROM files \
+             WHERE owner_id = ? AND trashed_at IS NULL",
+        )
+        .bind(user_id)
+        .fetch_one(self.db.pool())
+        .await?;
+        Ok(u64::try_from(n.unwrap_or(0)).unwrap_or(0))
+    }
+
+    /// Set or clear the per-user storage quota.
+    pub async fn set_quota(&self, id: &str, quota_bytes: Option<u64>) -> Result<(), DbError> {
+        let n = quota_bytes.and_then(|q| i64::try_from(q).ok());
+        sqlx::query("UPDATE users SET quota_bytes = ? WHERE id = ?")
+            .bind(n)
+            .bind(id)
+            .execute(self.db.pool())
+            .await?;
+        Ok(())
     }
 
     /// Count rows in `users`. Backs the first-run admin-setup gate —
