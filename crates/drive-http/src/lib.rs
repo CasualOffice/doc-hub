@@ -10,6 +10,7 @@
 mod about;
 mod activity;
 mod admin;
+mod direct_upload;
 mod files;
 pub mod headers;
 mod host_dispatch;
@@ -20,6 +21,7 @@ mod search;
 mod share;
 mod spa;
 mod state;
+mod thumbs;
 mod workspace_storage;
 mod workspaces;
 
@@ -102,6 +104,8 @@ fn app_origin_router(state: HttpState) -> Router {
     let share_router: Router = share::router(state.clone());
     let workspaces_router: Router = workspaces::router(state.clone());
     let workspace_storage_router: Router = workspace_storage::router(state.clone());
+    let direct_upload_router: Router = direct_upload::router(state.clone());
+    let thumbs_router: Router = thumbs::router(state.clone());
     let notes_router: Router = notes::router(state.clone());
     let admin_users_router: Router = admin::admin_router(state.clone());
 
@@ -119,6 +123,8 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(share_router)
         .merge(workspaces_router)
         .merge(workspace_storage_router)
+        .merge(direct_upload_router)
+        .merge(thumbs_router)
         .merge(notes_router)
         .merge(admin_users_router)
         // SPA fallback — `/`, `/sign-in`, `/files/...`, hashed asset paths

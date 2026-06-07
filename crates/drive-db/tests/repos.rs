@@ -205,6 +205,8 @@ async fn files_insert_list_rename_overwrite_trash_restore() {
             workspace_id: ws.clone(),
             storage_id: None,
             thumbnail: None,
+            status: drive_db::FileStatus::Ready,
+            expected_size: None,
         })
         .await
         .unwrap();
@@ -328,6 +330,8 @@ async fn files_and_folders_are_workspace_scoped() {
             workspace_id: personal.clone(),
             storage_id: None,
             thumbnail: None,
+            status: drive_db::FileStatus::Ready,
+            expected_size: None,
         })
         .await
         .unwrap();
@@ -343,6 +347,8 @@ async fn files_and_folders_are_workspace_scoped() {
             workspace_id: team.clone(),
             storage_id: None,
             thumbnail: None,
+            status: drive_db::FileStatus::Ready,
+            expected_size: None,
         })
         .await
         .unwrap();

@@ -9,6 +9,7 @@
 pub mod byo;
 pub mod registry;
 pub mod secret_box;
+pub mod thumbnails;
 
 pub use byo::{
     build_operator, ssrf_guard, test_connection, validate_shape as validate_shape_, ByoConfig,
@@ -18,6 +19,7 @@ pub use registry::StorageRegistry;
 pub use secret_box::{
     open as open_secret, parse_master_key_hex, seal as seal_secret, SecretBoxError,
 };
+pub use thumbnails::{FitMode, ImageOnlyWorker, ThumbSize, ThumbnailError, ThumbnailKind};
 
 use std::{ops::Range, sync::Arc, time::Duration as StdDuration};
 

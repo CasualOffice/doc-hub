@@ -21,7 +21,7 @@ mod workspaces;
 
 pub use audit::{AuditEvent, AuditRepo, NewAuditEvent};
 pub use error::DbError;
-pub use files::{File, FileRepo, NewFile};
+pub use files::{File, FileRepo, FileStatus, NewFile, ThumbsState};
 pub use folders::{Folder, FolderRepo, NewFolder};
 pub use notes::{
     order_key_between, parse_wiki_links, NewNote, Note, NoteBacklink, NoteLinksRepo, NoteNode,

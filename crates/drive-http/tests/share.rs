@@ -121,6 +121,8 @@ async fn seed_file(state: &HttpState, owner_id: &str) -> String {
             workspace_id: ws,
             storage_id: None,
             thumbnail: None,
+            status: drive_db::FileStatus::Ready,
+            expected_size: None,
         })
         .await
         .unwrap();

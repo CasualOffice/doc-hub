@@ -29,6 +29,7 @@ base64     = { workspace = true }
 aes-gcm    = { workspace = true }
 rand       = { workspace = true }
 ulid       = { workspace = true }
+image      = { workspace = true }
 tracing    = { workspace = true }
 
 [dev-dependencies]

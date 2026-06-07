@@ -178,7 +178,7 @@ impl From<Folder> for FolderDto {
 }
 
 #[derive(Serialize)]
-struct FileDto {
+pub(crate) struct FileDto {
     id: String,
     parent_id: Option<String>,
     name: String,
@@ -189,10 +189,39 @@ struct FileDto {
     modified_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     thumbnail: Option<String>,
+    /// Lifecycle state (pipeline §13.6). `ready` for proxy uploads and
+    /// finalized direct uploads; `uploading` for pre-finalize direct
+    /// uploads; `failed` if the direct PUT errored.
+    status: &'static str,
+    /// Server-side thumbnail generation state (pipeline §5.4). The SPA
+    /// uses `thumb_urls` (below) when this is `ready`.
+    thumbs_state: &'static str,
+    /// Convenience URLs for the three thumbnail sizes. Only populated
+    /// when `thumbs_state == "ready"`; consumers should fall back to
+    /// the inline `thumbnail` data URI otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thumb_urls: Option<ThumbUrls>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ThumbUrls {
+    small: String,
+    medium: String,
+    large: String,
 }
 
 impl From<File> for FileDto {
     fn from(f: File) -> Self {
+        let thumb_urls = if matches!(f.thumbs_state, drive_db::ThumbsState::Ready) {
+            let enc = |size: &str| format!("/api/files/{}/thumb/{}", &f.id, size);
+            Some(ThumbUrls {
+                small: enc("small"),
+                medium: enc("medium"),
+                large: enc("large"),
+            })
+        } else {
+            None
+        };
         Self {
             id: f.id,
             parent_id: f.parent_id,
@@ -203,6 +232,9 @@ impl From<File> for FileDto {
             created_at: rfc3339(f.created_at),
             modified_at: rfc3339(f.modified_at),
             thumbnail: f.thumbnail,
+            status: f.status.as_str(),
+            thumbs_state: f.thumbs_state.as_str(),
+            thumb_urls,
         }
     }
 }
@@ -216,7 +248,7 @@ fn rfc3339(t: time::OffsetDateTime) -> String {
 
 /// Display-name sanitisation — minimum bar from `docs/research/06-security.md` §2.
 /// (Full unicode normalisation lives in a Phase-2 helper; we keep the essentials.)
-fn sanitise_display_name(name: &str) -> Result<String, FilesError> {
+pub(crate) fn sanitise_display_name(name: &str) -> Result<String, FilesError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err(FilesError::Validation("name cannot be empty".into()));
@@ -762,6 +794,10 @@ async fn upload_file(
             workspace_id,
             storage_id,
             thumbnail,
+            // Proxy multipart commits the row as ready in one shot —
+            // the bytes are already in the bucket by the time we get here.
+            status: drive_db::FileStatus::Ready,
+            expected_size: None,
         })
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;

@@ -150,6 +150,8 @@ async fn seed(state: &HttpState) {
                 workspace_id: ws.clone(),
                 storage_id: None,
                 thumbnail: None,
+                status: drive_db::FileStatus::Ready,
+                expected_size: None,
             })
             .await
             .unwrap();
@@ -272,6 +274,8 @@ async fn search_excludes_other_users_files() {
             workspace_id: other_ws,
             storage_id: None,
             thumbnail: None,
+            status: drive_db::FileStatus::Ready,
+            expected_size: None,
         })
         .await
         .unwrap();

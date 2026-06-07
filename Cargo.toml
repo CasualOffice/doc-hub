@@ -76,6 +76,11 @@ mime_guess        = "2"
 # about their extension by inspecting the first few bytes of the payload.
 infer             = { version = "0.19", default-features = false }
 
+# Server-side image-only thumbnail decoder (pipeline §5.4). PDF / video
+# decoders are deferred to v0.2 — they require a sandboxed subprocess
+# per the security brief, so we don't run them in-process.
+image             = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+
 # Dev / test
 http-body-util    = "0.1"
 tempfile          = "3"
