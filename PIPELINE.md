@@ -134,6 +134,7 @@ The current Notes app is shaped for developers (markdown source pane + literal `
 | # | Item | Brief | Priority | Trigger |
 |---|---|---|---|---|
 | MK1 | Domain flip + final CNAME (`drive.schnsrw.live` → final apex) | [`07-marketing-site`](./docs/research/07-marketing-site.md) | P1 | Calendar / DNS decision; nothing technical blocks it |
+| MK-PERF | **Marketing-site Lighthouse perf regression** (mobile-profile score 0.74 vs the ≥0.95 bar). Surfaced once the astro-check OOM stopped masking the Lighthouse run. Gate temporarily demoted to warn — restore to error once the LCP / TBT regression is fixed. | [`07-marketing-site`](./docs/research/07-marketing-site.md) | **P0** | Investigate immediately — the gate is the polish bar for the marketing site |
 | MK2 | Pagefind docs search | [`07-marketing-site`](./docs/research/07-marketing-site.md) | P2 | After the first user can't find a doc page on their own |
 | MK3 | i18n (start with the marketing site, then docs, then SPA) | — (needs brief) | P3 | First non-English contributor opens an issue |
 

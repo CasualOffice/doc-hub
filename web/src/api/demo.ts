@@ -445,20 +445,43 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
   if (p === "/api/search" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
     const q = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
-    if (!q) {
-      return { folders: [], files: [] } as unknown as T;
-    }
     const limit = Math.max(
       1,
-      Math.min(200, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50),
+      Math.min(200, Number.parseInt(url.searchParams.get("limit") ?? "30", 10) || 30),
     );
+    // Empty-query empty-filters → return empty result. Anything else
+    // runs the substring match. Phase 3 wire shape: include `notes`,
+    // `total`, `next_cursor` (null in demo — no pagination), and
+    // `sort_applied` so the SPA's new state machine doesn't crash on
+    // undefined fields.
+    if (!q) {
+      return {
+        files: [],
+        folders: [],
+        notes: [],
+        total: { files: 0, folders: 0, notes: 0, exact: true },
+        next_cursor: null,
+        sort_applied: url.searchParams.get("sort") ?? "modified",
+      } as unknown as T;
+    }
+    const matchedFolders = state.folders
+      .filter((f) => f.name.toLowerCase().includes(q))
+      .slice(0, limit);
+    const matchedFiles = state.files
+      .filter((f) => f.name.toLowerCase().includes(q))
+      .slice(0, limit);
     return {
-      folders: state.folders
-        .filter((f) => f.name.toLowerCase().includes(q))
-        .slice(0, limit),
-      files: state.files
-        .filter((f) => f.name.toLowerCase().includes(q))
-        .slice(0, limit),
+      files: matchedFiles,
+      folders: matchedFolders,
+      notes: [],
+      total: {
+        files: matchedFiles.length,
+        folders: matchedFolders.length,
+        notes: 0,
+        exact: true,
+      },
+      next_cursor: null,
+      sort_applied: url.searchParams.get("sort") ?? "modified",
     } as unknown as T;
   }
   // Workspaces — demo has Personal + one seeded Team workspace ("Demo")
