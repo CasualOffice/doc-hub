@@ -20,7 +20,6 @@ import {
   Italic as ItalicIcon,
   List,
   Heading as HeadingIcon,
-  Link as LinkIcon,
   Slash,
 } from "lucide-react";
 
@@ -128,18 +127,9 @@ export function MobileToolbar({ editor }: Props) {
           )}
         </span>
       </MobBtn>
-      <MobBtn
-        label="Link"
-        active={editor.isActive("link")}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          // Phase 2 wires the actual URL prompt; today we surface a
-          // hint so the affordance is visible.
-          window.alert("Link dialog coming soon.");
-        }}
-      >
-        <LinkIcon size={17} strokeWidth={2} />
-      </MobBtn>
+      {/* Link button deferred to NT2 Phase 2 — needs a proper
+          token-styled URL input dialog. Including it as a no-op stub
+          would lie to the user about what works. */}
       <span className="cd-mobile-sep" aria-hidden="true" />
       <MobBtn
         label="Insert block (slash menu)"

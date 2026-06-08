@@ -1,0 +1,167 @@
+/* Shared Radix dialog styling. Used by ConfirmDialog + PromptDialog.
+   The pre-existing RenameDialog uses its own inline styles; that will
+   migrate over in a follow-up polish pass.
+
+   Polish bar: concentric corners, fade-in on overlay, subtle scale +
+   fade on content, prefers-reduced-motion honoured. */
+
+.cd-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 24, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+  animation: cd-dialog-overlay-in 160ms var(--ease);
+}
+
+.cd-dialog-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 91;
+  width: min(420px, calc(100vw - 32px));
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-hover);
+  padding: 22px 22px 18px;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  animation: cd-dialog-content-in 180ms var(--ease);
+}
+
+.cd-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.cd-dialog-title {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: var(--text-lg, 1.05rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.cd-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.cd-dialog-icon--warn {
+  background: rgba(178, 36, 36, 0.10);
+  color: var(--danger, #b22424);
+}
+
+.cd-dialog-body {
+  margin: 4px 0 16px;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.cd-dialog-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+
+.cd-dialog-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+.cd-dialog-input[aria-invalid="true"] {
+  border-color: var(--danger, #b22424);
+}
+
+.cd-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.cd-dialog-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.cd-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cd-dialog-btn--ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  border-color: var(--line);
+}
+
+.cd-dialog-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.cd-dialog-btn--primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.cd-dialog-btn--primary:hover:not(:disabled) {
+  background: var(--ink-soft);
+}
+
+.cd-dialog-btn--danger {
+  background: var(--danger, #b22424);
+  color: var(--paper);
+}
+
+.cd-dialog-btn--danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+@keyframes cd-dialog-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cd-dialog-content-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-dialog-overlay,
+  .cd-dialog-content {
+    animation: none;
+  }
+}

@@ -20,6 +20,7 @@ import {
 import { ChevronRight, NotebookPen, Plus, RotateCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { MarkdownEditor } from "../components/notes/MarkdownEditor.tsx";
 
 import {
@@ -221,8 +222,11 @@ export function Notes() {
     }
   }
 
-  async function onDelete(id: string) {
-    if (!window.confirm("Delete this note permanently? This cannot be undone.")) return;
+  const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
+  function onDelete(id: string) {
+    setDeleteCandidate(id);
+  }
+  async function performDelete(id: string) {
     try {
       await noteDelete(id);
       toast.success("Deleted");
@@ -401,6 +405,19 @@ export function Notes() {
           />
         )}
       </section>
+
+      <ConfirmDialog
+        open={deleteCandidate !== null}
+        title="Delete this note permanently?"
+        body="This cannot be undone. The note + its body + backlinks index will be removed."
+        confirmLabel="Delete permanently"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteCandidate) return performDelete(deleteCandidate);
+          return undefined;
+        }}
+        onClose={() => setDeleteCandidate(null)}
+      />
     </div>
   );
 }

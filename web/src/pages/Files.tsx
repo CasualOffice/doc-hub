@@ -30,6 +30,7 @@ import { SelectionBar } from "../components/SelectionBar.tsx";
 import { ShareDialog } from "../components/ShareDialog.tsx";
 import { SortMenu, type SortDir, type SortKey } from "../components/SortMenu.tsx";
 import type { ViewMode } from "../components/TopBar.tsx";
+import { PromptDialog } from "../components/PromptDialog.tsx";
 
 const SORT_KEY_STORAGE = "cd-sort-key-v1";
 
@@ -413,24 +414,14 @@ export function Files({
     }
   }, [uploadRequested, onUploadHandled]);
 
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
   const lastNewFolderTickRef = useRef(newFolderRequested);
   useEffect(() => {
     if (newFolderRequested === lastNewFolderTickRef.current) return;
     lastNewFolderTickRef.current = newFolderRequested;
     if (newFolderRequested === 0) return;
-    (async () => {
-      const name = window.prompt("Folder name", "Untitled folder");
-      if (name && name.trim()) {
-        try {
-          await api.createFolder(name.trim(), current.id, workspaceId);
-          toast.success("Folder created");
-          void refresh();
-        } catch {
-          toast.error("Couldn't create folder");
-        }
-      }
-      onNewFolderHandled();
-    })();
+    setNewFolderOpen(true);
+    onNewFolderHandled();
   }, [newFolderRequested, onNewFolderHandled, refresh, current.id]);
 
   const uploadAll = useCallback(
@@ -961,6 +952,31 @@ export function Files({
           onTrash={bulkTrash}
         />
       )}
+
+      <PromptDialog
+        open={newFolderOpen}
+        title="New folder"
+        label="Name"
+        placeholder="Untitled folder"
+        defaultValue="Untitled folder"
+        submitLabel="Create folder"
+        validate={(v) => {
+          if (v.length < 1) return "Required";
+          if (v.length > 200) return "Name is too long";
+          if (/[\/\\\0]/.test(v)) return "Slashes and null bytes aren't allowed";
+          return null;
+        }}
+        onSubmit={async (name) => {
+          try {
+            await api.createFolder(name, current.id, workspaceId);
+            toast.success("Folder created");
+            void refresh();
+          } catch {
+            toast.error("Couldn't create folder");
+          }
+        }}
+        onClose={() => setNewFolderOpen(false)}
+      />
     </div>
   );
 }

@@ -89,6 +89,10 @@ jobs:
           # Override per environment via repo Variables when DNS changes.
           ASTRO_SITE: ${{ vars.MARKETING_SITE_URL || 'https://schnsrw.live' }}
           ASTRO_BASE: ${{ vars.MARKETING_SITE_BASE || '' }}
+          # `astro check` walks every .astro file's TS — the Phase 3
+          # content additions push it over Node's 4 GB default. 8 GB is
+          # comfortable on ubuntu-latest runners (7 GB RAM).
+          NODE_OPTIONS: "--max-old-space-size=8192"
         run: pnpm build
 
       # ── 3. Lighthouse budgets (mobile profile, must clear ≥ 95) ────────

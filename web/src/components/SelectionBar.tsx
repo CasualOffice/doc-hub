@@ -9,6 +9,8 @@ import { useState } from "react";
 import { Download, FolderInput, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
+
 export function SelectionBar({
   count,
   onClear,
@@ -21,13 +23,9 @@ export function SelectionBar({
   onTrash: () => Promise<void>;
 }) {
   const [trashing, setTrashing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  async function handleTrash() {
-    if (trashing) return;
-    if (count > 5) {
-      const ok = window.confirm(`Move ${count} files to trash?`);
-      if (!ok) return;
-    }
+  async function performTrash() {
     setTrashing(true);
     try {
       await onTrash();
@@ -36,6 +34,15 @@ export function SelectionBar({
     } finally {
       setTrashing(false);
     }
+  }
+
+  function handleTrash() {
+    if (trashing) return;
+    if (count > 5) {
+      setConfirming(true);
+      return;
+    }
+    void performTrash();
   }
 
   return (
@@ -94,10 +101,20 @@ export function SelectionBar({
         <FolderInput size={14} strokeWidth={1.8} />
         Move
       </ActionBtn>
-      <ActionBtn onClick={() => void handleTrash()} danger disabled={trashing}>
+      <ActionBtn onClick={() => handleTrash()} danger disabled={trashing}>
         <Trash2 size={14} strokeWidth={1.8} />
         {trashing ? "Trashing…" : "Trash"}
       </ActionBtn>
+
+      <ConfirmDialog
+        open={confirming}
+        title={`Move ${count} ${count === 1 ? "file" : "files"} to trash?`}
+        body="Items in Trash can be restored for 30 days, then they're permanently removed."
+        confirmLabel="Move to trash"
+        variant="destructive"
+        onConfirm={performTrash}
+        onClose={() => setConfirming(false)}
+      />
 
       <style>{`
         @keyframes cd-selbar-in {
