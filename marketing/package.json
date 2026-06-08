@@ -6,7 +6,8 @@
   "description": "Casual Drive marketing + docs site. Astro 5, MDX. Statically generated, mobile-first, SEO-budgeted. Hosts the SPA demo at /demo.",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build",
+    "build": "node scripts/optimize-screenshots.mjs && astro check && astro build",
+    "build:images": "node scripts/optimize-screenshots.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "format": "prettier --write \"src/**/*.{astro,ts,tsx,mdx,css}\"",
