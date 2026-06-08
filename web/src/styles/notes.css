@@ -527,3 +527,491 @@
 .notes-backlinks button:hover {
   text-decoration: underline;
 }
+
+/* ── Live-render editor (Phase 3 §17 — NT1 Phase 1) ──────────────── */
+/* Tiptap renders a contenteditable inside `.cd-note-editor > .ProseMirror`.
+   We style it to match the existing preview typography so the WYSIWYG
+   feels identical to what users saw in the right-hand pane before. */
+
+.cd-note-editor .ProseMirror {
+  outline: none;
+  min-height: 480px;
+  font-size: var(--text-md, 1rem);
+  line-height: 1.7;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.cd-note-editor .ProseMirror:focus {
+  outline: none;
+}
+
+/* Empty-document placeholder. ProseMirror adds
+   `.is-editor-empty.is-empty` to the first node when the doc is empty;
+   we paint the placeholder via a ::before only on that. */
+.cd-note-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-2);
+  pointer-events: none;
+  height: 0;
+  float: left;
+}
+
+.cd-note-editor[data-placeholder] .ProseMirror.is-editor-empty p:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-2);
+  pointer-events: none;
+  height: 0;
+  float: left;
+}
+
+/* Block-level typography mirrors `.notes-pane-preview` so existing
+   notes look the same the second after the editor takes over. */
+.cd-note-editor .ProseMirror h1,
+.cd-note-editor .ProseMirror h2,
+.cd-note-editor .ProseMirror h3 {
+  color: var(--ink);
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, var(--font-sans));
+  font-weight: 600;
+}
+
+.cd-note-editor .ProseMirror h1 {
+  font-size: 1.5rem;
+  margin: 18px 0 10px;
+}
+
+.cd-note-editor .ProseMirror h2 {
+  font-size: 1.2rem;
+  margin: 16px 0 8px;
+}
+
+.cd-note-editor .ProseMirror h3 {
+  font-size: 1.05rem;
+  margin: 12px 0 6px;
+}
+
+.cd-note-editor .ProseMirror p {
+  margin: 8px 0;
+}
+
+.cd-note-editor .ProseMirror ul,
+.cd-note-editor .ProseMirror ol {
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+.cd-note-editor .ProseMirror li > p {
+  margin: 2px 0;
+}
+
+.cd-note-editor .ProseMirror code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  background: var(--bg-subtle);
+  border-radius: 4px;
+}
+
+.cd-note-editor .ProseMirror pre {
+  background: var(--bg-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin: 10px 0;
+  white-space: pre;
+}
+
+.cd-note-editor .ProseMirror pre code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.cd-note-editor .ProseMirror blockquote {
+  border-left: 3px solid var(--line-strong);
+  margin: 10px 0;
+  padding: 4px 12px;
+  color: var(--muted);
+  background: var(--bg-subtle);
+  border-radius: 4px;
+}
+
+.cd-note-editor .ProseMirror a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cd-note-editor .ProseMirror hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-note-editor .ProseMirror * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ── NT2 floating formatting toolbar ─────────────────────────────── */
+.cd-bubble-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-hover);
+  font-family: var(--font-sans);
+}
+
+.cd-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.cd-bubble-btn:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.cd-bubble-btn.is-active {
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+}
+
+.cd-bubble-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 3px;
+}
+
+/* ── NT3 slash menu ──────────────────────────────────────────────── */
+.cd-slash-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-hover);
+  padding: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.cd-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  transition: background 120ms;
+}
+
+.cd-slash-item.is-active,
+.cd-slash-item:hover {
+  background: var(--bg-hover);
+}
+
+.cd-slash-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+.cd-slash-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.cd-slash-title {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.cd-slash-desc {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── NT4 mention + note-link popovers ────────────────────────────── */
+.cd-mention-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-hover);
+  padding: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.cd-mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  transition: background 120ms;
+}
+
+.cd-mention-item.is-active,
+.cd-mention-item:hover {
+  background: var(--bg-hover);
+}
+
+.cd-mention-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.cd-mention-avatar--note {
+  background: var(--bg-subtle);
+  color: var(--ink-soft);
+}
+
+.cd-mention-avatar--create {
+  background: var(--bg-subtle);
+  color: var(--accent-strong);
+}
+
+.cd-mention-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.cd-mention-name {
+  color: var(--ink);
+}
+
+.cd-mention-tag {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  font-weight: 600;
+}
+
+.cd-mention-create .cd-mention-name {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* ── NT6 mobile sticky toolbar ───────────────────────────────────── */
+.cd-mobile-toolbar {
+  /* Desktop hides it entirely — the BubbleMenu serves selection there. */
+  display: none;
+}
+
+@media (max-width: 1023.9px) {
+  .cd-mobile-toolbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom)) 10px;
+    background: var(--card);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .cd-mobile-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.cd-mobile-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+
+.cd-mobile-btn:active {
+  background: var(--bg-hover);
+}
+
+.cd-mobile-btn.is-active {
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+}
+
+.cd-mobile-sep {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ── NT5 hover-revealed block handle ─────────────────────────────── */
+
+/* Hidden on mobile — touch users get the long-press sheet (NT6 P2). */
+.cd-block-handle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 120ms, background 120ms, color 120ms;
+}
+
+@media (min-width: 1024px) and (hover: hover) {
+  .cd-block-handle {
+    display: inline-flex;
+    opacity: 0.45;
+  }
+  .cd-block-handle:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+    color: var(--ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-block-handle {
+    transition: none;
+  }
+}
+
+.cd-block-menu {
+  min-width: 180px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-hover);
+  padding: 5px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink);
+  z-index: 70;
+}
+
+.cd-block-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  transition: background 100ms, color 100ms;
+}
+
+.cd-block-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.cd-block-menu-item.is-destructive {
+  color: var(--danger, #b22424);
+}
+
+.cd-block-menu-item.is-destructive:hover {
+  background: rgba(178, 36, 36, 0.08);
+}
+
+.cd-block-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.cd-block-menu-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 4px;
+}

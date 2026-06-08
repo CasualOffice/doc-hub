@@ -1,27 +1,26 @@
 /**
  * Notes / Wiki shell. Pipeline §8.11. Spec: docs/ux/16-notes-surface.md.
  *
- * Tree (sticky 240 px on desktop, drawer on mobile) + Editor (markdown source
- * + live preview on desktop, tabbed on mobile) + Backlinks panel.
+ * Tree (sticky 240 px on desktop, drawer on mobile) + Editor (Phase 3 §17
+ * live-render markdown via Tiptap) + Backlinks panel.
  *
- * The editor is a polished textarea with autosize, tab-to-indent, and a 600 ms
- * debounced PATCH. Wiki-link autocomplete suggests existing pages when the
- * user types `[[`. Rendering uses `marked` (already a dep) wrapped in
- * `dompurify` — both already in the SPA bundle for share-link previews.
+ * The editor never exposes markdown source to the user — it parses
+ * markdown in, renders blocks live as the user types, and serializes
+ * markdown back out. Storage format unchanged. See
+ * docs/research/17-notes-general-user-ux.md for the locked decisions.
  */
 import {
   type ChangeEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
-import { ChevronRight, Eye, NotebookPen, Pencil, Plus, RotateCw, Search, Trash2 } from "lucide-react";
+import { ChevronRight, NotebookPen, Plus, RotateCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+import { MarkdownEditor } from "../components/notes/MarkdownEditor.tsx";
 
 import {
   type Note,
@@ -40,8 +39,6 @@ import { useActiveWorkspaceId } from "../state/WorkspaceContext.tsx";
 
 const DRAFT_KEY_PREFIX = "cd-note-draft-v1:";
 
-type ViewTab = "edit" | "preview";
-
 export function Notes() {
   const workspaceId = useActiveWorkspaceId();
   const [tree, setTree] = useState<NoteNode[]>([]);
@@ -51,7 +48,6 @@ export function Notes() {
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<ViewTab>("edit");
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState<NoteNode[]>([]);
   const [showTrash, setShowTrash] = useState(false);
@@ -194,12 +190,11 @@ export function Notes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persist, open]);
 
-  async function onCreate(parentId: string | null = null) {
+  async function onCreate(parentId: string | null = null, title = "Untitled") {
     try {
-      const n = await noteCreate("Untitled", parentId, workspaceId);
+      const n = await noteCreate(title, parentId, workspaceId);
       await refreshTree();
       setOpenId(n.id);
-      setActiveTab("edit");
     } catch {
       toast.error("Couldn't create note");
     }
@@ -391,10 +386,9 @@ export function Notes() {
           <NoteEditor
             note={open}
             tree={tree}
+            workspaceId={workspaceId}
             saveState={saveState}
             savedAt={savedAt}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
             onTitleChange={(title) =>
               setOpen((prev) => (prev ? { ...prev, title } : prev))
             }
@@ -403,6 +397,7 @@ export function Notes() {
             }
             onNavigateBacklink={(id) => setOpenId(id)}
             onTrash={() => open && void onTrash(open.id)}
+            onCreateNote={(title) => void onCreate(null, title)}
           />
         )}
       </section>
@@ -558,79 +553,29 @@ function TreeSkeleton() {
 function NoteEditor({
   note,
   tree,
+  workspaceId,
   saveState,
   savedAt,
-  activeTab,
-  onTabChange,
   onTitleChange,
   onBodyChange,
   onNavigateBacklink,
   onTrash,
+  onCreateNote,
 }: {
   note: Note;
   tree: NoteNode[];
+  workspaceId: string | null;
   saveState: "idle" | "saving" | "saved" | "error";
   savedAt: number | null;
-  activeTab: ViewTab;
-  onTabChange: (t: ViewTab) => void;
   onTitleChange: (title: string) => void;
   onBodyChange: (body: string) => void;
   onNavigateBacklink: (id: string) => void;
   onTrash: () => void;
+  onCreateNote: (title: string) => void;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Tab-to-indent in markdown source.
-  function onBodyKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Tab" && !e.shiftKey) {
-      e.preventDefault();
-      const el = e.currentTarget;
-      const { selectionStart, selectionEnd, value } = el;
-      const next = value.slice(0, selectionStart) + "  " + value.slice(selectionEnd);
-      onBodyChange(next);
-      requestAnimationFrame(() => {
-        el.selectionStart = el.selectionEnd = selectionStart + 2;
-      });
-    }
-  }
-
-  // Auto-grow textarea.
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(el.scrollHeight, 480)}px`;
-  }, [note.id, note.body]);
-
-  const rendered = useMemo(() => renderMarkdown(note.body, tree, note.workspace_id), [
-    note.body,
-    tree,
-    note.workspace_id,
-  ]);
-
   return (
     <div className="notes-editor">
       <div className="notes-editor-head">
-        <div className="notes-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "edit"}
-            className={activeTab === "edit" ? "active" : ""}
-            onClick={() => onTabChange("edit")}
-          >
-            <Pencil size={13} strokeWidth={1.8} /> Write
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "preview"}
-            className={activeTab === "preview" ? "active" : ""}
-            onClick={() => onTabChange("preview")}
-          >
-            <Eye size={13} strokeWidth={1.8} /> Preview
-          </button>
-        </div>
         <div className="notes-editor-actions">
           <span className="notes-save-state" aria-live="polite">
             {saveState === "saving" && "Saving…"}
@@ -664,26 +609,16 @@ function NoteEditor({
         aria-label="Note title"
       />
 
-      <div className={`notes-split notes-split-${activeTab}`}>
-        <div className="notes-pane-edit">
-          <textarea
-            ref={textareaRef}
-            className="notes-textarea"
-            value={note.body}
-            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onBodyChange(e.target.value)}
-            onKeyDown={onBodyKey}
-            placeholder="Start writing in markdown… use [[Page name]] to link."
-            spellCheck
-            aria-label="Note body"
-          />
-        </div>
-        <div
-          className="notes-pane-preview"
-          // Markdown render is purified + scoped to a 'note-prose' class
-          // so any styles can be tightened/loosened via the global stylesheet.
-          dangerouslySetInnerHTML={{ __html: rendered }}
-        />
-      </div>
+      <MarkdownEditor
+        key={note.id}
+        value={note.body}
+        onChange={onBodyChange}
+        placeholder="Start writing — press / for blocks, @ to mention, + to link a note."
+        id={`note-${note.id}-body`}
+        workspaceId={workspaceId}
+        notesTree={tree}
+        onCreateNote={onCreateNote}
+      />
 
       {note.backlinks.length > 0 && (
         <div className="notes-backlinks">
@@ -730,46 +665,12 @@ function relTime(ts: number): string {
   return new Date(ts).toLocaleString();
 }
 
-// ── Markdown rendering ──────────────────────────────────────────────
-
-/**
- * Render the markdown body with `[[Page]]` tokens swapped for SPA links.
- * Resolution is in-process against the tree we already have — no extra
- * request. Dangling links render with a red underline; clicking them
- * (delegated via event bubbling in the preview pane) creates a new page.
- *
- * `workspace_id` argument is the source-of-truth for the link's scope —
- * passed but currently used only by tests / future cross-workspace UI.
- */
-function renderMarkdown(body: string, tree: NoteNode[], _workspaceId: string): string {
-  const byLower = new Map<string, NoteNode>();
-  for (const n of tree) byLower.set(n.title.toLowerCase(), n);
-
-  const interpolated = body.replace(/\[\[([^\]\n]+)\]\]/g, (_m, raw: string) => {
-    const trimmed = raw.trim();
-    if (!trimmed) return _m;
-    const hit = byLower.get(trimmed.toLowerCase());
-    if (hit) {
-      return `<a class="note-wikilink" data-note-id="${escapeAttr(hit.id)}">${escapeHtml(trimmed)}</a>`;
-    }
-    return `<a class="note-wikilink note-wikilink-dangling" data-dangling-title="${escapeAttr(trimmed)}">${escapeHtml(trimmed)}</a>`;
-  });
-
-  const rawHtml = marked.parse(interpolated, { async: false }) as string;
-  return DOMPurify.sanitize(rawHtml, {
-    ADD_ATTR: ["data-note-id", "data-dangling-title", "class"],
-  });
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeAttr(s: string): string {
-  return escapeHtml(s);
-}
+// Markdown rendering moved into the Tiptap-backed MarkdownEditor
+// (Phase 3 §17 §NT1 Phase 1). The renderer below was the old
+// preview-pane code; the editor is now the document, so the standalone
+// renderer is no longer needed in this file.
+//
+// Wiki-link resolution (`[[Title]]` → SPA link) is handled by the
+// editor's link node — Phase 2 wires the `+` / `[[` picker; until then
+// the existing markdown tokens render as plain `[[…]]` text. The
+// backlinks index keeps working server-side regardless.

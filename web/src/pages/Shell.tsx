@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { DEMO_MODE } from "../api/client.ts";
 import { useAuth } from "../auth/AuthContext.tsx";
@@ -12,7 +12,10 @@ import { TopBar, type ViewMode } from "../components/TopBar.tsx";
 import { Activity } from "./Activity.tsx";
 import { Admin } from "./Admin.tsx";
 import { Files } from "./Files.tsx";
-import { Notes } from "./Notes.tsx";
+// Notes is route-split so the Tiptap + ProseMirror bundle (~180 KB
+// gzipped) only loads when the user navigates to Notes. Spec:
+// docs/research/17-notes-general-user-ux.md §"Threat model" → bundle.
+const Notes = lazy(() => import("./Notes.tsx").then((m) => ({ default: m.Notes })));
 import { Settings } from "./Settings.tsx";
 
 export function Shell() {
@@ -135,7 +138,17 @@ export function Shell() {
               />
             </CenteredPane>
           )}
-          {nav === "notes" && <Notes />}
+          {nav === "notes" && (
+            <Suspense
+              fallback={
+                <CenteredPane>
+                  <EmptyState title="Loading notes…" subtitle="" />
+                </CenteredPane>
+              }
+            >
+              <Notes />
+            </Suspense>
+          )}
           {nav === "activity" && <Activity />}
           {nav === "admin" && <Admin onNavigate={(t) => setNav(t)} />}
           {nav === "settings" && <Settings />}
