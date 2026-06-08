@@ -113,7 +113,7 @@ pub(crate) async fn get_thumb(
                 drive_storage::SignedUrl::Native { url, .. } => url.to_string(),
                 drive_storage::SignedUrl::Token { token, .. } => {
                     // fs/memory backends — issue against the user-content origin.
-                    format!("{}raw/{}", s.config.usercontent_origin.as_str(), token,)
+                    format!("{}raw/{}", s.config.usercontent_origin.as_str(), token)
                 }
             };
             Ok((
