@@ -1,83 +1,76 @@
 # 10 — SDK integration plan (Casual Editor / Sheets in-Drive)
 
-Plan-only. No code in this batch. Per CLAUDE.md "plan → present → ask → code"; this doc presents the integration shape so you can sign off before implementation.
+**Revised 2026-06-08** — SDK is the primary integration. Iframe path is out of scope for Phase 1; the existing WOPI new-tab handoff covers the isolated-launch case.
 
-Companion to `08-editor-handoff.md` (current WOPI new-tab handoff) and `07-preview-surface.md` (where the iframe-mounted editor would live). Source contracts live in the Casual Editor repo: [`13-iframe-protocol.md`](https://github.com/schnsrw/docx/blob/main/docs/internal/13-iframe-protocol.md) + [`14-sdk-delivery.md`](https://github.com/schnsrw/docx/blob/main/docs/internal/14-sdk-delivery.md).
+Companion to `08-editor-handoff.md` (current WOPI new-tab handoff) and `07-preview-surface.md` (where the editor mounts). Source contracts: [`13-iframe-protocol.md`](https://github.com/schnsrw/docx/blob/main/docs/internal/13-iframe-protocol.md) + [`14-sdk-delivery.md`](https://github.com/schnsrw/docx/blob/main/docs/internal/14-sdk-delivery.md).
 
 ## What's already shipped
 
-- ✅ **WOPI handoff** (`08-editor-handoff.md`, pipeline row 4.3 + 4.4). `GET /api/files/{id}/open` mints a per-launch token + redirects to the editor in a new tab. The editor calls back to Drive's `/wopi/files/{id}` endpoints for CheckFileInfo / GetFile / PutFile + Lock lifecycle. **This continues to work as the third-party WOPI path** — don't touch it.
+- ✅ **WOPI handoff** (`08-editor-handoff.md`, pipeline row 4.3 + 4.4). `GET /api/files/{id}/open` mints a per-launch token + redirects to the editor in a new tab. The editor calls back to Drive's `/wopi/files/{id}` endpoints for CheckFileInfo / GetFile / PutFile + Lock lifecycle. **Continues to work as the third-party WOPI path** — don't touch it.
 - ✅ **`crates/drive-wopi`** — WOPI host implementation (7 endpoints, 409 lock contract, token mint via `mint_token`).
+- ✅ **`@schnsrw/docx-js-editor@1.0.0`** — `CasualEditor` React component + `FileSource` interface, on npm.
+- ✅ **`@schnsrw/casual-sheets@0.3.0`** — `CasualSheets` React Univer wrapper, signing surface, iframe protocol types, on npm. Eager Univer plugin CSS at `@schnsrw/casual-sheets/styles`.
 
 ## What this plan proposes
 
-Two new integration shapes, **both opt-in** alongside the existing new-tab WOPI handoff:
+**Phase 1 — SDK integration (in-Drive editing).** Drive `npm install`s the editor SDKs and mounts them directly into its React tree. The Preview modal's stage becomes a real editor for `.docx` / `.xlsx` instead of a procedural-thumbnail placeholder. Bytes flow through Drive's own content endpoints (no WOPI dance for the SDK path); the WOPI handoff stays around for the third-party launch.
 
-### Shape A — Iframe-in-Preview (in-Drive editing)
+**Why SDK specifically:**
 
-User clicks an `.xlsx` / `.docx` row → Preview modal opens → editor renders **inside the modal** via iframe instead of being a new-tab dance. Drive's chrome stays visible; the user never loses context.
+- **One container by default.** Drive bundles the editor; no second deploy for the editor's gateway. Operators flip `DRIVE_COLLAB_BACKEND_URL=wss://...` to enable real-time co-edit (which then needs the Casual gateway as a second container) — but that's opt-in, not the default.
+- **No postMessage hop.** The editor shares Drive's React state directly; drag-from-sidebar, user-identity propagation, etc. compose naturally.
+- **Same security model as the rest of Drive.** Bytes ride the existing same-origin authenticated session — no separate CSP `frame-ancestors` story, no token mint per launch.
 
-**Why iframe specifically:**
+### Out of Phase 1 scope
 
-- Strong security boundary (CSP `frame-ancestors`, cross-origin enforcement).
-- Editor deploy stays independent of Drive's deploy cycle.
-- WOPI byte transport keeps working under the iframe — only the UX events (selection, save command, lock-lost, signing) get a postMessage layer on top.
-
-Source contract: [iframe protocol](https://github.com/schnsrw/docx/blob/main/docs/internal/13-iframe-protocol.md). The editor's `/embed` route is already shipped; Drive just opens the iframe with the right URL.
-
-### Shape B — SDK + DriveFileSource (npm-embedded editor)
-
-For the future "rich Drive workspace" view that wants tighter integration — drag from Drive's left pane into the editor, share Drive's user state, no postMessage hop. Drive's React SPA imports `@eigenpal/docx-js-editor` (and the sheet equivalent) as an npm dep; the editor is React-mounted directly into Drive's tree.
-
-**Why this matters:** in this mode Drive runs as **one container** when co-edit is off (no second container for the editor's gateway). Operators get a clear cost equation: skip co-edit → simpler deploy; add it → start the Casual gateway as a second container.
-
-This is the bigger lift and lands in a later phase.
+- **Iframe-in-Preview** — the editor's `/embed` route is already shipped, and Drive could host it via postMessage. We're skipping it because the SDK gives us in-React mounting that's strictly better for the single-tenant, single-container case Drive optimises for. Iframe revisits only if a real need surfaces (multi-tenant isolation, cross-org embedding, etc.).
+- **Signature pipeline** — Phase 2 (was Phase C). Drive becomes a signing host: opens the editor in signing mode, persists per-field bytes + audit rows. Editor surface is already shipped at `@schnsrw/casual-sheets/signing` + `@schnsrw/docx-js-editor`; backend stamping lands in its own PR.
 
 ---
 
 ## Phases (numbered)
 
-### Phase A — Iframe-in-Preview (smallest, ship-first)
+### Phase 1 — SDK + DriveFileSource (in-Drive editing)
 
-1. **A1 — Editor URL shape.** Editor exposes `/embed?app=docs&config=<base64url>`. The base64url JSON is `EmbedConfig { hostOrigin, theme, hideTitleBar?, readOnly? }`. The WOPI bootstrap params (`wopiSrc`, `access_token`) ride along.
-2. **A2 — Drive backend.** `GET /api/files/{id}/open` gains a `?mode=iframe` variant that returns the same `editor_app, access_token, access_token_ttl` plus the explicit `entry_url` pointing at `/embed`. WOPI cookies + tokens unchanged.
-3. **A3 — Drive SPA Preview Modal.** New `EditorIframe` component renders the iframe + wires the postMessage bridge. Drive code only handles envelopes it cares about; everything else is silently dropped per protocol.
-4. **A4 — Bridge events.** Drive listens for:
-   - `casual.save.request` → already covered by WOPI PutFile flow (the editor saves to the host's WOPI endpoint directly); used here just for "show a saving spinner in Drive's chrome".
-   - `casual.selection.changed` → updates Drive's detail sidebar.
-   - `casual.lock.lost` → swaps Drive's chrome into read-only banner.
-   - `casual.telemetry.event` → logged into Drive's structured events.
-   - Drive sends `casual.command.save` when user clicks Drive's Save shortcut in the preview chrome.
+Drive imports `@schnsrw/docx-js-editor` + `@schnsrw/casual-sheets`, mounts them under the Preview modal's stage, and routes bytes through new content endpoints.
 
-**Where things live:**
+1. **P1.1 — Drive backend.** Two new endpoints alongside the existing WOPI surface — same-origin, session-cookie + CSRF auth, no token mint:
+   - `GET /api/files/{id}/content` — returns the raw bytes inline (200 with body). Lets the SDK consume bytes without the WOPI `wopiSrc` + token round trip.
+   - `PUT /api/files/{id}/content` — accepts raw bytes in the body, writes through `crates/drive-storage`, updates `size` + `updated_at` on the file row, emits a `files.save` audit event.
 
-- `crates/drive-http` — extends `/api/files/{id}/open` for the iframe mode. ~30 Rust lines.
-- `crates/drive-wopi` — unchanged.
-- `web/src/components/preview/EditorIframe.tsx` — new ~150 line component.
-- `web/src/api/files.ts` — new helper `openInIframe(fileId)` returning the entry URL.
+   ~80 Rust lines in `crates/drive-http/src/files.rs`, alongside the existing handlers.
 
-**Out of scope:** signatures (Phase C), SDK embedding (Phase B), tight integration with Drive's left-pane drag-and-drop.
+2. **P1.2 — `DriveFileSource` (~80 TS lines).** Implements the editor's `FileSource` interface against the new content endpoints. Methods:
+   - `open(docId)` → `GET /api/files/{id}/content` → `{ name, contents: Uint8Array }`
+   - `save(docId, bytes)` → `PUT /api/files/{id}/content`
+   - `list / rename / delete / watchRecent / rememberLastOpened / lastOpened` → no-op (Drive owns those UIs in its own chrome; the editor never invokes them when these no-op).
 
-### Phase B — SDK + DriveFileSource
+   Lives at `web/src/file-source/DriveFileSource.ts`.
 
-The richer in-Drive workspace. Single-container Drive deploy; Drive imports the editor as an npm component.
+3. **P1.3 — React wrappers.** Two thin components that wrap the SDK with `DriveFileSource` + Drive's user identity:
+   - `web/src/components/editor/CasualDocEditor.tsx` (~80 TS lines) wraps `<CasualEditor>` from `@schnsrw/docx-js-editor`.
+   - `web/src/components/editor/CasualSheetWorkspace.tsx` (~80 TS lines) wraps `<CasualSheets>` from `@schnsrw/casual-sheets/sheets`. Imports `@schnsrw/casual-sheets/styles` once.
 
-1. **B1 — Wait on package shape.** Today `@eigenpal/docx-js-editor` is published; `@sheet/web` is workspace-internal. Phase B requires sheet to also publish — track that separately, don't block on it.
-2. **B2 — `DriveFileSource` (TypeScript, ~80 lines).** Implements the editor's `FileSource` interface against Drive's existing file endpoints. Methods: `open`, `save`, plus the trivial `list / rename / delete / watchRecent / rememberLastOpened / lastOpened` that no-op (Drive owns those surfaces in its own UI). Lives at `web/src/file-source/DriveFileSource.ts`.
-3. **B3 — Drive backend endpoints.** SDK-mode `open` + `save` hit `GET / PUT /api/files/{id}/content` — thin shims over `crates/drive-storage` that don't need the WOPI 7-endpoint surface. ~50 Rust lines.
-4. **B4 — React surface.** `web/src/components/editor/CasualDocEditor.tsx` wraps `<CasualEditor>` from the SDK with a DriveFileSource and the Drive user's identity. Same shape for sheet once it publishes.
-5. **B5 — Co-edit toggle.** Operator env `DRIVE_COLLAB_BACKEND_URL=wss://collab.drive.example` flips the editor into collab mode. When unset, Drive runs as one container.
+4. **P1.4 — Preview wiring.** `web/src/components/preview/PreviewStage.tsx` gets two new cases:
+   - `kind === 'doc'` → `<CasualDocEditor fileId={file.id} />`
+   - `kind === 'sheet'` → `<CasualSheetWorkspace fileId={file.id} />`
+
+   Removes the procedural-thumbnail placeholder for those kinds.
+
+5. **P1.5 — Co-edit env flag.** Operator env `DRIVE_COLLAB_BACKEND_URL=wss://collab.drive.example` propagates to the SPA via the existing `/api/about` / config endpoint. When set, the wrappers pass it to `<CasualEditor backendUrl=...>` / `<CasualSheets>` (collab plumbing in the sheet SDK lands when its wrapper supports it). When unset, Drive runs as one container.
 
 **Where things live:**
 
-- `crates/drive-http` — new content endpoints alongside existing WOPI surface. ~50 Rust lines.
+- `crates/drive-http/src/files.rs` — adds `get_content` + `put_content` handlers + two routes. ~80 Rust lines.
 - `web/src/file-source/DriveFileSource.ts` — new file. ~80 TS lines.
-- `web/src/components/editor/CasualDocEditor.tsx` — new file. ~150 TS lines.
-- `web/package.json` — adds `@eigenpal/docx-js-editor` (sheet later).
+- `web/src/components/editor/CasualDocEditor.tsx` — new file. ~80 TS lines.
+- `web/src/components/editor/CasualSheetWorkspace.tsx` — new file. ~80 TS lines.
+- `web/src/components/preview/PreviewStage.tsx` — extended with 2 cases.
+- `web/package.json` — adds `@schnsrw/docx-js-editor` + `@schnsrw/casual-sheets` (peer Univer set: 15 `@univerjs/*` packages at `^0.24.0`).
 
-**Out of scope:** signature pipeline (Phase C).
+**Out of scope:** signature pipeline (Phase 2).
 
-### Phase C — Signature pipeline
+### Phase 2 — Signature pipeline (was Phase C)
 
 Drive becomes a real signing workflow host: user clicks "Sign this file" → Drive opens the editor in signing mode → user signs anchored fields → Drive's Rust backend stamps the signatures + writes an audit row.
 
@@ -140,80 +133,79 @@ Drive becomes a real signing workflow host: user clicks "Sign this file" → Dri
 
 ---
 
-## Sequence — Phase A (iframe-in-Preview)
+## Sequence — Phase 1 (SDK + DriveFileSource)
 
 ```
-Drive SPA              Drive backend                Editor (iframe)
-─────────              ─────────────                ───────────────
-user clicks .docx row
+Drive SPA                              Drive backend
+─────────                              ─────────────
+user clicks .docx row in Preview
       │
       ▼
-GET /api/files/{id}/open?mode=iframe
-      │             ──► mint WOPI token
-      │                 build /embed?wopiSrc=...&access_token=...
-      │             ◄── 200 {entry_url, access_token_ttl}
-      │
-mount <EditorIframe src={entry_url}>
-                                                    boot SPA, parse EmbedConfig
-                                                    ◄────── casual.hello
-casual.hello (capabilities, authToken) ─────────►
-                                                    ◄────── casual.ready
-                                                    ◄────── casual.load.request via WOPI (NOT iframe)
-                                                          (editor reaches Drive's
-                                                           /wopi/files/{id}/contents)
-                          ◄── WOPI byte fetch       render document
-                                                    ◄────── casual.selection.changed × N
-Drive sidebar updates from selection events
-                                                    ◄────── casual.lock.lost (if applicable)
-Drive chrome flips to read-only banner
+construct DriveFileSource(fileId)
+mount <CasualDocEditor fileId={fileId} />
+       │ wraps <CasualEditor fileSource={fs} docId={fileId} />
+       ▼
+fs.open(fileId)
+       │
+       ▼
+GET /api/files/{id}/content (same-origin cookie + CSRF)
+                                     ──► storage.get(storage_key(id))
+                                     ◄── bytes
+       ◄── 200 application/octet-stream
+       │
+render workbook / document
 …
-user clicks Drive's chrome "Save"
-casual.command.save ────────────────────────────►
-                                                    triggers WOPI PutFile
-                          ◄── byte save             ◄────── casual.telemetry.event (save)
-Drive's "Last modified" updates
+user types / formats
+…
+useFileSourceAutoSave → fs.save(fileId, bytes)
+       │
+       ▼
+PUT /api/files/{id}/content
+       │
+                                     ──► storage.put(storage_key(id), bytes)
+                                          file_repo.update_size_and_mtime
+                                          audit.emit("files.save")
+                                     ◄── 200 FileDto
+       ◄── 200
+Drive's recent-files strip refreshes from FileDto.updated_at
 ```
 
-The two transports compose: **WOPI for bytes, postMessage for UX events.** Neither replaces the other.
+Same-origin, same auth cookie, no token mint. Iframe + postMessage stay shipped at the editor side for future use; Phase 1 doesn't touch them.
 
 ---
 
 ## Open questions for sign-off
 
-Tag with my best-guess default; flip in your review.
-
-1. **Phase A vs Phase B priority?** Default: A first (smaller, ships iframe-in-Preview UX without bundling the editor; B follows when sheet publishes).
-2. **Signature blob storage backend?** Default: `crates/drive-storage`'s existing OpenDAL facade (fs / s3 / memory / minio — same four backends as file bytes). Alternative: a dedicated signatures bucket with stricter ACLs.
-3. **Audit row partitioning?** Default: one row per session + one per field. Alternative: collapse into one row per signed field with the session metadata denormalised.
-4. **Co-edit operator default in Phase B?** Default: off (one container). Operators flip `DRIVE_COLLAB_BACKEND_URL` to enable.
-5. **Signing crate naming?** Default: `crates/drive-signing`. Keeps the crypto dep (`ring`) isolated from the rest of Drive.
-6. **Field anchor UI?** Default: operator-supplied field arrays via API (no in-Drive placement UI in Phase C). Drive admins POST `/api/files/{id}/sign` with the field list; the field-placement UI is Phase D.
+1. **Phase ordering?** ✅ confirmed 2026-06-08 — Phase 1 SDK first, Phase 2 signing later, iframe out of scope for now.
+2. **Co-edit default in Phase 1?** ✅ confirmed off by default — operators flip `DRIVE_COLLAB_BACKEND_URL` to enable.
+3. **Signature blob storage backend?** Default: `crates/drive-storage`'s existing OpenDAL facade (fs / s3 / memory / minio). Alternative: dedicated signatures bucket. **Decide at Phase 2.**
+4. **Audit row partitioning?** Default: one row per session + one per field. **Decide at Phase 2.**
+5. **Signing crate naming?** Default: `crates/drive-signing`. Keeps the crypto dep (`ring`) isolated. **Decide at Phase 2.**
+6. **Field anchor UI?** Default: operator-supplied field arrays via API (no in-Drive placement UI in Phase 2). **Decide at Phase 2.**
 
 ---
 
 ## What this plan does NOT change
 
 - The existing WOPI new-tab handoff (`08-editor-handoff.md`). Both paths coexist.
-- The two-origin model (`drive.<host>` for app, `usercontent-drive.<host>` for raw bytes). The iframe lives in the app origin; the editor's bytes come through WOPI as today.
-- The single-tenant admin auth model. SDK + iframe paths use the existing `__Host-cd_sid` session.
-- The "no multi-user accounts in v0" rule. Phase C signatures are signed by the authenticated admin; multi-user signing is a v0.2+ feature.
+- The two-origin model (`drive.<host>` for app, `usercontent-drive.<host>` for raw bytes). The SDK content endpoints serve from the app origin (small bytes inline); the existing user-content origin keeps the download flow.
+- The single-tenant admin auth model. SDK uses the existing `__Host-cd_sid` session + CSRF.
+- The "no multi-user accounts in v0" rule. Phase 2 signatures are signed by the authenticated admin; multi-user signing is a v0.2+ feature.
 
 ## Required reading before code lands
 
 1. This doc.
-2. [Casual Editor iframe protocol](https://github.com/schnsrw/docx/blob/main/docs/internal/13-iframe-protocol.md).
-3. [Casual Editor SDK delivery](https://github.com/schnsrw/docx/blob/main/docs/internal/14-sdk-delivery.md).
-4. [Casual Sheets signing + embed](https://github.com/schnsrw/sheets/blob/main/docs/SDK_SIGNING_EMBED.md).
-5. `08-editor-handoff.md` (existing WOPI path).
-6. `crates/drive-wopi/src/handlers.rs` — current handoff implementation.
+2. [Casual Editor SDK delivery](https://github.com/schnsrw/docx/blob/main/docs/internal/14-sdk-delivery.md) — `FileSource` interface contract.
+3. [Casual Sheets signing + embed](https://github.com/schnsrw/sheets/blob/main/docs/SDK_SIGNING_EMBED.md).
+4. `08-editor-handoff.md` (existing WOPI path).
+5. `crates/drive-http/src/files.rs` — current file routes (add content endpoints alongside).
 
 ## Estimated effort (rough)
 
 | Phase | Rust | TS | Tests | Notes |
 | ----- | ---- | -- | ----- | ----- |
-| A | ~30 LOC | ~150 LOC | ~80 LOC | Smallest, shippable independently |
-| B | ~50 LOC | ~230 LOC | ~150 LOC | Blocked on sheet publishing |
-| C | ~550 LOC (new crate) | ~250 LOC | ~250 LOC | Largest; new crate + migrations |
+| 1 | ~80 LOC | ~240 LOC | ~150 LOC | Both SDKs live; ships in one PR |
+| 2 | ~550 LOC (new crate) | ~250 LOC | ~250 LOC | New crate + migrations; needs Q3/4/5/6 decisions |
 
 Numbers are pre-code estimates; expect ±30%.
 
