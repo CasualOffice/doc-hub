@@ -10,6 +10,11 @@ All notable changes to Casual Drive land here. Format follows
 
 - OIDC sign-in (Authorization Code + PKCE). `DRIVE_ALLOW_PASSWORD_AUTH=false` hides the password form.
 - Sandboxed `drive-thumb-worker` subprocess for video thumbnails (ffmpeg-CLI), with per-job rlimits and optional `setuid`. PDF support deferred.
+- **SDK integration (Phase 1)** — `@schnsrw/docx-js-editor@1.0.0` + `@schnsrw/casual-sheets@0.3.0` mounted inline in the Preview modal. `.docx` opens the real editor in-Drive; `.xlsx` falls back to the existing WOPI new-tab handoff until Phase 1.5 ships an xlsx → IWorkbookData converter. See [`docs/ux/10-sdk-integration-plan.md`](./docs/ux/10-sdk-integration-plan.md).
+  - New endpoints `GET / PUT /api/files/{id}/content` carry bytes through the same-origin authenticated session — no token mint, no user-content origin redirect. The WOPI handoff stays around for the third-party launch.
+  - `DriveFileSource` implements the SDK's `FileSource` interface; `CasualDocEditor` wires the editor with the signed-in admin's identity. Co-edit defaults off — operators set `VITE_DRIVE_COLLAB_BACKEND_URL=wss://...` to enable.
+  - `AutosaveStatus` indicator surfaces in the Preview chrome (Google-Docs-style "Saving… / Saved 2m ago").
+  - Bundle splits: vendor-docx-editor (2.5 MB) lazy-loads only when a `.docx` is opened; cold load stays at ~677 KB.
 
 ### Planned
 
