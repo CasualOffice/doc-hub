@@ -11,6 +11,9 @@
 //! - `POST   /api/files/{id}/trash`             — soft-delete
 //! - `POST   /api/files/{id}/restore`           — undo trash
 //! - `GET    /api/files/{id}/download`          — 302 to signed URL
+//! - `GET    /api/files/{id}/content`           — stream raw bytes (SDK)
+//! - `PUT    /api/files/{id}/content`           — replace raw bytes (SDK)
+//! - `GET    /api/files/{id}/open`              — WOPI handoff (new tab)
 
 use std::time::Duration;
 
@@ -1075,6 +1078,118 @@ async fn download_file(
     Ok(r)
 }
 
+// ── SDK content endpoints ───────────────────────────────────────────────
+//
+// Same-origin byte transport for the in-Drive SDK editor wrappers
+// (CasualDocEditor / CasualSheetWorkspace). See
+// docs/ux/10-sdk-integration-plan.md §"Phase 1 — SDK + DriveFileSource".
+// Distinct from the WOPI handoff: no token mint, no user-content
+// origin redirect; the SPA already has the auth cookie + CSRF.
+
+/// `GET /api/files/{id}/content` — stream the file's raw bytes.
+///
+/// Used by `DriveFileSource.open(fileId)` on the SPA side. Returns
+/// the file's stored content_type (or `application/octet-stream` as
+/// fallback) so the editor's bytes-to-document pipeline stays generic.
+async fn get_content(
+    State(s): State<HttpState>,
+    session: AuthSession,
+    Path(id): Path<String>,
+) -> Result<Response, FilesError> {
+    let files = FileRepo::new(&s.db);
+    let file = files
+        .find_by_id(&id)
+        .await
+        .map_err(|_| FilesError::NotFound)?;
+    ensure_owner(&file.owner_id, &session)?;
+
+    let (meta, stream) = s
+        .storage
+        .get(&storage_key(&id), None)
+        .await
+        .map_err(|e| FilesError::Internal(e.to_string()))?;
+
+    let content_type = file
+        .content_type
+        .as_deref()
+        .unwrap_or("application/octet-stream");
+
+    let mut response = Response::new(Body::from_stream(stream));
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(content_type)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    headers.insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&meta.size.to_string()).unwrap(),
+    );
+    // The SDK fetches with default cache semantics; force no-store so a
+    // mid-edit reload always gets the latest bytes instead of a stale
+    // browser-cache hit between saves.
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
+    Ok(response)
+}
+
+/// `PUT /api/files/{id}/content` — replace the file's bytes.
+///
+/// Body: raw bytes (the editor's saved `.docx` / `.xlsx` payload). Used
+/// by `DriveFileSource.save(fileId, bytes)`. Writes through
+/// `crates/drive-storage`, bumps `size` + `version` + `modified_at`
+/// on the file row, emits a `files.save` audit event, and returns the
+/// updated `FileDto`.
+async fn put_content(
+    State(s): State<HttpState>,
+    session: AuthSession,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Result<Json<FileDto>, FilesError> {
+    let files = FileRepo::new(&s.db);
+    let file = files
+        .find_by_id(&id)
+        .await
+        .map_err(|_| FilesError::NotFound)?;
+    ensure_owner(&file.owner_id, &session)?;
+
+    let new_size = body.len() as u64;
+    let content_type = file.content_type.clone();
+
+    s.storage
+        .put(&storage_key(&id), body, content_type.as_deref())
+        .await
+        .map_err(|e| FilesError::Internal(e.to_string()))?;
+
+    files
+        .set_size_and_touch(&id, new_size)
+        .await
+        .map_err(|e| FilesError::Internal(e.to_string()))?;
+
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "files.save".into(),
+            target_kind: Some("file".into()),
+            target_id: Some(file.id.clone()),
+            target_name: Some(file.name.clone()),
+            ip_address: None,
+            metadata: None,
+        },
+    );
+
+    // Re-read so the response carries the bumped version + modified_at.
+    let updated = files
+        .find_by_id(&id)
+        .await
+        .map_err(|_| FilesError::NotFound)?;
+    Ok(Json(FileDto::from(updated)))
+}
+
 pub(crate) fn router(state: HttpState, body_limit_bytes: usize) -> Router {
     Router::new()
         .route("/api/folders/root/children", get(list_root))
@@ -1088,6 +1203,12 @@ pub(crate) fn router(state: HttpState, body_limit_bytes: usize) -> Router {
         .route("/api/files/{id}/trash", post(trash_file))
         .route("/api/files/{id}/restore", post(restore_file))
         .route("/api/files/{id}/download", get(download_file))
+        .route(
+            "/api/files/{id}/content",
+            get(get_content)
+                .put(put_content)
+                .layer(DefaultBodyLimit::max(body_limit_bytes)),
+        )
         .route("/api/files/{id}/open", get(open_in_editor))
         .with_state(state)
 }

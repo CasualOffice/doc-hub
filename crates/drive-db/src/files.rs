@@ -589,6 +589,26 @@ impl<'a> FileRepo<'a> {
         Ok(())
     }
 
+    /// Replace the byte payload metadata after an SDK content PUT.
+    /// Updates `size`, bumps `version` (client-side ETag continuity
+    /// across saves), and stamps `modified_at` to now. Storage write
+    /// happens at the handler before this is called.
+    pub async fn set_size_and_touch(&self, id: &str, new_size: u64) -> Result<(), DbError> {
+        let now_s = ts(time::OffsetDateTime::now_utc());
+        let size_i64 = i64::try_from(new_size).unwrap_or(i64::MAX);
+        sqlx::query(
+            "UPDATE files \
+             SET size = ?, version = version + 1, modified_at = ? \
+             WHERE id = ?",
+        )
+        .bind(size_i64)
+        .bind(&now_s)
+        .bind(id)
+        .execute(self.db.pool())
+        .await?;
+        Ok(())
+    }
+
     pub async fn move_to(&self, id: &str, new_parent_id: Option<&str>) -> Result<(), DbError> {
         let now_s = ts(time::OffsetDateTime::now_utc());
         sqlx::query("UPDATE files SET parent_id = ?, modified_at = ? WHERE id = ?")
