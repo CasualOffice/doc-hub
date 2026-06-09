@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod about;
+mod access_log;
 mod activity;
 mod admin;
 mod direct_upload;
@@ -26,6 +27,7 @@ mod thumbs;
 mod workspace_storage;
 mod workspaces;
 
+pub use access_log::access_log;
 pub use rate_limit::{RateLimitConfig, RateLimiter};
 pub use state::HttpState;
 

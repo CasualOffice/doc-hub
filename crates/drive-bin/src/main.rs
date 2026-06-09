@@ -7,7 +7,7 @@ use std::sync::Arc;
 use drive_auth::AuthState;
 use drive_core::Config;
 use drive_db::{Db, DbError, NewUser, UserRepo};
-use drive_http::{router, HttpState};
+use drive_http::{access_log, router, HttpState};
 use drive_storage::{parse_master_key_hex, Storage};
 use drive_wopi::WopiState;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -75,7 +75,11 @@ async fn main() -> anyhow::Result<()> {
         thumb_worker,
     };
 
-    let app = router(state).layer(tower_http::trace::TraceLayer::new_for_http());
+    // OB1 — structured access log per request. Replaces tower-http's
+    // default TraceLayer (which span-wrapped requests but never emitted
+    // redacted, JSON-shaped events for log aggregation). Mounted
+    // outermost so its timing covers every middleware below.
+    let app = router(state).layer(axum::middleware::from_fn(access_log));
 
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(addr = %bind, "listening");
@@ -108,9 +112,36 @@ async fn seed_admin_if_missing(db: &Db, cfg: &Config) -> Result<(), DbError> {
     }
 }
 
+/// `DRIVE_LOG_FORMAT=json` ships one JSON object per line (for fluent /
+/// Loki / Vector / Datadog), `text` keeps the human-readable dev layout
+/// (default in non-prod). Production deploys default to `json` so
+/// operators get parseable access logs out of the box.
 fn init_tracing() {
-    tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,drive=debug".into()))
-        .with(fmt::layer())
-        .init();
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info,drive=debug,drive_http::access=info".into());
+    let is_prod = matches!(
+        std::env::var("DRIVE_PROD").as_deref(),
+        Ok("1" | "true" | "yes" | "on"),
+    );
+    let format = std::env::var("DRIVE_LOG_FORMAT").unwrap_or_else(|_| {
+        if is_prod {
+            "json".into()
+        } else {
+            "text".into()
+        }
+    });
+
+    let registry = tracing_subscriber::registry().with(filter);
+    if format == "json" {
+        registry
+            .with(
+                fmt::layer()
+                    .json()
+                    .with_current_span(false)
+                    .with_span_list(false),
+            )
+            .init();
+    } else {
+        registry.with(fmt::layer()).init();
+    }
 }
