@@ -47,7 +47,12 @@ export function Shell() {
     }
     function onNav(e: Event) {
       const detail = (e as CustomEvent<string>).detail;
-      if (detail === "activity") setNav("activity");
+      // Files.tsx fires `cd:nav` when a note search-result is clicked —
+      // need to flip to the Notes tab before the matching `cd:open-note`
+      // event lands so Notes.tsx is mounted to receive it.
+      if (detail === "activity" || detail === "notes" || detail === "home") {
+        setNav(detail);
+      }
     }
     window.addEventListener("keydown", onKey);
     window.addEventListener("cd:nav", onNav);

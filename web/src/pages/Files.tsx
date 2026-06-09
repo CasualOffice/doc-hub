@@ -11,6 +11,7 @@ import {
   searchAdvanced,
   type FileDto,
   type FolderDto,
+  type NoteSearchHit,
   type SearchFilters,
   type SearchResp,
   type SortBy as SearchSortBy,
@@ -102,7 +103,15 @@ interface Crumb {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "ready"; folders: FolderDto[]; files: FileDto[] }
+  | {
+      kind: "ready";
+      folders: FolderDto[];
+      files: FileDto[];
+      /** Search-mode only — notes that matched the query. Folder
+       * listing never sets this. The grid renders a small "Notes"
+       * section above the folders+files when present. */
+      notes?: NoteSearchHit[];
+    }
   | { kind: "error"; message: string };
 
 type Entry =
@@ -307,6 +316,7 @@ export function Files({
           kind: "ready",
           folders: data.folders,
           files: data.files,
+          notes: data.notes,
         });
         setSearched(true);
         setSearchMeta({
@@ -372,6 +382,7 @@ export function Files({
                     kind: "ready",
                     folders: [...s.folders, ...data.folders],
                     files: [...s.files, ...data.files],
+                    notes: [...(s.notes ?? []), ...data.notes],
                   }
                 : s,
             );
@@ -853,6 +864,22 @@ export function Files({
             />
           </div>
         )}
+        {/* SR-NOTES: in search mode, surface matching notes above the
+            files+folders grid. Clicks dispatch the same custom event
+            CommandPalette uses, so the Notes tab opens the right page. */}
+        {state.kind === "ready" && inSearchMode && (state.notes?.length ?? 0) > 0 && (
+          <NoteResultsSection
+            notes={state.notes!}
+            onOpen={(id) => {
+              window.dispatchEvent(
+                new CustomEvent<string>("cd:open-note", { detail: id }),
+              );
+              window.dispatchEvent(
+                new CustomEvent<string>("cd:nav", { detail: "notes" }),
+              );
+            }}
+          />
+        )}
         {state.kind === "ready" &&
           (total > 0 || uploading.length > 0) &&
           (view === "grid" ? (
@@ -1033,6 +1060,93 @@ export function Files({
         onClose={() => setNewFolderOpen(false)}
       />
     </div>
+  );
+}
+
+function NoteResultsSection({
+  notes,
+  onOpen,
+}: {
+  notes: NoteSearchHit[];
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <section aria-label="Note results" style={{ marginBottom: 18 }}>
+      <h2
+        style={{
+          margin: "8px 0 8px",
+          fontSize: "var(--text-xs)",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "var(--muted)",
+          fontWeight: 600,
+        }}
+      >
+        Notes
+      </h2>
+      <ul
+        style={{
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+          display: "grid",
+          gap: 4,
+        }}
+      >
+        {notes.map((n) => (
+          <li key={n.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(n.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: 8,
+                background: "transparent",
+                border: "1px solid var(--line)",
+                color: "var(--ink)",
+                cursor: "pointer",
+                textAlign: "left",
+                fontFamily: "var(--font-sans)",
+                fontSize: "var(--text-sm)",
+                transition: "background 120ms, border-color 120ms",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--bg-hover)";
+                e.currentTarget.style.borderColor = "var(--line-strong)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.borderColor = "var(--line)";
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 22,
+                  height: 22,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 6,
+                  background: "var(--bg-subtle)",
+                  color: "var(--muted)",
+                  fontSize: 11,
+                  flexShrink: 0,
+                }}
+              >
+                ¶
+              </span>
+              <span style={{ minWidth: 0, flex: 1 }}>{n.title}</span>
+              <span style={{ fontSize: 11, color: "var(--muted-2)" }}>Open in Notes →</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
