@@ -16,40 +16,16 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
-    plugins: [
-      react(),
-      tailwindcss(),
-      {
-        // @schnsrw/docx-js-editor@1.0.0's dist contains a runtime
-        // `new Worker(new URL("./format-converter.worker.ts", import.meta.url))`
-        // but the worker source isn't bundled — Vite's worker-import-meta-url
-        // plugin throws at build time trying to resolve it. Drive never
-        // triggers the converter (only .docx through DriveFileSource), so
-        // rewrite the worker construction to a no-op stub before Vite sees
-        // it. Long-term fix is republishing the editor SDK with the worker
-        // properly bundled; tracked separately.
-        name: "casual-drive-sdk-worker-shim",
-        enforce: "pre",
-        transform(code, id) {
-          if (
-            !id.includes("@schnsrw/docx-js-editor") ||
-            !code.includes("format-converter.worker.ts")
-          ) {
-            return null;
-          }
-          return code.replace(
-            /new Worker\(new URL\(["']\.\/format-converter\.worker\.ts["'],import\.meta\.url\)\s*,\s*\{[^}]*\}\)/g,
-            "({" +
-              "postMessage(){}," +
-              "addEventListener(){}," +
-              "removeEventListener(){}," +
-              "terminate(){}," +
-              "onmessage:null,onerror:null,onmessageerror:null" +
-              "})",
-          );
-        },
-      },
-    ],
+    plugins: [react(), tailwindcss()],
+    worker: {
+      // The editor SDK ships `format-converter.worker.mjs` (from
+      // @schnsrw/docx-js-editor@1.0.1 onward) and references it via
+      // `new Worker(new URL(...), import.meta.url)`. Vite's worker
+      // bundler defaults to 'iife', which is incompatible with the
+      // code-splitting build; the editor's worker code-splits its
+      // ESM-format dependencies, so the host needs to pick ESM too.
+      format: "es",
+    },
     server: {
       port: 5173,
       strictPort: true,
