@@ -71,6 +71,68 @@ interface DemoEvent {
 const STATE_KEY = "cd-demo-state-v1";
 const blobs: Map<string, Blob> = new Map();
 
+// IndexedDB-backed blob storage so uploaded files survive a page
+// reload. localStorage is too small + JSON-unfriendly for binary;
+// IDB scales to GBs and handles Blobs natively.
+const IDB_NAME = "cd-demo";
+const IDB_STORE = "blobs";
+let idbReady: Promise<IDBDatabase> | null = null;
+function openIdb(): Promise<IDBDatabase> {
+  if (idbReady) return idbReady;
+  idbReady = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB unavailable"));
+      return;
+    }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("idb open failed"));
+  });
+  return idbReady;
+}
+async function idbPutBlob(id: string, blob: Blob): Promise<void> {
+  try {
+    const db = await openIdb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(blob, id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* private mode / quota — fall through, memory map still has it */
+  }
+}
+async function idbGetBlob(id: string): Promise<Blob | null> {
+  try {
+    const db = await openIdb();
+    return await new Promise<Blob | null>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).get(id);
+      req.onsuccess = () => resolve((req.result as Blob | undefined) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+async function idbDeleteBlob(id: string): Promise<void> {
+  try {
+    const db = await openIdb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* ignored */
+  }
+}
+
 // Seeded workspaces for the demo. Kept in-memory (not persisted)
 // because the demo's workspaces are just for showing off the switcher.
 const demoWorkspaces: Array<{
@@ -677,6 +739,7 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       thumbnail: thumb && thumb.startsWith("data:image/") ? thumb : null,
     };
     blobs.set(fileDto.id, file);
+    void idbPutBlob(fileDto.id, file);
     state.files.push(fileDto);
     emitDemo({
       actor_id: "demo-user",
@@ -713,14 +776,13 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     const file = state.files.find((f) => f.id === fid);
     if (!file) throw makeError(404, "file not found");
     if (method === "GET") {
-      // If the user uploaded this file in this demo session, it has
-      // real bytes in the `blobs` map — return them so the editor
-      // parses the actual .docx / .xlsx. Seeded files (Product
-      // brief.docx etc.) have no entry → fall back to an empty Blob
-      // and the editor renders its "couldn't parse" placeholder
-      // gracefully. Using `as T` because the shim's return type is
-      // generic by route.
-      const stored = blobs.get(fid);
+      // Resolve bytes in priority: in-memory blobs Map → IndexedDB
+      // (survives reloads) → empty Blob (seeded files that ship
+      // metadata-only). The editor renders its parse-error UI cleanly
+      // on the empty fallback. `as T` because the shim's return type
+      // is generic by route.
+      const stored = blobs.get(fid) ?? (await idbGetBlob(fid)) ?? null;
+      if (stored) blobs.set(fid, stored); // warm the memory cache
       const body =
         stored ??
         new Blob([], { type: file.content_type ?? "application/octet-stream" });
@@ -730,10 +792,9 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       }) as unknown) as T;
     }
     if (method === "PUT") {
-      // Accept the bytes + persist into `blobs` so the next GET (same
-      // session) sees them. Size + version bump so the autosave chrome
-      // shows "saved 1s ago". Persistence is session-scoped — the
-      // localStorage shim doesn't carry blobs across reloads.
+      // Persist the new bytes to both in-memory blobs and IDB so a
+      // reload after an edit doesn't undo the save. Size + version
+      // bump so the autosave chrome shows "saved 1s ago".
       const bodyBlob =
         init.body instanceof Blob
           ? init.body
@@ -742,7 +803,10 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
                 type: file.content_type ?? "application/octet-stream",
               })
             : null;
-      if (bodyBlob) blobs.set(fid, bodyBlob);
+      if (bodyBlob) {
+        blobs.set(fid, bodyBlob);
+        void idbPutBlob(fid, bodyBlob);
+      }
       const size = init.body instanceof Blob
         ? init.body.size
         : init.body instanceof ArrayBuffer
@@ -797,6 +861,7 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       const f = state.files[idx];
       state.files.splice(idx, 1);
       blobs.delete(fid);
+      void idbDeleteBlob(fid);
       emitDemo({
         actor_id: "demo-user",
         actor_username: state.username ?? "demo",
