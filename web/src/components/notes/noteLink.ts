@@ -13,9 +13,14 @@
  * `[[Title]]` literally still get a wiki-link via the markdown parser.
  */
 import { Extension } from "@tiptap/core";
+import { PluginKey } from "@tiptap/pm/state";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 
 import type { NoteNode } from "../../api/client.ts";
+
+/** Distinct ProseMirror plugin key — see `slashMenu.ts` for the
+ * rationale (default `suggestion$` collides across extensions). */
+export const noteLinkPluginKey = new PluginKey("noteLinkSuggestion");
 
 export interface NoteLinkItem {
   id: string;
@@ -56,6 +61,7 @@ export function filterNotes(tree: NoteNode[], query: string): NoteLinkItem[] {
 
 export function noteLinkExtension(opts: ExtensionOpts): Extension {
   const suggestion: Omit<SuggestionOptions, "editor"> = {
+    pluginKey: noteLinkPluginKey,
     char: "+",
     allowSpaces: false,
     startOfLine: false,

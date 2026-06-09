@@ -12,8 +12,17 @@
  *   - `/ask AI` items (path-only seam — wired when user prioritises).
  */
 import { Extension } from "@tiptap/core";
+import { PluginKey } from "@tiptap/pm/state";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import type { Editor, Range } from "@tiptap/core";
+
+// Distinct key per Suggestion extension — Tiptap's @tiptap/suggestion
+// defaults all plugins to the same `suggestion$` key, so when an
+// editor mounts three Suggestion extensions (slash / @-mention /
+// +-note-link) they collide with "Adding different instances of a
+// keyed plugin (suggestion$)". Each extension exports its own key
+// so ProseMirror can track them as siblings.
+export const slashMenuPluginKey = new PluginKey("slashMenuSuggestion");
 
 export interface SlashItem {
   id: string;
@@ -121,6 +130,7 @@ export interface SlashRendererControls {
  * controls object hooked up to a React popover that paints the items. */
 export function slashMenuExtension(controls: SlashRendererControls): Extension {
   const suggestion: Omit<SuggestionOptions, "editor"> = {
+    pluginKey: slashMenuPluginKey,
     char: "/",
     // Only allow `/` to trigger at the start of a node OR after whitespace —
     // mid-word slashes (file paths, URLs) shouldn't open the menu.

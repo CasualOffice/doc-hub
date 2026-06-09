@@ -9,9 +9,14 @@
  * lands alongside the notifications brief when it surfaces (NT4 Phase 2).
  */
 import { Extension } from "@tiptap/core";
+import { PluginKey } from "@tiptap/pm/state";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 
 import type { WorkspaceMember } from "../../api/client.ts";
+
+/** Distinct ProseMirror plugin key — see `slashMenu.ts` for the
+ * rationale (default `suggestion$` collides across extensions). */
+export const peopleMentionPluginKey = new PluginKey("peopleMentionSuggestion");
 
 export interface MentionItem {
   id: string;
@@ -62,6 +67,7 @@ export function peopleMentionExtension(opts: ExtensionOpts): Extension {
   };
 
   const suggestion: Omit<SuggestionOptions, "editor"> = {
+    pluginKey: peopleMentionPluginKey,
     char: "@",
     allowSpaces: false,
     startOfLine: false,

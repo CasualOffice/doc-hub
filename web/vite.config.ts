@@ -49,17 +49,27 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (!id.includes("node_modules")) return undefined;
             // Group React + React-DOM + scheduler in one vendor chunk so
-            // no other chunk needs to reach across the boundary for a
-            // partial React export (which previously created a circular
-            // dep with vendor-docx-editor and crashed React's module
-            // init with "Cannot set properties of undefined (Activity)").
+            // no other chunk reaches across the boundary for a partial
+            // React export (previously created a circular dep with
+            // vendor-docx-editor and crashed React's module init with
+            // "Cannot set properties of undefined (Activity)").
             if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) {
               return "vendor-react";
+            }
+            // ProseMirror is shared by Tiptap (powering Notes) AND the
+            // @schnsrw/docx-js-editor SDK. Keep it in its OWN chunk so
+            // a) Notes doesn't transitively pull the SDK's vendor chunk
+            // (which made the Notes route depend on vendor-docx-editor
+            // unnecessarily — surfaced as a confusing "why did Notes
+            // hit the docx editor chunk" report), and b) both consumers
+            // share the same plugin-key namespace so PM doesn't
+            // duplicate-register keyed plugins.
+            if (/[\\/]node_modules[\\/](prosemirror-[^/\\]+)[\\/]/.test(id)) {
+              return "vendor-prosemirror";
             }
             if (id.includes("@univerjs/")) return "vendor-univer";
             if (id.includes("@schnsrw/casual-sheets")) return "vendor-univer";
             if (id.includes("@schnsrw/docx-js-editor")) return "vendor-docx-editor";
-            if (id.includes("prosemirror-")) return "vendor-docx-editor";
             if (id.includes("yjs") || id.includes("y-prosemirror") || id.includes("y-websocket")) {
               return "vendor-collab";
             }
