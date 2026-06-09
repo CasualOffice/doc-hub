@@ -49,8 +49,22 @@ export function CasualSheetWorkspace({ file }: CasualSheetWorkspaceProps) {
         type="button"
         onClick={() => {
           void (async () => {
-            const resp = await openInEditor(file.id);
-            window.open(resp.entry_url, "_blank", "noopener,noreferrer");
+            try {
+              const resp = await openInEditor(file.id);
+              window.open(resp.entry_url, "_blank", "noopener,noreferrer");
+            } catch (err) {
+              // Demo + self-host-without-editor-origin both 503. Surface
+              // a friendly toast instead of an Uncaught (in promise) in
+              // the console.
+              const msg =
+                err instanceof Error &&
+                "status" in err &&
+                (err as Error & { status?: number }).status === 503
+                  ? "Casual Sheets isn't wired up here — set DRIVE_SHEET_ORIGIN to enable in-tab editing."
+                  : "Couldn't open this file in the editor.";
+              const { toast } = await import("sonner");
+              toast.message(msg);
+            }
           })();
         }}
         style={{

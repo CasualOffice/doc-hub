@@ -700,6 +700,54 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     throw makeError(503, "editor not configured");
   }
 
+  // SDK content endpoints — `GET /api/files/{id}/content` returns the
+  // raw bytes the editor renders against; `PUT` replaces them.
+  // The demo doesn't persist real bytes for its seeded files, so GET
+  // returns an empty buffer (the editor mounts in an "empty document"
+  // state) and PUT is a no-op success. This is what keeps the SDK
+  // editor functional inside the demo without 404 noise in console.
+  const contentMatch = p.match(/^\/api\/files\/([^/]+)\/content$/);
+  if (contentMatch) {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    const fid = decodeURIComponent(contentMatch[1]);
+    const file = state.files.find((f) => f.id === fid);
+    if (!file) throw makeError(404, "file not found");
+    if (method === "GET") {
+      // Return an empty ArrayBuffer wrapped in a Response so callers
+      // that do .arrayBuffer() / .blob() work uniformly. Using `as T`
+      // because the shim's return type is generic by route.
+      const empty = new Blob([], {
+        type: file.content_type ?? "application/octet-stream",
+      });
+      return (new Response(empty, {
+        status: 200,
+        headers: { "Content-Type": file.content_type ?? "application/octet-stream" },
+      }) as unknown) as T;
+    }
+    if (method === "PUT") {
+      // Accept the bytes, update size + bump version so the autosave
+      // chrome shows "saved". Don't persist actual bytes (demo is
+      // ephemeral; this is just to keep the editor's autosave loop
+      // happy).
+      const size = init.body instanceof Blob
+        ? init.body.size
+        : init.body instanceof ArrayBuffer
+          ? init.body.byteLength
+          : 0;
+      const idx = state.files.findIndex((f) => f.id === fid);
+      if (idx >= 0) {
+        state.files[idx] = {
+          ...state.files[idx],
+          size,
+          modified_at: nowIso(),
+          version: state.files[idx].version + 1,
+        };
+        persist();
+      }
+      return undefined as T;
+    }
+  }
+
   const fileMatch = p.match(/^\/api\/files\/([^/]+)(\/(trash|download))?$/);
   if (fileMatch) {
     const fid = decodeURIComponent(fileMatch[1]);
