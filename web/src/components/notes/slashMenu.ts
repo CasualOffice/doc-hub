@@ -101,6 +101,22 @@ export const SLASH_ITEMS: SlashItem[] = [
     run: ({ editor, range }) =>
       editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
   },
+  {
+    // NT3 Phase 2 — "Link to note" item. Hands off to the `+`
+    // note-link picker (NT4) by deleting the `/` trigger then
+    // inserting `+`, which immediately opens the existing
+    // NoteLinkPopover. Once the user picks a note, the picker
+    // inserts a real Tiptap Link mark (NT1 Phase 2) pointing at
+    // `cd-note://<id>` — clickable in-app and serializable through
+    // markdown. Sharing one popover instead of duplicating the
+    // resolver here keeps the two surfaces in lock-step.
+    id: "note-link",
+    title: "Link to note",
+    description: "Pick another note to wiki-link",
+    keywords: ["link", "note", "wiki", "page", "[[", "+"],
+    run: ({ editor, range }) =>
+      editor.chain().focus().deleteRange(range).insertContent("+").run(),
+  },
 ];
 
 /** Filter slash items by the user's query (case-insensitive substring
