@@ -32,8 +32,28 @@ import { ShareDialog } from "../components/ShareDialog.tsx";
 import { SortMenu, type SortDir, type SortKey } from "../components/SortMenu.tsx";
 import type { Density, ViewMode } from "../components/TopBar.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
+import {
+  decodeSearchState,
+  encodeSearchState,
+  isStateNonEmpty,
+  type UrlState,
+} from "../lib/searchUrl.ts";
 
 const SORT_KEY_STORAGE = "cd-sort-key-v1";
+
+/** SR6 — read search state from the address bar on mount. Wrapped in
+ * try/catch + window guard so SSR / Safari quirks degrade to "empty
+ * search" rather than throwing the SPA. */
+function readInitialUrlState(): UrlState {
+  if (typeof window === "undefined") {
+    return decodeSearchState("");
+  }
+  try {
+    return decodeSearchState(window.location.search);
+  } catch {
+    return decodeSearchState("");
+  }
+}
 
 interface StoredSort {
   key: SortKey;
@@ -192,15 +212,75 @@ export function Files({
   const [searched, setSearched] = useState(false);
 
   // Phase 3 search — chip-driven filters + cursor pagination.
-  const [searchFilters, setSearchFilters] = useState<SearchFilters>(() => defaultFilters());
-  const [searchSort, setSearchSort] = useState<SearchSortBy>("relevance");
-  const [searchSortDir, setSearchSortDir] = useState<SearchSortDir>("desc");
+  // SR6 — initial state is read from URL search params so reload +
+  // deep-link land back on the same search. The encode/decode pair
+  // lives in `lib/searchUrl.ts`; defaults are omitted so a clean URL
+  // means a clean state.
+  const initialUrl = readInitialUrlState();
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>(initialUrl.filters);
+  const [searchSort, setSearchSort] = useState<SearchSortBy>(initialUrl.sort);
+  const [searchSortDir, setSearchSortDir] = useState<SearchSortDir>(initialUrl.sortDir);
   const [searchMeta, setSearchMeta] = useState<{
     total: { files: number; folders: number; notes: number; exact: boolean };
     nextCursor: string | null;
     sortApplied: SearchSortBy;
   } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // SR6 — keep the URL in sync with the current search state. Writes
+  // via `history.replaceState` so back/forward isn't polluted with a
+  // history entry per keystroke. Skips the write when the serialized
+  // string already matches what's in the address bar (avoids a
+  // re-render storm when the popstate handler below echoes state
+  // through). Routes that aren't "search" (everything-default) clear
+  // the query string entirely so the URL doesn't read like noise.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const next = encodeSearchState({
+      query,
+      filters: searchFilters,
+      sort: searchSort,
+      sortDir: searchSortDir,
+    });
+    const hasContent = isStateNonEmpty({
+      query,
+      filters: searchFilters,
+      sort: searchSort,
+      sortDir: searchSortDir,
+    });
+    const current = window.location.search.startsWith("?")
+      ? window.location.search.slice(1)
+      : window.location.search;
+    if (next === current) return;
+    const url =
+      hasContent && next.length > 0
+        ? `${window.location.pathname}?${next}${window.location.hash}`
+        : `${window.location.pathname}${window.location.hash}`;
+    try {
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* private mode / sandboxed iframes can throw — silent. */
+    }
+  }, [query, searchFilters, searchSort, searchSortDir]);
+
+  // SR6 — back / forward replays the URL into local state. The
+  // popstate event fires after the browser updates `window.location`,
+  // so we just decode the latest. Query is owned by Shell.tsx; emit a
+  // `cd:search-query` event for it to pick up.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onPop() {
+      const decoded = decodeSearchState(window.location.search);
+      setSearchFilters(decoded.filters);
+      setSearchSort(decoded.sort);
+      setSearchSortDir(decoded.sortDir);
+      window.dispatchEvent(
+        new CustomEvent<string>("cd:search-query", { detail: decoded.query }),
+      );
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   // Workspaces list — needed for the SearchToolbar's Workspace chip
   // (only when the user has more than one) and scope picker.

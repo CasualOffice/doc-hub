@@ -9,6 +9,7 @@ import { EmptyState } from "../components/EmptyState.tsx";
 import { HelpModal } from "../components/HelpModal.tsx";
 import { Sidebar, type NavId } from "../components/Sidebar.tsx";
 import { TopBar, type Density, type ViewMode } from "../components/TopBar.tsx";
+import { decodeSearchState } from "../lib/searchUrl.ts";
 import { Activity } from "./Activity.tsx";
 import { Admin } from "./Admin.tsx";
 import { Files } from "./Files.tsx";
@@ -34,7 +35,10 @@ export function Shell() {
       /* localStorage can throw in Safari private mode — silent. */
     }
   }, [density]);
-  const [query, setQuery] = useState("");
+  // SR6 — seed query from `?q=…` on mount so deep-links and reloads
+  // restore the search bar. Filters/sort restore themselves inside
+  // Files.tsx (it owns that state).
+  const [query, setQuery] = useState(() => readQueryFromUrl());
   const [itemCount, setItemCount] = useState(0);
   const [uploadTick, setUploadTick] = useState(0);
   const [newFolderTick, setNewFolderTick] = useState(0);
@@ -65,11 +69,20 @@ export function Shell() {
         setNav(detail);
       }
     }
+    // SR6 — Files.tsx owns URL writes (it has filters + sort too) and
+    // fires `cd:search-query` after parsing popstate so this side can
+    // sync without two parallel popstate handlers fighting.
+    function onSearchQuery(e: Event) {
+      const detail = (e as CustomEvent<string>).detail;
+      setQuery(typeof detail === "string" ? detail : "");
+    }
     window.addEventListener("keydown", onKey);
     window.addEventListener("cd:nav", onNav);
+    window.addEventListener("cd:search-query", onSearchQuery);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("cd:nav", onNav);
+      window.removeEventListener("cd:search-query", onSearchQuery);
     };
   }, []);
 
@@ -213,6 +226,15 @@ export function Shell() {
 }
 
 const DENSITY_STORAGE_KEY = "cd:files:density";
+
+function readQueryFromUrl(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return decodeSearchState(window.location.search).query;
+  } catch {
+    return "";
+  }
+}
 
 function readDensity(): Density {
   if (typeof window === "undefined") return "comfortable";
