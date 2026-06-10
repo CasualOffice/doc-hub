@@ -38,6 +38,7 @@ import {
   isStateNonEmpty,
   type UrlState,
 } from "../lib/searchUrl.ts";
+import { recordRecent } from "../lib/recentSearches.ts";
 
 const SORT_KEY_STORAGE = "cd-sort-key-v1";
 
@@ -281,6 +282,32 @@ export function Files({
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  // SR11 — TopBar dispatches `cd:search-commit` on Enter / blur with
+  // a non-empty query. We pair the query with the currently-active
+  // filter snapshot and record both — the dropdown re-applies both
+  // when the user clicks an entry. Dedup + cap-to-10 lives in the
+  // helper.
+  useEffect(() => {
+    function onCommit(e: Event) {
+      const q = (e as CustomEvent<string>).detail;
+      if (typeof q !== "string" || q.trim().length === 0) return;
+      recordRecent(q, searchFilters);
+      window.dispatchEvent(new Event("cd:recents-changed"));
+    }
+    function onApplyFilters(e: Event) {
+      const detail = (e as CustomEvent<SearchFilters>).detail;
+      if (detail && typeof detail === "object") {
+        setSearchFilters({ ...defaultFilters(), ...detail });
+      }
+    }
+    window.addEventListener("cd:search-commit", onCommit);
+    window.addEventListener("cd:apply-filters", onApplyFilters);
+    return () => {
+      window.removeEventListener("cd:search-commit", onCommit);
+      window.removeEventListener("cd:apply-filters", onApplyFilters);
+    };
+  }, [searchFilters]);
 
   // Workspaces list — needed for the SearchToolbar's Workspace chip
   // (only when the user has more than one) and scope picker.

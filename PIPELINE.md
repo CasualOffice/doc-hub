@@ -42,8 +42,7 @@ Phase A + Owner chip landed (backend + chip toolbar + Owner autocomplete + infin
 | # | Item | Brief | Priority | Trigger |
 |---|---|---|---|---|
 | SR9  | Focused-empty suggestion grid (Recently opened / Edited by others / Pinned) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Suggested-when-empty" | P1 | After SR1–SR8 land |
-| SR10 | Type-ahead query autocomplete (separate `/api/search/autocomplete` endpoint, 80 ms debounce) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Type-ahead" | P1 | After SR1–SR8 land |
-| SR11 | Recent-searches dropdown (per-user `localStorage`, 10 entries, clear-history button) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Search history" | P1 | Ships with SR10 |
+| SR10 | Type-ahead query autocomplete (separate `/api/search/autocomplete` endpoint, 80 ms debounce). Recents popover (SR11) is the host UI — this drops server suggestions in alongside the localStorage entries. | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Type-ahead" | P1 | After SR1–SR8 land |
 | SR12 | No-results recovery panel (one-click filter relaxation + did-you-mean from OpenSearch `phrase_suggester`) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"No-results recovery" | P1 | After SR1–SR8 land |
 | SR13 | Full-text snippets + `<mark>` highlights | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Full-text matching" | P1 | Requires S2 (OpenSearch) |
 | SR14 | A11y polish — `role="combobox"`, `aria-live` count announcements, infinite-scroll announcements, focus-trap in popovers | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Accessibility" | P1 | Audited as part of every SR pass; this is the dedicated cleanup row |

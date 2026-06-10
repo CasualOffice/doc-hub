@@ -1,7 +1,9 @@
-import { ChangeEvent } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { Grid3x3, HelpCircle, List, Rows3, Rows4, Search } from "lucide-react";
 
+import { clearRecent, getRecent, type RecentSearch } from "../lib/recentSearches.ts";
 import { NotificationsBell } from "./NotificationsBell.tsx";
+import { RecentSearchesPopover } from "./RecentSearchesPopover.tsx";
 
 export type ViewMode = "grid" | "list";
 export type Density = "comfortable" | "compact";
@@ -23,6 +25,20 @@ export function TopBar({
   onDensityChange: (d: Density) => void;
   onShowHelp: () => void;
 }) {
+  // SR11 — recent-searches dropdown state. Recents are loaded lazily
+  // (only when the input gains focus, so a never-focused TopBar
+  // doesn't pay the localStorage parse) and refreshed whenever Files
+  // emits `cd:recents-changed` after a commit.
+  const [inputFocused, setInputFocused] = useState(false);
+  const [recents, setRecents] = useState<RecentSearch[]>([]);
+
+  useEffect(() => {
+    function refresh() {
+      setRecents(getRecent());
+    }
+    window.addEventListener("cd:recents-changed", refresh);
+    return () => window.removeEventListener("cd:recents-changed", refresh);
+  }, []);
   return (
     <header
       style={{
@@ -49,6 +65,15 @@ export function TopBar({
           placeholder="Search files and folders"
           value={query}
           onChange={(e: ChangeEvent<HTMLInputElement>) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && query.trim().length > 0) {
+              // SR11 — Files owns search state, so it gets to record
+              // the commit alongside its current filter snapshot.
+              window.dispatchEvent(
+                new CustomEvent<string>("cd:search-commit", { detail: query }),
+              );
+            }
+          }}
           style={{
             width: "100%",
             border: "1px solid var(--line)",
@@ -64,11 +89,44 @@ export function TopBar({
           onFocus={(e) => {
             e.currentTarget.style.borderColor = "var(--line-strong)";
             e.currentTarget.style.boxShadow = "0 0 0 4px rgba(26,26,30,.04)";
+            setInputFocused(true);
+            setRecents(getRecent());
           }}
           onBlur={(e) => {
             e.currentTarget.style.borderColor = "var(--line)";
             e.currentTarget.style.boxShadow = "";
+            // Defer the close so a click on a popover entry
+            // (mousedown fires before blur) lands before the popover
+            // unmounts.
+            setTimeout(() => setInputFocused(false), 120);
+            // Also commit on blur when the user typed something but
+            // never hit Enter — keeps the recents list useful for
+            // users who navigate via clicks instead of keyboard.
+            if (query.trim().length > 0) {
+              window.dispatchEvent(
+                new CustomEvent<string>("cd:search-commit", { detail: query }),
+              );
+            }
           }}
+        />
+        <RecentSearchesPopover
+          open={inputFocused && recents.length > 0}
+          recents={recents}
+          query={query}
+          onPick={(rec) => {
+            onQueryChange(rec.query);
+            window.dispatchEvent(
+              new CustomEvent<typeof rec.filters>("cd:apply-filters", {
+                detail: rec.filters,
+              }),
+            );
+            setInputFocused(false);
+          }}
+          onClear={() => {
+            clearRecent();
+            setRecents([]);
+          }}
+          onClose={() => setInputFocused(false)}
         />
       </div>
 
