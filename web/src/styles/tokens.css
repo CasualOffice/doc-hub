@@ -336,6 +336,29 @@ body {
 .tabular-nums { font-variant-numeric: tabular-nums; }
 .hairline     { border: 1px solid var(--line); }
 
+/* SR4 — result density. Defaults match the v2 spec's comfortable
+   numbers; `[data-density="compact"]` overrides drop the values
+   12–35% to mirror what Notion / Linear / GitHub ship as their
+   compact mode. Page size is independent (handled by the search +
+   list pagination logic). */
+:root {
+  --cd-card-thumb-h:     130px;
+  --cd-card-meta-pad-y:  13px;
+  --cd-card-meta-pad-x:  15px;
+  --cd-list-row-pad-y:   13px;
+  --cd-list-row-pad-x:   22px;
+  --cd-list-row-thumb:   30px;
+}
+
+[data-density="compact"] {
+  --cd-card-thumb-h:     96px;
+  --cd-card-meta-pad-y:  9px;
+  --cd-card-meta-pad-x:  13px;
+  --cd-list-row-pad-y:   8px;
+  --cd-list-row-pad-x:   22px;
+  --cd-list-row-thumb:   26px;
+}
+
 /* Skeleton shimmer — gradient-based, used by loading placeholders across
    the app. Consumers set `background-size: 200% 100%` and a
    `--bg-subtle → --card → --bg-subtle` linear gradient. */

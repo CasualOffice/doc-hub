@@ -30,7 +30,7 @@ import { RenameDialog } from "../components/RenameDialog.tsx";
 import { SelectionBar } from "../components/SelectionBar.tsx";
 import { ShareDialog } from "../components/ShareDialog.tsx";
 import { SortMenu, type SortDir, type SortKey } from "../components/SortMenu.tsx";
-import type { ViewMode } from "../components/TopBar.tsx";
+import type { Density, ViewMode } from "../components/TopBar.tsx";
 import { PromptDialog } from "../components/PromptDialog.tsx";
 
 const SORT_KEY_STORAGE = "cd-sort-key-v1";
@@ -120,6 +120,7 @@ type Entry =
 
 export function Files({
   view,
+  density,
   query,
   uploadRequested,
   onUploadHandled,
@@ -131,6 +132,7 @@ export function Files({
   onItemCount,
 }: {
   view: ViewMode;
+  density: Density;
   query: string;
   uploadRequested: number;
   onUploadHandled: () => void;
@@ -777,6 +779,7 @@ export function Files({
 
   return (
     <div
+      data-density={density}
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -1405,7 +1408,7 @@ function FolderCard({
         selected={selected}
         kebab={<EntryKebab entry={{ kind: "folder", folder }} handlers={handlers} />}
       >
-        <div style={{ height: 130, overflow: "hidden" }}>
+        <div style={{ height: "var(--cd-card-thumb-h)", overflow: "hidden" }}>
           <FileThumb name={folder.name} kind="fold" />
         </div>
         <CardMeta name={folder.name} kind="fold" sub={`Folder · ${relative(folder.modified_at)}`} />
@@ -1433,7 +1436,13 @@ function FileCard({
         selected={selected}
         kebab={<EntryKebab entry={{ kind: "file", file }} handlers={handlers} />}
       >
-        <div style={{ height: 130, overflow: "hidden", borderBottom: "1px solid var(--line)" }}>
+        <div
+          style={{
+            height: "var(--cd-card-thumb-h)",
+            overflow: "hidden",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
           <FileThumb
             name={file.name}
             kind={kind}
@@ -1452,7 +1461,7 @@ function GhostCard({ name }: { name: string }) {
     <Card>
       <div
         style={{
-          height: 130,
+          height: "var(--cd-card-thumb-h)",
           background: "var(--bg-hover)",
           display: "flex",
           alignItems: "center",
@@ -1577,7 +1586,7 @@ function CardMeta({
   sub: string;
 }) {
   return (
-    <div style={{ padding: "13px 15px" }}>
+    <div style={{ padding: "var(--cd-card-meta-pad-y) var(--cd-card-meta-pad-x)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
         <FileMiniIcon kind={kind} />
         <span
@@ -1635,7 +1644,7 @@ function ListView({
           display: "grid",
           gridTemplateColumns: "2.5fr 1fr 1fr 80px 42px",
           alignItems: "center",
-          padding: "13px 22px",
+          padding: "var(--cd-list-row-pad-y) var(--cd-list-row-pad-x)",
           gap: 16,
           fontSize: "var(--text-xs)",
           letterSpacing: "1.5px",
@@ -1735,7 +1744,7 @@ function ListRow({
         display: "grid",
         gridTemplateColumns: "2.5fr 1fr 1fr 80px 42px",
         alignItems: "center",
-        padding: "13px 22px",
+        padding: "var(--cd-list-row-pad-y) var(--cd-list-row-pad-x)",
         gap: 16,
         fontSize: "var(--text-base)",
         cursor: onClick ? "pointer" : "default",
@@ -1756,8 +1765,8 @@ function ListRow({
       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, fontWeight: 500 }}>
         <span
           style={{
-            width: 30,
-            height: 30,
+            width: "var(--cd-list-row-thumb)",
+            height: "var(--cd-list-row-thumb)",
             borderRadius: 7,
             overflow: "hidden",
             flexShrink: 0,

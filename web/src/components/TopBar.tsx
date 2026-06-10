@@ -1,21 +1,26 @@
 import { ChangeEvent } from "react";
-import { Grid3x3, HelpCircle, List, Search } from "lucide-react";
+import { Grid3x3, HelpCircle, List, Rows3, Rows4, Search } from "lucide-react";
 
 import { NotificationsBell } from "./NotificationsBell.tsx";
 
 export type ViewMode = "grid" | "list";
+export type Density = "comfortable" | "compact";
 
 export function TopBar({
   query,
   onQueryChange,
   view,
   onViewChange,
+  density,
+  onDensityChange,
   onShowHelp,
 }: {
   query: string;
   onQueryChange: (q: string) => void;
   view: ViewMode;
   onViewChange: (v: ViewMode) => void;
+  density: Density;
+  onDensityChange: (d: Density) => void;
   onShowHelp: () => void;
 }) {
   return (
@@ -68,6 +73,7 @@ export function TopBar({
       </div>
 
       <ViewToggle value={view} onChange={onViewChange} />
+      <DensityToggle value={density} onChange={onDensityChange} />
       <NotificationsBell />
       <button
         type="button"
@@ -121,6 +127,43 @@ function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMo
       </ToggleButton>
       <ToggleButton active={value === "list"} onClick={() => onChange("list")} title="List view">
         <List size={17} strokeWidth={1.8} />
+      </ToggleButton>
+    </div>
+  );
+}
+
+/** SR4 — row-density toggle. `Rows3` = comfortable (3 visible rows in
+ * the icon, taller rows in the grid); `Rows4` = compact (more rows
+ * visible, tighter padding). Title text spells it out so the choice is
+ * obvious even on a touch device where Lucide's icon difference is
+ * subtle. */
+function DensityToggle({ value, onChange }: { value: Density; onChange: (d: Density) => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        border: "1px solid var(--line)",
+        borderRadius: 11,
+        background: "var(--card)",
+        padding: 3,
+        gap: 2,
+      }}
+      role="group"
+      aria-label="Row density"
+    >
+      <ToggleButton
+        active={value === "comfortable"}
+        onClick={() => onChange("comfortable")}
+        title="Comfortable density"
+      >
+        <Rows3 size={17} strokeWidth={1.8} />
+      </ToggleButton>
+      <ToggleButton
+        active={value === "compact"}
+        onClick={() => onChange("compact")}
+        title="Compact density"
+      >
+        <Rows4 size={17} strokeWidth={1.8} />
       </ToggleButton>
     </div>
   );

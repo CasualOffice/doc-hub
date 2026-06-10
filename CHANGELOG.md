@@ -8,6 +8,8 @@ All notable changes to Casual Drive land here. Format follows
 
 ### Added
 
+- **Notes editor — link dialog (NT2 Phase 2).** ⌘K / Ctrl-K opens a Radix dialog with one URL field; auto-prepends `https://` for bare hosts, rejects `javascript:` / `data:` / `vbscript:` / `file:` case-insensitively, mirrors selection-wrapping behaviour from Notion / Obsidian. Bubble toolbar gets a Link button; mobile sticky toolbar gains one too.
+- **Result density toggle (SR4).** Comfortable / Compact selector in the top toolbar, persisted per-user via `localStorage`. Driven by CSS custom properties scoped on `[data-density="compact"]` so card thumb height, card meta padding, list-row padding and the list-row thumbnail all shrink together. Doesn't change page size.
 - OIDC sign-in (Authorization Code + PKCE). `DRIVE_ALLOW_PASSWORD_AUTH=false` hides the password form.
 - Sandboxed `drive-thumb-worker` subprocess for video thumbnails (ffmpeg-CLI), with per-job rlimits and optional `setuid`. PDF support deferred.
 - **SDK integration (Phase 1)** — `@schnsrw/docx-js-editor@1.0.0` + `@schnsrw/casual-sheets@0.3.0` mounted inline in the Preview modal. `.docx` opens the real editor in-Drive; `.xlsx` falls back to the existing WOPI new-tab handoff until Phase 1.5 ships an xlsx → IWorkbookData converter. See [`docs/ux/10-sdk-integration-plan.md`](./docs/ux/10-sdk-integration-plan.md).

@@ -8,7 +8,7 @@ import { DemoBanner } from "../components/DemoBanner.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { HelpModal } from "../components/HelpModal.tsx";
 import { Sidebar, type NavId } from "../components/Sidebar.tsx";
-import { TopBar, type ViewMode } from "../components/TopBar.tsx";
+import { TopBar, type Density, type ViewMode } from "../components/TopBar.tsx";
 import { Activity } from "./Activity.tsx";
 import { Admin } from "./Admin.tsx";
 import { Files } from "./Files.tsx";
@@ -23,6 +23,17 @@ export function Shell() {
   const username = status.kind === "authed" ? status.me.admin : "admin";
   const [nav, setNav] = useState<NavId>("home");
   const [view, setView] = useState<ViewMode>("grid");
+  // SR4 — result density. Persisted per-user in localStorage so the
+  // choice survives page reloads. SSR-safe (typeof check) for the rare
+  // case the SPA is prerendered. Doesn't affect page size.
+  const [density, setDensity] = useState<Density>(() => readDensity());
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DENSITY_STORAGE_KEY, density);
+    } catch {
+      /* localStorage can throw in Safari private mode — silent. */
+    }
+  }, [density]);
   const [query, setQuery] = useState("");
   const [itemCount, setItemCount] = useState(0);
   const [uploadTick, setUploadTick] = useState(0);
@@ -90,6 +101,8 @@ export function Shell() {
               onQueryChange={setQuery}
               view={view}
               onViewChange={setView}
+              density={density}
+              onDensityChange={setDensity}
               onShowHelp={() => setHelpOpen(true)}
             />
           </div>
@@ -98,6 +111,7 @@ export function Shell() {
           {nav === "home" && (
             <Files
               view={view}
+              density={density}
               query={query}
               uploadRequested={uploadTick}
               onUploadHandled={() => {}}
@@ -196,6 +210,18 @@ export function Shell() {
       />
     </div>
   );
+}
+
+const DENSITY_STORAGE_KEY = "cd:files:density";
+
+function readDensity(): Density {
+  if (typeof window === "undefined") return "comfortable";
+  try {
+    const raw = window.localStorage.getItem(DENSITY_STORAGE_KEY);
+    return raw === "compact" ? "compact" : "comfortable";
+  } catch {
+    return "comfortable";
+  }
 }
 
 function CenteredPane({ children }: { children: React.ReactNode }) {

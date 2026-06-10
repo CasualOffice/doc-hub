@@ -35,8 +35,7 @@ Phase A + Owner chip landed (backend + chip toolbar + Owner autocomplete + infin
 
 | # | Item | Brief | Priority | Trigger |
 |---|---|---|---|---|
-| SR4 | Result density toggle (Comfortable / Compact; persisted) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Result density" | P1 | Pick up after feedback on Phase A |
-| SR6 | URL state mirrors query + filters + sort + scope (shareable result links) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"State checklist" | P1 | After SR4 — needs careful coordination with folder-nav routes |
+| SR6 | URL state mirrors query + filters + sort + scope (shareable result links) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"State checklist" | P1 | Next up — needs careful coordination with folder-nav routes |
 | SR7 | Per-result actions verified inside search mode (kebab / right-click / multi-select / selection bar — already wired in Files.tsx, audit + bulk action testing in search context) | [`12-search-surface`](./docs/ux/12-search-surface.md) §"Per-result actions" + §"Bulk actions" | P1 | Audit pass after Phase A user feedback |
 
 ### Search polish (layered, subsequent passes)
