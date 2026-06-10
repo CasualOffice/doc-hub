@@ -39,6 +39,7 @@ import {
   type UrlState,
 } from "../lib/searchUrl.ts";
 import { recordRecent } from "../lib/recentSearches.ts";
+import { markPaint } from "../lib/searchMetrics.ts";
 
 const SORT_KEY_STORAGE = "cd-sort-key-v1";
 
@@ -449,6 +450,12 @@ export function Files({
           sortApplied: data.sort_applied,
         });
         onItemCount(data.folders.length + data.files.length + data.notes.length);
+        // SR15 — close the keystroke→paint measurement window AFTER
+        // the browser has painted the new result pane. Double-rAF
+        // pushes us past React's commit (rAF #1) and into the next
+        // composited frame (rAF #2), so the timestamp lines up with
+        // what the user actually sees.
+        requestAnimationFrame(() => requestAnimationFrame(markPaint));
       } catch (err) {
         if (controller.signal.aborted) return;
         const msg =

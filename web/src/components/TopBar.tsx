@@ -2,6 +2,7 @@ import { ChangeEvent, useEffect, useState } from "react";
 import { Grid3x3, HelpCircle, List, Rows3, Rows4, Search } from "lucide-react";
 
 import { clearRecent, getRecent, type RecentSearch } from "../lib/recentSearches.ts";
+import { markKeystroke } from "../lib/searchMetrics.ts";
 import { NotificationsBell } from "./NotificationsBell.tsx";
 import { RecentSearchesPopover } from "./RecentSearchesPopover.tsx";
 
@@ -84,7 +85,14 @@ export function TopBar({
           aria-expanded={popoverOpen}
           aria-activedescendant={popoverOpen ? activeOptionId ?? undefined : undefined}
           aria-label="Search files and folders"
-          onChange={(e: ChangeEvent<HTMLInputElement>) => onQueryChange(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+            // SR15 — open a keystroke→paint measurement window if one
+            // isn't already pending. Subsequent keystrokes inside the
+            // window are folded into the same measurement so the
+            // debounce delay shows up as part of perceived latency.
+            markKeystroke();
+            onQueryChange(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && query.trim().length > 0) {
               // SR11 — Files owns search state, so it gets to record
