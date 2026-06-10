@@ -64,10 +64,12 @@ test.skip("renaming via right-click context menu updates the card name", async (
 });
 
 test("sort menu reverses item order", async ({ page }) => {
-  // Trigger has aria-label="Sort" so it's the most stable handle.
-  const sortBtn = page.getByLabel("Sort").first();
+  // SR14 reshaped the SortMenu — trigger aria-label now spells out
+  // the live state ("Sort by Name, ascending") and items moved from
+  // `menuitem` to `menuitemradio` (proper radio semantics).
+  const sortBtn = page.getByLabel(/^Sort by /).first();
   await sortBtn.click();
-  await page.getByRole("menuitem").filter({ hasText: "Descending" }).click();
+  await page.getByRole("menuitemradio").filter({ hasText: "Descending" }).click();
   // Trigger label still shows the active key after the menu closes.
   await expect(sortBtn).toContainText(/Name/);
 });
