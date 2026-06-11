@@ -33,6 +33,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { getFile, type FileDto } from "../api/client.ts";
 import { inferKind } from "../components/FileThumb.tsx";
+import { useReportViewing } from "../state/PresenceContext.tsx";
 
 // Same lazy-load pattern as PreviewStage — both surfaces share the
 // same SDK chunks but tax different routes, so the Suspense
@@ -116,6 +117,15 @@ export function FileFullscreen({ fileId }: FileFullscreenProps) {
       document.title = prev;
     };
   }, [state]);
+
+  // RT3 — tell the presence hub which file we're viewing so peers'
+  // file rows light up with the viewing dot. Clear on unmount so the
+  // dot goes away when we navigate back to /home.
+  const reportViewing = useReportViewing();
+  useEffect(() => {
+    reportViewing(fileId);
+    return () => reportViewing(null);
+  }, [fileId, reportViewing]);
 
   const goBack = () => {
     window.history.pushState({}, "", "/");

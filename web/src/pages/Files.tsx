@@ -26,6 +26,7 @@ import { forbiddenUploadExtension } from "../api/uploadPolicy.ts";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { EntryContextMenu, EntryKebab, type Entry as MenuEntry, type EntryMenuHandlers } from "../components/EntryMenu.tsx";
 import { FileMiniIcon, FileThumb, inferKind, type FileKind } from "../components/FileThumb.tsx";
+import { FileViewingDot } from "../components/FileViewingDot.tsx";
 import { PreviewModal } from "../components/PreviewModal.tsx";
 import { RenameDialog } from "../components/RenameDialog.tsx";
 import { SelectionBar } from "../components/SelectionBar.tsx";
@@ -1708,8 +1709,13 @@ function FileCard({
             height: "var(--cd-card-thumb-h)",
             overflow: "hidden",
             borderBottom: "1px solid var(--line)",
+            position: "relative",
           }}
         >
+          {/* RT3 — peer-viewing dot. Renders null when no one else
+              is viewing this file; tinted with that peer's avatar
+              colour when they are. */}
+          <FileViewingDot fileId={file.id} placement="card" />
           <FileThumb
             name={file.name}
             kind={kind}
@@ -1954,6 +1960,7 @@ function ListView({
         return (
           <EntryContextMenu key={e.file.id} entry={entry} handlers={handlers}>
             <ListRow
+              fileId={e.file.id}
               name={e.file.name}
               kind={kind}
               type={labelForKind(kind)}
@@ -1977,6 +1984,7 @@ function ListView({
 }
 
 function ListRow({
+  fileId,
   name,
   kind,
   type,
@@ -1990,6 +1998,10 @@ function ListRow({
   thumbUrls,
   selected,
 }: {
+  /** Optional — only the file rows have it; the upload-ghost row
+   * passes nothing because there's no committed id yet. When
+   * present, used to look up peer-viewing state for the dot. */
+  fileId?: string;
   name: string;
   kind: FileKind;
   type: string;
@@ -2042,6 +2054,7 @@ function ListRow({
         >
           <FileThumb name={name} kind={kind} size="small" thumbnail={thumbnail} thumbUrls={thumbUrls} />
         </span>
+        {fileId && <FileViewingDot fileId={fileId} placement="list" />}
         <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
       </div>
       <span style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>{type}</span>

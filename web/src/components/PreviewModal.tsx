@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight, Download, Share2, Star, X } from "lucide-rea
 import type { UseFileSourceAutoSaveReturn } from "@schnsrw/docx-js-editor";
 
 import { downloadUrl, type FileDto } from "../api/client.ts";
+import { useReportViewing } from "../state/PresenceContext.tsx";
 import { FileThumb, inferKind } from "./FileThumb.tsx";
 import { PreviewStage } from "./preview/PreviewStage.tsx";
 
@@ -64,6 +65,18 @@ export function PreviewModal({
   useEffect(() => {
     setAutosaveState(null);
   }, [files[index]?.id]);
+
+  // RT3 — announce the focused file to peers' presence streams so
+  // their file rows light up with the viewing dot. Pin updates on
+  // ←/→ navigation between peer files; clears when the modal closes.
+  const reportViewing = useReportViewing();
+  const focusedId = open ? files[index]?.id ?? null : null;
+  useEffect(() => {
+    reportViewing(focusedId);
+    return () => {
+      if (focusedId) reportViewing(null);
+    };
+  }, [focusedId, reportViewing]);
 
   // ←/→ keyboard nav while open
   useEffect(() => {
