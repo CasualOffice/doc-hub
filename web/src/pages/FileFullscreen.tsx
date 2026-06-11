@@ -246,7 +246,7 @@ function FullscreenBody({ state }: { state: LoadState }) {
   if (kind === "doc") {
     return (
       <Suspense fallback={<LoadingFallback />}>
-        <CasualDocEditor file={file} />
+        <CasualDocEditor file={file} mode="editor" />
       </Suspense>
     );
   }

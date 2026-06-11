@@ -42,13 +42,13 @@ const MD_CAP_BYTES = 256 * 1024; // 256 KB
 export interface PreviewStageProps {
   file: FileDto;
   kind: FileKind;
-  /** Bubbled from CasualDocEditor → PreviewModal so the modal chrome
-   *  can render a "Saving… / Saved 2m ago" indicator alongside the
-   *  file title. Only the 'doc' case forwards; others ignore. */
+  /** Carried for API stability — autosave state now lives INSIDE the
+   *  embed iframe (the SDK's own chrome shows "Saving…"), so the
+   *  modal no longer subscribes. Drop this prop in the next major. */
   onAutosaveState?: (state: UseFileSourceAutoSaveReturn) => void;
 }
 
-export function PreviewStage({ file, kind, onAutosaveState }: PreviewStageProps) {
+export function PreviewStage({ file, kind }: PreviewStageProps) {
   switch (kind) {
     case "img":
       return <ImageStage file={file} />;
@@ -65,13 +65,15 @@ export function PreviewStage({ file, kind, onAutosaveState }: PreviewStageProps)
     case "doc":
       return (
         <Suspense fallback={<EditorLoading />}>
-          <CasualDocEditor file={file} onAutosaveState={onAutosaveState} />
+          {/* mode='preview' hides the toolbar inside the iframe so the
+              modal stage renders JUST the document canvas. */}
+          <CasualDocEditor file={file} mode="preview" />
         </Suspense>
       );
     case "sheet":
       return (
         <Suspense fallback={<EditorLoading />}>
-          <CasualSheetWorkspace file={file} />
+          <CasualSheetWorkspace file={file} mode="preview" />
         </Suspense>
       );
     default:
