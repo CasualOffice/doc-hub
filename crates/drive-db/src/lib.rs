@@ -11,6 +11,7 @@ mod audit;
 mod error;
 mod files;
 mod folders;
+mod invitations;
 mod notes;
 mod oidc;
 mod pool;
@@ -25,6 +26,7 @@ pub use audit::{AuditEvent, AuditRepo, NewAuditEvent};
 pub use error::DbError;
 pub use files::{File, FileRepo, FileStatus, NewFile, ThumbsState};
 pub use folders::{Folder, FolderRepo, NewFolder};
+pub use invitations::{NewWorkspaceInvitation, WorkspaceInvitation, WorkspaceInvitationRepo};
 pub use notes::{
     order_key_between, parse_wiki_links, NewNote, Note, NoteBacklink, NoteLinksRepo, NoteNode,
     NotesRepo,

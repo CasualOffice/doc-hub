@@ -73,7 +73,7 @@ The OIDC floor is in. Filling out the team-collaboration story:
 
 | # | Item | Brief | Priority | Trigger |
 |---|---|---|---|---|
-| MU1 | Workspace invitations (token-based; email-or-link) | — (needs brief; design notes in `08-byo-storage` only cover storage) | P1 | After RT1 (presence) — invitations are the moment team workspaces stop being "owner-only" |
+| MU1 | Workspace invitations (token-based; magic-link auto-create on accept; both single-use and multi-use links — decisions captured in [[workspace-invitations]] memory entry). **Phase 1a shipped (backend)** — migration `0013_workspace_invitations.sql`, `WorkspaceInvitationRepo`, 5 HTTP endpoints (create / list / revoke / peek / accept), 8 unit + handler tests covering happy path + membership gate + single-use exhaustion + multi-use cap + admin-role guard + anonymous peek + revoke round trip. RT1 1c `workspace.joined` broadcast wired into the accept handler. **Remaining**: 1b — SPA UI (switcher-footer entry + InviteDialog + `/invite/<token>` accept route, signed-in only); 1c — Settings → Members tab; 1d — magic-link auto-create (anonymous → mint user + session). | [[workspace-invitations]] memory + (TODO) `docs/research/18-workspace-invitations.md` | P1 | 1b unblocks team onboarding; 1d covers the "anonymous magic link" UX path the brief locked. |
 | MU2 | Role tiers beyond Owner / Member (Viewer, Editor, Admin) | — (needs brief) | P2 | After MU1 |
 | MU3 | Server-mediated email (transactional: invite / share / quota-request) | — (needs brief) | P2 | After MU1 |
 | MU4 | OIDC group → role mapping (admin group, per-workspace group claims) | [`12-oidc`](./docs/research/12-oidc.md) §"admin_group" extension | P2 | After MU1 + MU2 |

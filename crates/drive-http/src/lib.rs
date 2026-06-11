@@ -15,6 +15,7 @@ mod direct_upload;
 mod files;
 pub mod headers;
 mod host_dispatch;
+mod invitations;
 mod notes;
 mod oidc;
 pub mod presence;
@@ -114,6 +115,7 @@ fn app_origin_router(state: HttpState) -> Router {
     let notes_router: Router = notes::router(state.clone());
     let admin_users_router: Router = admin::admin_router(state.clone());
     let presence_router: Router = presence::router().with_state(state.clone());
+    let invitations_router: Router = invitations::router(state.clone());
 
     Router::new()
         .route("/healthz", get(healthz))
@@ -135,6 +137,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(notes_router)
         .merge(admin_users_router)
         .merge(presence_router)
+        .merge(invitations_router)
         // SPA fallback — `/`, `/sign-in`, `/files/...`, hashed asset paths
         // — anything not matched above is served from the embedded `web/dist/`.
         .fallback(spa::serve)
