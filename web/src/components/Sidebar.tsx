@@ -20,6 +20,7 @@ import {
 
 import { Logo, Wordmark } from "./Logo.tsx";
 import { AvatarStack } from "./AvatarStack.tsx";
+import { ThemeToggle } from "./ThemeToggle.tsx";
 import { WorkspaceSwitcher as RealWorkspaceSwitcher } from "./WorkspaceSwitcher.tsx";
 
 export type NavId =
@@ -200,7 +201,12 @@ export function Sidebar({
 
       {storage && <StorageCard {...storage} />}
 
-      <AvatarRow username={username} />
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <AvatarRow username={username} />
+        </div>
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }

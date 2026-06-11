@@ -41,6 +41,8 @@ import {
   type UrlState,
 } from "../lib/searchUrl.ts";
 import { recordRecent } from "../lib/recentSearches.ts";
+import { usePresenceActions, usePresenceUsers } from "../state/PresenceContext.tsx";
+import { useAuth } from "../auth/AuthContext.tsx";
 import { markPaint } from "../lib/searchMetrics.ts";
 
 const SORT_KEY_STORAGE = "cd-sort-key-v1";
@@ -607,7 +609,10 @@ export function Files({
           .replace(/[-:T]/g, "")
           .slice(2, 12); // YYMMDDhhmm
         const name = `${base} ${stamp}.${ext}`;
-        const resp = await fetch(`/templates/blank.${ext}`);
+        // Prefix with Vite's BASE_URL — on local dev the SPA is served at /,
+        // on Pages it's served at /demo-app/, and the templates live under
+        // both. Hardcoding `/templates/...` made the Pages build 404.
+        const resp = await fetch(`${import.meta.env.BASE_URL}templates/blank.${ext}`);
         if (!resp.ok) throw new Error(`template fetch failed: HTTP ${resp.status}`);
         const blob = await resp.blob();
         const file = new File([blob], name, { type: mime });
@@ -753,6 +758,54 @@ export function Files({
     () => filteredEntries.filter((e): e is { kind: "file"; file: FileDto } => e.kind === "file").map((e) => e.file),
     [filteredEntries],
   );
+
+  // RT4 — quiet peer-action toast. Watches the rolling action buffer
+  // (PresenceContext) and pops a sonner toast when a peer renames /
+  // trashes / etc. a file that's currently in the user's grid. Self-
+  // actions and out-of-view targets are silently skipped per the
+  // brief ("don't spam"). lastSeenTsRef dedupes across renders;
+  // we only ever consider entries newer than the last batch.
+  const presenceActions = usePresenceActions();
+  const presenceUsers = usePresenceUsers();
+  const { status: authStatus } = useAuth();
+  const myUserId = authStatus.kind === "authed" ? authStatus.me.user_id ?? null : null;
+  const lastSeenActionTsRef = useRef(0);
+  useEffect(() => {
+    if (presenceActions.length === 0) return;
+    // Build a quick lookup for currently-rendered targets. Both file
+    // and folder ids count — folder rename events still need to land.
+    const visibleIds = new Set<string>();
+    for (const e of filteredEntries) {
+      visibleIds.add(e.kind === "file" ? e.file.id : e.folder.id);
+    }
+    let dirty = false;
+    let newestTs = lastSeenActionTsRef.current;
+    // Walk oldest-first so toasts fire in chronological order on the
+    // initial burst (`presenceActions` is newest-first per the
+    // PresenceContext spec).
+    for (let i = presenceActions.length - 1; i >= 0; i--) {
+      const a = presenceActions[i];
+      if (a.received_at <= lastSeenActionTsRef.current) continue;
+      if (a.received_at > newestTs) newestTs = a.received_at;
+      if (myUserId && a.user_id === myUserId) continue;
+      if (!a.target_id || !visibleIds.has(a.target_id)) continue;
+      const verb = verbFor(a.action);
+      if (!verb) continue;
+      const actor = presenceUsers.find((u) => u.user_id === a.user_id)?.username ?? "Someone";
+      const targetName = a.target_name ?? "a file";
+      toast.message(`${actor} ${verb} ${targetName}`, { duration: 3000 });
+      dirty = true;
+    }
+    lastSeenActionTsRef.current = newestTs;
+    // Re-pull so the renamed name actually reflects in the row the
+    // user just got toasted about. The search-aware refresh handles
+    // both browse + search modes.
+    if (dirty) void refresh();
+    // refresh is intentionally not in deps — it's stable per-render
+    // via useCallback and adding it would re-fire the effect on
+    // every workspace change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presenceActions, filteredEntries, presenceUsers, myUserId]);
 
   // Per-entry menu handlers — built once, accept the entry inline so the
   // menu in every row/card binds to the right target.
@@ -2139,6 +2192,26 @@ function GridSkeleton({ view }: { view: ViewMode }) {
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────
+
+/** RT4 — translate a server-side audit action string into the
+ * human-readable verb for the quiet peer toast. Returns null when the
+ * action shouldn't surface as a toast (e.g. self-uploads aren't
+ * informative since the SPA shows its own progress chrome). */
+function verbFor(action: string): string | null {
+  switch (action) {
+    case "files.rename":
+    case "folders.rename":
+      return "renamed";
+    case "files.trash":
+      return "moved to trash";
+    case "files.upload":
+      return "uploaded";
+    case "folders.create":
+      return "created folder";
+    default:
+      return null;
+  }
+}
 
 function labelForKind(k: ReturnType<typeof inferKind>): string {
   switch (k) {
