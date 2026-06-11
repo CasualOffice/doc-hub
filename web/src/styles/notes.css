@@ -718,6 +718,43 @@
   margin: 0 3px;
 }
 
+.cd-toolbar-row {
+  /* Shared row layout used by BOTH the bubble menu and the fixed
+     toolbar. Surface chrome (background, border, shadow) is owned by
+     the wrapping class — `.cd-bubble-toolbar` paints the floating
+     card; `.cd-fixed-toolbar` paints the sticky-top bar. */
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Notes fixed (sticky-top) formatting toolbar ─────────────────── */
+.cd-fixed-toolbar {
+  /* Desktop only — mobile path is NT6's bottom toolbar. The media
+     query below shows / hides it. */
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  /* `cd-fixed-toolbar` lives directly inside the editor pane (next
+     to <EditorContent>). The pane's parent provides the scroll
+     container — any ancestor with `overflow: visible` breaks sticky,
+     so the editor pane explicitly opts in to `overflow-y: auto`. */
+  padding: 6px 0;
+  margin-bottom: 8px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+@media (min-width: 1024px) and (hover: hover) {
+  .cd-fixed-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+}
+
 /* ── NT3 slash menu ──────────────────────────────────────────────── */
 .cd-slash-menu {
   display: flex;

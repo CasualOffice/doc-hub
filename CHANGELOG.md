@@ -24,6 +24,12 @@ All notable changes to Casual Drive land here. Format follows
 
 - **Notes editor — "Link to note" slash item (NT3 Phase 2).** The slash menu (`/`) gets a "Link to note" entry that hands off to the existing `+` note-link picker, so users have keyboard-symmetric paths to insert a wiki-link. The picker still inserts a real Tiptap Link mark with `href="cd-note://<id>"` (NT1 Phase 2) — markdown round-trip + in-app click navigation unchanged.
 - **Marketing site — mobile-sized screenshot variants (MK-PERF-95).** `optimize-screenshots.mjs` now also emits an `@800w.avif` + `@800w.webp` for every PNG. The `<picture>` in `ScreenshotShowcase.astro` carries two extra `<source>` entries gated on `media="(max-width: 768px)"` so phones serve the small variant before the desktop one's even considered. On the LCP screenshot (`files-list`) that's 38 KB AVIF → 10 KB AVIF (3.8× smaller). Desktop is unchanged.
+- **Notes — fixed sticky-top formatting toolbar.** Notion-style: a persistent toolbar pinned to the top of the editor pane (sticky during scroll) hosts the same Bold / Italic / Strike / Code / Link / H1-H3 / Bullet / Numbered / Quote actions the bubble menu has carried since NT2. Bubble menu still appears on text selection — discoverability for first-time users, proximity-to-cursor for power users. The button row was extracted into a shared `ToolbarRow` component so both surfaces stay in lock-step. Desktop only (≥1024 px + hover); mobile keeps NT6's bottom toolbar.
+
+### Fixed
+
+- **Notes — title / body edits no longer skipped during autosave round-trip.** The autosave handler used to `setOpen(serverResponse)` after every save, which blindly clobbered local title + body with whatever the server returned — keystrokes typed during the network turn vanished as the controlled input + Tiptap editor re-synced from props. The handler now keeps `prev.title` + `prev.body` from local state and only takes the server-owned fields (timestamps, parent_id, version), so mid-flight edits survive and the next debounced save picks them up.
+
 ### Performance
 
 - **Search debounce 200 ms → 50 ms (SR15).** The spec budgets p95 keystroke→paint at 200 ms but the existing debounce ate the entire budget before fetch + paint started. Drops to 50 ms (Notion / Linear style). Local p95 fell from 417 ms → 207 ms — essentially on the spec target. AbortController on every keystroke already coalesces in-flight requests, so a tighter debounce produces more cancels, not more wasted server work. Playwright ceiling tightened from 800 ms → 500 ms.

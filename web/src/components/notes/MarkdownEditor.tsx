@@ -30,6 +30,7 @@ import { Markdown } from "tiptap-markdown";
 import { listWorkspaceMembers, type NoteNode } from "../../api/client.ts";
 
 import { BlockHandle } from "./BlockHandle.tsx";
+import { FixedToolbar } from "./FixedToolbar.tsx";
 import { FormattingToolbar } from "./FormattingToolbar.tsx";
 import { LinkDialog } from "./LinkDialog.tsx";
 import { MobileToolbar } from "./MobileToolbar.tsx";
@@ -319,6 +320,7 @@ export function MarkdownEditor({
 
   return (
     <>
+      <FixedToolbar editor={editor} onLinkClick={openLinkDialog} />
       <EditorContent editor={editor} />
       <FormattingToolbar editor={editor} onLinkClick={openLinkDialog} />
       <MobileToolbar editor={editor} onLinkClick={openLinkDialog} />

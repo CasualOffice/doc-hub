@@ -133,11 +133,30 @@ export function Notes() {
     if (!open) return;
     setSaveState("saving");
     try {
+      // Snapshot what we're SENDING — used after the await to detect
+      // whether the user typed more during the round-trip. Without this
+      // guard, blindly `setOpen(updated)` would clobber any keystrokes
+      // landed during the network turn (visible as "the title input
+      // drops characters mid-typing" / "the editor briefly jumps back").
+      const sentTitle = open.title;
+      const sentBody = open.body;
       const updated = await notePatch(open.id, {
-        title: open.title,
-        body: open.body,
+        title: sentTitle,
+        body: sentBody,
       });
-      setOpen(updated);
+      // Only sync the server-owned fields (timestamps, version,
+      // parent_id, etc.). KEEP local title + body — if they changed
+      // during the round-trip, the next debounced save will catch up;
+      // if they didn't, the local values still equal what we sent so
+      // overwriting would be a no-op anyway.
+      setOpen((prev) => {
+        if (!prev || prev.id !== updated.id) return prev;
+        return {
+          ...updated,
+          title: prev.title,
+          body: prev.body,
+        };
+      });
       setSaveState("saved");
       setSavedAt(Date.now());
       try {
