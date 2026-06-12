@@ -46,16 +46,28 @@ jobs:
             web/pnpm-lock.yaml
             marketing/pnpm-lock.yaml
 
-      # ── Self-hosted Inter (not committed; see marketing/public/fonts/) ──
-      - name: Fetch Inter variable fonts
+      # ── Self-hosted IBM Plex Sans + Mono (not committed; see
+      #    marketing/public/fonts/). Source: jsDelivr mirror of
+      #    @fontsource-variable/ibm-plex-sans + @fontsource/ibm-plex-mono.
+      #    These are the same woff2 files the SPA's npm `@fontsource-*`
+      #    packages bundle — we pull them at build time so the
+      #    marketing site self-hosts the same binaries (no separate
+      #    Google-Fonts cross-origin load on cold paint).
+      - name: Fetch IBM Plex Sans + Mono variable fonts
         run: |
           mkdir -p marketing/public/fonts
+          # Plex Sans variable (latin) — the workhorse for everything.
           curl -fsSL --retry 3 \
-            https://rsms.me/inter/font-files/InterVariable.woff2 \
-            -o marketing/public/fonts/inter-variable.woff2
+            "https://cdn.jsdelivr.net/npm/@fontsource-variable/ibm-plex-sans@5/files/ibm-plex-sans-latin-wght-normal.woff2" \
+            -o marketing/public/fonts/plex-sans-variable.woff2
+          # Plex Mono (regular 400 + medium 500 — used in code blocks,
+          # share-link / invite URL inputs).
           curl -fsSL --retry 3 \
-            https://rsms.me/inter/font-files/InterVariable-Italic.woff2 \
-            -o marketing/public/fonts/inter-italic-variable.woff2
+            "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5/files/ibm-plex-mono-latin-400-normal.woff2" \
+            -o marketing/public/fonts/plex-mono-400.woff2
+          curl -fsSL --retry 3 \
+            "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5/files/ibm-plex-mono-latin-500-normal.woff2" \
+            -o marketing/public/fonts/plex-mono-500.woff2
 
       # ── 1. Build the SPA in demo mode under /demo-app/ ─────────────────
       - name: Install SPA deps

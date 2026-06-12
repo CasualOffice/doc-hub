@@ -80,10 +80,12 @@ const ogUrl = ogImage.startsWith("http") ? ogImage : `${siteUrl}${ogImage}`;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    {/* Preload the Inter weights used above the fold */}
+    {/* Preload IBM Plex Sans — the workhorse for everything above
+        the fold. Mono only loads in code blocks lower down, so we
+        skip preloading it. */}
     <link
       rel="preload"
-      href="/fonts/inter-variable.woff2"
+      href="/fonts/plex-sans-variable.woff2"
       as="font"
       type="font/woff2"
       crossorigin

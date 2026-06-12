@@ -13,8 +13,8 @@
     "screenshots": "node tests/e2e/marketing-screenshots.mjs"
   },
   "dependencies": {
-    "@fontsource-variable/fraunces": "^5.2.9",
-    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource-variable/ibm-plex-sans": "^5.2.8",
     "@formkit/auto-animate": "^0.9.0",
     "@radix-ui/react-dialog": "^1.1.16",
     "@schnsrw/casual-sheets": "^0.5.1",
