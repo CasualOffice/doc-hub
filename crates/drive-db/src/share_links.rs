@@ -124,6 +124,18 @@ impl<'a> ShareLinkRepo<'a> {
         rows.iter().map(row_to_share_link).collect()
     }
 
+    pub async fn list_for_folder(&self, folder_id: &str) -> Result<Vec<ShareLink>, DbError> {
+        let rows = sqlx::query(
+            "SELECT id, token, file_id, folder_id, password_hash, permissions, \
+             expires_at, created_at, created_by, last_accessed_at, access_count \
+             FROM share_links WHERE folder_id = ? ORDER BY created_at DESC",
+        )
+        .bind(folder_id)
+        .fetch_all(self.db.pool())
+        .await?;
+        rows.iter().map(row_to_share_link).collect()
+    }
+
     pub async fn find_by_id(&self, id: &str) -> Result<ShareLink, DbError> {
         let row = sqlx::query(
             "SELECT id, token, file_id, folder_id, password_hash, permissions, \

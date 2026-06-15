@@ -15,7 +15,7 @@
 use std::time::Duration;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -23,7 +23,7 @@ use axum::{
 };
 use base64::Engine as _;
 use drive_auth::{hash_password, verify_password, AuthSession};
-use drive_db::{AuditRepo, FileRepo, NewAuditEvent, NewShareLink, ShareLink, ShareLinkRepo};
+use drive_db::{AuditRepo, FileRepo, FolderRepo, NewAuditEvent, NewShareLink, ShareLink, ShareLinkRepo};
 use drive_storage::SignedUrl;
 use serde::{Deserialize, Serialize};
 
@@ -199,10 +199,16 @@ async fn revoke_share(
         // missing links rather than 403 so they can't probe existence.
         return Err(ShareError::NotFound);
     }
-    // Look up the target file name (denormalised so the audit row survives
-    // file deletion). Best-effort — missing file just yields a None name.
-    let file_name = if let Some(fid) = link.file_id.as_deref() {
+    // Look up the target name (denormalised so the audit row survives
+    // file/folder deletion). Best-effort — missing target just yields None.
+    let target_name = if let Some(fid) = link.file_id.as_deref() {
         FileRepo::new(&s.db)
+            .find_by_id(fid)
+            .await
+            .ok()
+            .map(|f| f.name)
+    } else if let Some(fid) = link.folder_id.as_deref() {
+        FolderRepo::new(&s.db)
             .find_by_id(fid)
             .await
             .ok()
@@ -223,12 +229,123 @@ async fn revoke_share(
             action: "share.revoke".into(),
             target_kind: Some("share_link".into()),
             target_id: Some(link.id),
-            target_name: file_name,
+            target_name,
             ip_address: None,
             metadata: None,
         },
     );
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ── Owner-side handlers (folder shares) ────────────────────────────────
+
+async fn create_folder_share(
+    State(s): State<HttpState>,
+    session: AuthSession,
+    Path(folder_id): Path<String>,
+    Json(body): Json<CreateShareBody>,
+) -> Result<(StatusCode, Json<ShareDto>), ShareError> {
+    let perms = body.permissions.as_deref().unwrap_or("view");
+    if perms != "view" {
+        return Err(ShareError::Validation(
+            "only 'view' permissions ship in v0".into(),
+        ));
+    }
+
+    let folders = FolderRepo::new(&s.db);
+    let folder = folders
+        .find_by_id(&folder_id)
+        .await
+        .map_err(|_| ShareError::NotFound)?;
+    if folder.owner_id != session.user_id {
+        return Err(ShareError::Forbidden);
+    }
+    if folder.trashed_at.is_some() {
+        return Err(ShareError::NotFound);
+    }
+
+    let password_hash = match body
+        .password
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
+        Some(p) if p.chars().count() < 4 => {
+            return Err(ShareError::Validation(
+                "share password must be at least 4 characters".into(),
+            ));
+        }
+        Some(p) => Some(hash_password(p).map_err(|e| ShareError::Internal(e.to_string()))?),
+        None => None,
+    };
+
+    let expires_at = body
+        .expires_in_seconds
+        .and_then(|secs| if secs > 0 { Some(secs) } else { None })
+        .map(|secs| time::OffsetDateTime::now_utc() + time::Duration::seconds(secs));
+
+    let token = mint_token();
+    let folder_name = folder.name.clone();
+    let link = ShareLinkRepo::new(&s.db)
+        .insert(&NewShareLink {
+            token,
+            file_id: None,
+            folder_id: Some(folder.id.clone()),
+            password_hash,
+            permissions: perms.to_string(),
+            expires_at,
+            created_by: session.user_id.clone(),
+        })
+        .await
+        .map_err(|e| ShareError::Internal(e.to_string()))?;
+
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: "share.create".into(),
+            target_kind: Some("share_link".into()),
+            target_id: Some(link.id.clone()),
+            target_name: Some(folder_name),
+            ip_address: None,
+            metadata: Some(format!(
+                r#"{{"folder_id":"{}","has_password":{}}}"#,
+                folder.id,
+                link.password_hash.is_some()
+            )),
+        },
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        Json(ShareDto::from_link(&link, &s.config.app_origin)),
+    ))
+}
+
+async fn list_folder_shares(
+    State(s): State<HttpState>,
+    session: AuthSession,
+    Path(folder_id): Path<String>,
+) -> Result<Json<ListShares>, ShareError> {
+    let folders = FolderRepo::new(&s.db);
+    let folder = folders
+        .find_by_id(&folder_id)
+        .await
+        .map_err(|_| ShareError::NotFound)?;
+    if folder.owner_id != session.user_id {
+        return Err(ShareError::Forbidden);
+    }
+
+    let links = ShareLinkRepo::new(&s.db)
+        .list_for_folder(&folder.id)
+        .await
+        .map_err(|e| ShareError::Internal(e.to_string()))?;
+    let shares = links
+        .iter()
+        .map(|l| ShareDto::from_link(l, &s.config.app_origin))
+        .collect();
+    Ok(Json(ListShares { shares }))
 }
 
 // ── Recipient-side handlers ────────────────────────────────────────────
@@ -240,6 +357,10 @@ pub(crate) struct ResolveBody {
 
 #[derive(Serialize)]
 struct RecipientFile {
+    /// `id` is needed by the recipient page to call the per-file
+    /// download endpoint (`/api/share/{token}/download?file_id=…`).
+    /// Safe to expose because the share token already gates access.
+    id: String,
     name: String,
     size: u64,
     content_type: Option<String>,
@@ -247,10 +368,31 @@ struct RecipientFile {
 }
 
 #[derive(Serialize)]
-struct Resolved {
-    file: RecipientFile,
-    download_url: String,
-    permissions: String,
+struct RecipientFolder {
+    id: String,
+    name: String,
+    modified_at: String,
+}
+
+/// `kind: "file"` carries the legacy single-file payload; `kind: "folder"`
+/// adds a `files` + `folders` listing for the depth-1 children of the
+/// shared folder. The SPA branches on `kind` to render the right view.
+/// Serialised flat (no nested `data:` wrapper) so the SPA TS type can
+/// be a discriminated union without restructuring existing call sites.
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase", tag = "kind")]
+enum Resolved {
+    File {
+        file: RecipientFile,
+        download_url: String,
+        permissions: String,
+    },
+    Folder {
+        folder: RecipientFolder,
+        files: Vec<RecipientFile>,
+        folders: Vec<RecipientFolder>,
+        permissions: String,
+    },
 }
 
 async fn resolve_share(
@@ -275,10 +417,75 @@ async fn resolve_share(
         }
     }
 
-    let file_id = link
-        .file_id
-        .as_deref()
-        .ok_or_else(|| ShareError::Validation("folder shares not yet supported".into()))?;
+    if let Some(folder_id) = link.folder_id.as_deref() {
+        let folders = FolderRepo::new(&s.db);
+        let folder = folders
+            .find_by_id(folder_id)
+            .await
+            .map_err(|_| ShareError::NotFound)?;
+        if folder.trashed_at.is_some() {
+            return Err(ShareError::NotFound);
+        }
+        // Depth-1 listing — recursive descent is a Phase-2 polish.
+        // Scope by the folder's owner so the recipient sees what the
+        // sharer would see, regardless of who's anonymously visiting.
+        let child_files = FileRepo::new(&s.db)
+            .list_children(Some(&folder.id), &folder.owner_id)
+            .await
+            .unwrap_or_default();
+        let child_folders = folders
+            .list_children(Some(&folder.id), &folder.owner_id)
+            .await
+            .unwrap_or_default();
+
+        let _ = repo.touch(&link.id).await;
+
+        AuditRepo::emit(
+            &s.db,
+            NewAuditEvent {
+                actor_id: None,
+                actor_username: None,
+                action: "share.access".into(),
+                target_kind: Some("share_link".into()),
+                target_id: Some(link.id.clone()),
+                target_name: Some(folder.name.clone()),
+                ip_address: None,
+                metadata: Some(format!(
+                    r#"{{"token":"{}","folder_id":"{}"}}"#,
+                    link.token, folder.id
+                )),
+            },
+        );
+
+        return Ok(Json(Resolved::Folder {
+            folder: RecipientFolder {
+                id: folder.id.clone(),
+                name: folder.name,
+                modified_at: rfc3339(folder.modified_at),
+            },
+            files: child_files
+                .into_iter()
+                .map(|f| RecipientFile {
+                    id: f.id,
+                    name: f.name,
+                    size: f.size,
+                    content_type: f.content_type,
+                    modified_at: rfc3339(f.modified_at),
+                })
+                .collect(),
+            folders: child_folders
+                .into_iter()
+                .map(|f| RecipientFolder {
+                    id: f.id,
+                    name: f.name,
+                    modified_at: rfc3339(f.modified_at),
+                })
+                .collect(),
+            permissions: link.permissions,
+        }));
+    }
+
+    let file_id = link.file_id.as_deref().ok_or(ShareError::NotFound)?;
     let files = FileRepo::new(&s.db);
     let file = files
         .find_by_id(file_id)
@@ -305,8 +512,9 @@ async fn resolve_share(
         },
     );
 
-    Ok(Json(Resolved {
+    Ok(Json(Resolved::File {
         file: RecipientFile {
+            id: file.id,
             name: file.name,
             size: file.size,
             content_type: file.content_type,
@@ -317,9 +525,19 @@ async fn resolve_share(
     }))
 }
 
+#[derive(Deserialize, Default)]
+pub(crate) struct DownloadQuery {
+    /// Folder-share recipients pass `?file_id=…` to download a single
+    /// child of the shared folder; the server validates the child
+    /// actually belongs to that folder before signing the URL. File
+    /// shares ignore this — they always serve the link's `file_id`.
+    pub file_id: Option<String>,
+}
+
 async fn download_share(
     State(s): State<HttpState>,
     Path(token): Path<String>,
+    Query(query): Query<DownloadQuery>,
 ) -> Result<Response, ShareError> {
     let repo = ShareLinkRepo::new(&s.db);
     let link = repo
@@ -334,13 +552,35 @@ async fn download_share(
     // button to the user, password-gating the byte fetch as well would be
     // hostile UX. The token + active link is the access control here.
 
-    let file_id = link
-        .file_id
-        .as_deref()
-        .ok_or_else(|| ShareError::Validation("folder shares not yet supported".into()))?;
     let files = FileRepo::new(&s.db);
+    let file_id = if let Some(fid) = link.file_id.as_deref() {
+        // Single-file share: the link's file is the only valid target.
+        // A stray ?file_id=… query is ignored.
+        fid.to_string()
+    } else if let Some(folder_id) = link.folder_id.as_deref() {
+        // Folder share: ?file_id=… must reference a direct child of
+        // the shared folder, owned by the folder's owner. Anything
+        // else is a 404 — anti-enumeration is the same posture as
+        // revoke_share.
+        let requested = query.file_id.as_deref().ok_or(ShareError::NotFound)?;
+        let folder = FolderRepo::new(&s.db)
+            .find_by_id(folder_id)
+            .await
+            .map_err(|_| ShareError::NotFound)?;
+        let file = files
+            .find_by_id(requested)
+            .await
+            .map_err(|_| ShareError::NotFound)?;
+        if file.parent_id.as_deref() != Some(&folder.id) || file.owner_id != folder.owner_id {
+            return Err(ShareError::NotFound);
+        }
+        file.id
+    } else {
+        return Err(ShareError::NotFound);
+    };
+
     let file = files
-        .find_by_id(file_id)
+        .find_by_id(&file_id)
         .await
         .map_err(|_| ShareError::NotFound)?;
     if file.trashed_at.is_some() {
@@ -349,7 +589,7 @@ async fn download_share(
 
     let signed = s
         .storage
-        .signed_get(&storage_key(file_id), Duration::from_secs(120))
+        .signed_get(&storage_key(&file_id), Duration::from_secs(120))
         .await
         .map_err(|e| ShareError::Internal(e.to_string()))?;
 
@@ -458,6 +698,8 @@ pub(crate) fn router(state: HttpState) -> Router {
     Router::new()
         .route("/api/files/{id}/share", post(create_share))
         .route("/api/files/{id}/shares", get(list_shares))
+        .route("/api/folders/{id}/share", post(create_folder_share))
+        .route("/api/folders/{id}/shares", get(list_folder_shares))
         .route("/api/shares/{id}", delete(revoke_share))
         .route("/api/share/{token}", post(resolve_share))
         .route("/api/share/{token}/download", get(download_share))
