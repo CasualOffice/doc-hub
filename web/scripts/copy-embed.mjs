@@ -45,6 +45,23 @@ for (const [pkg, subdir, anchor] of PACKAGES) {
     mkdirSync(dstDir, { recursive: true });
     cpSync(srcEmbedDir, dstDir, { recursive: true });
 
+    // doc 1.1.4 ships dist/embed/embed-runtime.css that only contains
+    // ProseMirror base styles — the .ep-root tailwind-compiled editor
+    // CSS lives at dist/styles.css and isn't bundled into the embed
+    // runtime. Without it, every toolbar button stacks vertically with
+    // no layout and the editor canvas paints unstyled. Concatenate the
+    // editor styles into the embed CSS so the <link> in embed.html
+    // serves the full stylesheet.
+    if (pkg === "@schnsrw/docx-js-editor") {
+      const editorStylesPath = resolve(dirname(srcEmbedDir), "styles.css");
+      const embedCssPath = resolve(dstDir, "embed-runtime.css");
+      if (existsSync(editorStylesPath)) {
+        const base = existsSync(embedCssPath) ? readFileSync(embedCssPath, "utf8") : "";
+        const editor = readFileSync(editorStylesPath, "utf8");
+        writeFileSync(embedCssPath, `${base}\n${editor}`);
+      }
+    }
+
     // Patch the embed.html in place for three upstream packaging bugs:
     //   - sheet 0.5.0 references `embed-runtime.css` but the SDK doesn't
     //     ship one. Strip the stylesheet link so the browser doesn't
@@ -155,6 +172,59 @@ for (const [pkg, subdir, anchor] of PACKAGES) {
         } else {
           patched = patched.replace(/(<script\s+type="module")/, `${injection}\n    $1`);
         }
+      }
+
+      // Typography + SDK design-token baseline.
+      //
+      // The SDK's `embed-runtime.css` references CSS custom properties
+      // (--doc-bg, --doc-border, --doc-primary, --doc-text-muted, …)
+      // but DOES NOT define them — the upstream tokens live in
+      // `dist/styles.css`, which the iframe runtime never loads. When
+      // Drive consumed the editor directly (pre-iframe), the parent
+      // page provided those tokens; switching to the iframe broke this
+      // because CSS variables do NOT cross iframe boundaries. Result:
+      // toolbar borders, page-break backgrounds, link colors, hover
+      // states, etc. all render with empty `var(...)` substitutions
+      // (transparent / unstyled / broken).
+      //
+      // The font fallback compounds the visual break: the SDK's error
+      // / loading UIs don't set `font-family` either, so the iframe
+      // body falls back to the browser default (Times serif on Mac).
+      //
+      // Fix: inject a `<style>` block that defines (a) Drive's
+      // typography stack and (b) the SDK's design-token defaults
+      // copied from `dist/styles.css`'s inline `var(token, fallback)`
+      // pairs. This keeps the iframe CSS-isolated (no Drive chrome
+      // bleed), but gives the SDK's CSS the tokens it expects.
+      if (!patched.includes("/* cd-iframe-baseline */")) {
+        const baseline = [
+          "      /* cd-iframe-baseline — typography + missing --doc-* tokens */",
+          "      html, body {",
+          "        font-family: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;",
+          "        -webkit-font-smoothing: antialiased;",
+          "        -moz-osx-font-smoothing: grayscale;",
+          "      }",
+          "      :root {",
+          "        --doc-bg: #ffffff;",
+          "        --doc-bg-subtle: #f1f5f9;",
+          "        --doc-bg-hover: #f1f3f4;",
+          "        --doc-surface: #ffffff;",
+          "        --doc-border: #dadce0;",
+          "        --doc-border-light: #dadce0;",
+          "        --doc-text: #202124;",
+          "        --doc-text-muted: #9ca3af;",
+          "        --doc-text-on-surface: #1f2937;",
+          "        --doc-primary: #1a73e8;",
+          "        --doc-primary-light: #e8f0fe;",
+          "        --doc-primary-hover: #1557b0;",
+          "        --doc-link: #1a73e8;",
+          "        --doc-anim-base: 0.18s ease;",
+          "      }",
+          "",
+        ].join("\n");
+        // Insert as the first rule inside the existing <style> block so
+        // any later SDK-shipped rule can still override.
+        patched = patched.replace(/(<style>\s*)/, `$1\n${baseline}\n`);
       }
 
       if (patched !== raw) {
