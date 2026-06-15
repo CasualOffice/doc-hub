@@ -174,58 +174,17 @@ for (const [pkg, subdir, anchor] of PACKAGES) {
         }
       }
 
-      // Typography + SDK design-token baseline.
-      //
-      // The SDK's `embed-runtime.css` references CSS custom properties
-      // (--doc-bg, --doc-border, --doc-primary, --doc-text-muted, …)
-      // but DOES NOT define them — the upstream tokens live in
-      // `dist/styles.css`, which the iframe runtime never loads. When
-      // Drive consumed the editor directly (pre-iframe), the parent
-      // page provided those tokens; switching to the iframe broke this
-      // because CSS variables do NOT cross iframe boundaries. Result:
-      // toolbar borders, page-break backgrounds, link colors, hover
-      // states, etc. all render with empty `var(...)` substitutions
-      // (transparent / unstyled / broken).
-      //
-      // The font fallback compounds the visual break: the SDK's error
-      // / loading UIs don't set `font-family` either, so the iframe
-      // body falls back to the browser default (Times serif on Mac).
-      //
-      // Fix: inject a `<style>` block that defines (a) Drive's
-      // typography stack and (b) the SDK's design-token defaults
-      // copied from `dist/styles.css`'s inline `var(token, fallback)`
-      // pairs. This keeps the iframe CSS-isolated (no Drive chrome
-      // bleed), but gives the SDK's CSS the tokens it expects.
-      if (!patched.includes("/* cd-iframe-baseline */")) {
-        const baseline = [
-          "      /* cd-iframe-baseline — typography + missing --doc-* tokens */",
-          "      html, body {",
-          "        font-family: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;",
-          "        -webkit-font-smoothing: antialiased;",
-          "        -moz-osx-font-smoothing: grayscale;",
-          "      }",
-          "      :root {",
-          "        --doc-bg: #ffffff;",
-          "        --doc-bg-subtle: #f1f5f9;",
-          "        --doc-bg-hover: #f1f3f4;",
-          "        --doc-surface: #ffffff;",
-          "        --doc-border: #dadce0;",
-          "        --doc-border-light: #dadce0;",
-          "        --doc-text: #202124;",
-          "        --doc-text-muted: #9ca3af;",
-          "        --doc-text-on-surface: #1f2937;",
-          "        --doc-primary: #1a73e8;",
-          "        --doc-primary-light: #e8f0fe;",
-          "        --doc-primary-hover: #1557b0;",
-          "        --doc-link: #1a73e8;",
-          "        --doc-anim-base: 0.18s ease;",
-          "      }",
-          "",
-        ].join("\n");
-        // Insert as the first rule inside the existing <style> block so
-        // any later SDK-shipped rule can still override.
-        patched = patched.replace(/(<style>\s*)/, `$1\n${baseline}\n`);
-      }
+      // NB: the previous "cd-iframe-baseline" injection (IBM Plex Sans
+      // typography + hardcoded --doc-* design tokens) is intentionally
+      // removed. It was justified pre-1.1.5 when the SDK didn't bundle
+      // its dist/styles.css into embed-runtime.css; the baseline kept
+      // the iframe from rendering with empty var(...) substitutions.
+      // Since 1.1.5 the SDK ships the full tailwind layer (with its
+      // own canonical token values) inside embed-runtime.css, AND the
+      // copy-embed step above concatenates styles.css for older SDKs.
+      // Keeping the baseline now LEAKS Drive's typography into the
+      // iframe — IBM Plex Sans overrides Univer's Calibri/Arial and
+      // breaks the doc editor's own font stack. Trust the SDK's CSS.
 
       if (patched !== raw) {
         writeFileSync(htmlPath, patched);

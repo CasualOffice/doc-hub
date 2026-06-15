@@ -119,20 +119,11 @@ The current Notes app is shaped for developers (markdown source pane + literal `
 | NT9 | Real-time collab on notes (Tiptap + Yjs) | — (needs brief; out-of-scope for [`17-notes-general-user-ux`](./docs/research/17-notes-general-user-ux.md)) | P3 | After NT1 + ED2 — Tiptap pivot makes Yjs achievable |
 | NT10 | AI block actions (`/ask AI`, summarise, translate) | — **path-only, not work** | P3 | Integration seam: NT3 slash menu's command list. No brief, no provider pick, no implementation until explicitly prioritised. See [Path-only AI](#path-only-ai-integration-seams) below |
 
-## Theme: Bugs / regressions (user-reported, 2026-06-15)
-
-User flagged five post-reskin regressions in rapid succession. Capture verbatim, fix after the current in-flight task (MK-PERF-95) finishes.
-
-| # | Item | Brief | Priority | Trigger |
-|---|---|---|---|---|
-| BUG-IFRAME-CSS | Drive CSS bleeds inside the .docx / .xlsx iframe — the whole point of the iframe was to stop this; still happening. Verify the iframe is a true cross-document mount (not srcdoc / not a portal); check if any `<link>` in `embed.html` or any postMessage handler injects parent stylesheets; check if the SDK adopts parent `adoptedStyleSheets`. | — (needs note in `project_unified_editor_lifecycle`) | P0 | Reproduced; fix before next push touching the editor |
-
 ## Theme: Marketing site / docs
 
 | # | Item | Brief | Priority | Trigger |
 |---|---|---|---|---|
 | MK1 | Domain flip + final CNAME (`drive.schnsrw.live` → final apex) | [`07-marketing-site`](./docs/research/07-marketing-site.md) | P1 | Calendar / DNS decision; nothing technical blocks it |
-| MK-PERF-95 | **Restore marketing Lighthouse gate to ≥0.95** (currently 0.85 — temporarily relaxed). Phase 1 (AVIF/WebP screenshots) shipped 0.74 → 0.84; preload attempt regressed TBT to 2150ms (decode contention); MK-PERF mobile-variant + 800w shipped on 3f7f73d. **The Slate Console re-skin (2026-06-12) swapped Inter → IBM Plex Sans + Mono** — Plex Variable is heavier than Inter (full Latin range ~95KB vs ~62KB), so the cold-paint budget tightened. Re-baseline locally: `marketing/lighthouserc.json` `cpuSlowdownMultiplier:4` + 3 runs. Investigate: (a) subset Plex Variable to latin-only or per-page weight slice; (b) defer the dark-mode-toggle inline script; (c) code-split any remaining heavy CSS. | [`07-marketing-site`](./docs/research/07-marketing-site.md) + [[design-reskin-slate-console]] | P1 | Pick up before the next marketing-facing release |
 | MK2 | Pagefind docs search | [`07-marketing-site`](./docs/research/07-marketing-site.md) | P2 | After the first user can't find a doc page on their own |
 | MK3 | i18n (start with the marketing site, then docs, then SPA) | — (needs brief) | P3 | First non-English contributor opens an issue |
 
