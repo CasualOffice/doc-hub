@@ -389,24 +389,43 @@ export function Files({
   // there (different folder or a search result that didn't survive the
   // last fetch), fall back to fetching its metadata and opening anyway.
   useEffect(() => {
+    function routeOrPreview(target: FileDto, idx: number | null) {
+      const kind = inferKind(target.name, target.content_type);
+      if (kind === "doc" || kind === "sheet") {
+        const url = `/file/${encodeURIComponent(target.id)}`;
+        window.history.pushState({ file: target }, "", url);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        return;
+      }
+      if (idx !== null) setPreviewIdx(idx);
+    }
     function onOpen(e: Event) {
       const id = (e as CustomEvent<string>).detail;
       if (!id) return;
       if (state.kind !== "ready") return;
       const idx = state.files.findIndex((f) => f.id === id);
       if (idx >= 0) {
-        setPreviewIdx(idx);
+        routeOrPreview(state.files[idx], idx);
         return;
       }
       // Not in the current pane — pull it as a singleton list so the
-      // preview modal has something to render.
+      // preview modal has something to render (for non-editor types;
+      // editor types route to /file/<id> directly).
       void (async () => {
         try {
           const meta = await fetch(`/api/files/${encodeURIComponent(id)}`)
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null);
           if (meta && typeof meta === "object" && "id" in meta) {
-            setState({ kind: "ready", folders: [], files: [meta as FileDto] });
+            const file = meta as FileDto;
+            const kind = inferKind(file.name, file.content_type);
+            if (kind === "doc" || kind === "sheet") {
+              const url = `/file/${encodeURIComponent(file.id)}`;
+              window.history.pushState({ file }, "", url);
+              window.dispatchEvent(new PopStateEvent("popstate"));
+              return;
+            }
+            setState({ kind: "ready", folders: [], files: [file] });
             setPreviewIdx(0);
           }
         } catch {
@@ -813,7 +832,22 @@ export function Files({
   function handlersFor(entry: MenuEntry): EntryMenuHandlers {
     const openFile = (id: string) => {
       const i = fileList.findIndex((f) => f.id === id);
-      if (i >= 0) setPreviewIdx(i);
+      if (i < 0) return;
+      const target = fileList[i];
+      // Editor-eligible files (.docx, .xlsx, and any future co-edit
+      // formats wired into `inferKind`) bypass the PreviewModal and
+      // route straight to /file/<id> — the modal-first flow had a
+      // wasteful "click again to actually open" step the user pushed
+      // back on. Non-editor files (PDF, images, video, raw text, etc.)
+      // still get the modal as their preview surface.
+      const kind = inferKind(target.name, target.content_type);
+      if (kind === "doc" || kind === "sheet") {
+        const url = `/file/${encodeURIComponent(target.id)}`;
+        window.history.pushState({ file: target }, "", url);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        return;
+      }
+      setPreviewIdx(i);
     };
     if (entry.kind === "folder") {
       return {
@@ -1116,7 +1150,16 @@ export function Files({
                 if (entry.kind === "folder") enterFolder(entry.folder);
                 else {
                   const i = fileList.findIndex((f) => f.id === entry.file.id);
-                  if (i >= 0) setPreviewIdx(i);
+                  if (i < 0) return;
+                  const target = fileList[i];
+                  const kind = inferKind(target.name, target.content_type);
+                  if (kind === "doc" || kind === "sheet") {
+                    const url = `/file/${encodeURIComponent(target.id)}`;
+                    window.history.pushState({ file: target }, "", url);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  } else {
+                    setPreviewIdx(i);
+                  }
                 }
               }}
               handlersFor={handlersFor}
@@ -1132,7 +1175,16 @@ export function Files({
                 if (entry.kind === "folder") enterFolder(entry.folder);
                 else {
                   const i = fileList.findIndex((f) => f.id === entry.file.id);
-                  if (i >= 0) setPreviewIdx(i);
+                  if (i < 0) return;
+                  const target = fileList[i];
+                  const kind = inferKind(target.name, target.content_type);
+                  if (kind === "doc" || kind === "sheet") {
+                    const url = `/file/${encodeURIComponent(target.id)}`;
+                    window.history.pushState({ file: target }, "", url);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  } else {
+                    setPreviewIdx(i);
+                  }
                 }
               }}
               handlersFor={handlersFor}

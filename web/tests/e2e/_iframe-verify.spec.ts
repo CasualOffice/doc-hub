@@ -62,7 +62,7 @@ test("embed runtime is reachable at /embed/sheets and /embed/docs", async ({ pag
   expect(docRuntime.status()).toBe(200);
 });
 
-test("create new .xlsx → preview modal opens with iframe in preview mode", async ({ page }) => {
+test("create new .xlsx → card click routes to /file/<id> + editor iframe", async ({ page }) => {
   const errors = installErrorListener(page);
 
   // Click New → New spreadsheet
@@ -79,14 +79,16 @@ test("create new .xlsx → preview modal opens with iframe in preview mode", asy
   });
 
   // Click the new file card — target the card class, not bare text.
+  // Editor-eligible files (.xlsx) skip the PreviewModal entirely and
+  // route straight to /file/<id> in editor mode.
   const card = page.locator(".cd-file-card").filter({ hasText: /Untitled spreadsheet/i });
   await card.scrollIntoViewIfNeeded();
   await card.click();
 
-  // The iframe mounts via CasualSheetWorkspace.
+  await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
   const iframe = page.getByTestId("casual-sheet-workspace");
   await expect(iframe).toBeVisible({ timeout: 10_000 });
-  await expect(iframe).toHaveAttribute("src", /viewMode=preview/);
+  await expect(iframe).toHaveAttribute("src", /viewMode=editor/);
 
   // Give the iframe a chance to actually load and run its script.
   await page.waitForTimeout(2_000);
@@ -94,13 +96,13 @@ test("create new .xlsx → preview modal opens with iframe in preview mode", asy
   // No console errors / page errors during the mount.
   if (errors.length > 0) {
     throw new Error(
-      `Browser captured ${errors.length} error(s) during preview mount:\n` +
+      `Browser captured ${errors.length} error(s) during editor mount:\n` +
         errors.map((e) => `  [${e.source}] ${e.text}`).join("\n"),
     );
   }
 });
 
-test("create new .docx → preview modal opens with iframe in preview mode", async ({ page }) => {
+test("create new .docx → card click routes to /file/<id> + editor iframe", async ({ page }) => {
   const errors = installErrorListener(page);
 
   await page.getByRole("button", { name: /^New$/ }).click();
@@ -112,21 +114,22 @@ test("create new .docx → preview modal opens with iframe in preview mode", asy
   await card.scrollIntoViewIfNeeded();
   await card.click();
 
+  await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
   const iframe = page.getByTestId("casual-doc-editor");
   await expect(iframe).toBeVisible({ timeout: 10_000 });
-  await expect(iframe).toHaveAttribute("src", /viewMode=preview/);
+  await expect(iframe).toHaveAttribute("src", /viewMode=editor/);
 
   await page.waitForTimeout(2_000);
 
   if (errors.length > 0) {
     throw new Error(
-      `Browser captured ${errors.length} error(s) during preview mount:\n` +
+      `Browser captured ${errors.length} error(s) during editor mount:\n` +
         errors.map((e) => `  [${e.source}] ${e.text}`).join("\n"),
     );
   }
 });
 
-test("Open in editor → /file/<id> mounts iframe in editor mode", async ({ page }) => {
+test("card click on a .xlsx → /file/<id> mounts iframe in editor mode", async ({ page }) => {
   await page.getByRole("button", { name: /^New$/ }).click();
   await page.getByRole("menuitem", { name: /New spreadsheet/i }).click();
   await expect(page.getByText(/Created Untitled spreadsheet/i)).toBeHidden({
@@ -137,7 +140,6 @@ test("Open in editor → /file/<id> mounts iframe in editor mode", async ({ page
   await card.scrollIntoViewIfNeeded();
   await card.click();
 
-  await page.getByRole("button", { name: /Open in editor/i }).click();
   await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
 
   const iframe = page.getByTestId("casual-sheet-workspace");

@@ -26,24 +26,13 @@ test.beforeEach(async ({ page }) => {
   await signInDemo(page);
 });
 
-test("preview .xlsx → primary action navigates to /file/<id> with editor chrome", async ({ page }) => {
+test("click .xlsx card routes straight to /file/<id> with editor chrome", async ({ page }) => {
   // The demo seeds a 'Q2 planning.xlsx' file at the workspace root.
+  // Editor-eligible files (.xlsx) bypass the PreviewModal entirely —
+  // a single click routes to /file/<id> in editor mode (per the
+  // 2026-06-15 UX directive that the modal-first flow was wasteful).
   await page.getByText("Q2 planning.xlsx").first().click();
-  // The PreviewModal mounts CasualSheetWorkspace via PreviewStage.
-  // It immediately fires through DriveFileSource → xlsxToWorkbookData.
-  // For the empty seeded Blob the loader may resolve to an error or
-  // a near-empty workbook — either way the host wrapper renders one
-  // of its known testids (loading / ready / error).
-  const stage = page.getByTestId("casual-sheet-workspace").or(
-    page.getByTestId("casual-sheet-workspace-loading").or(
-      page.getByTestId("casual-sheet-workspace-error"),
-    ),
-  );
-  await expect(stage).toBeVisible({ timeout: 15_000 });
 
-  // Click "Open in editor" — should navigate to /file/<id> and
-  // mount FileFullscreen with editor chrome (mode=editor).
-  await page.getByRole("button", { name: /Open in editor/i }).click();
   await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
   await expect(page.getByTestId("file-fullscreen")).toBeVisible();
   await expect(page.getByTestId("file-fullscreen-title")).toHaveText("Q2 planning.xlsx");
@@ -59,15 +48,9 @@ test("preview .xlsx → primary action navigates to /file/<id> with editor chrom
   await expect(fullscreenStage).toBeVisible({ timeout: 15_000 });
 });
 
-test("preview .docx → primary action navigates to /file/<id>", async ({ page }) => {
+test("click .docx card routes straight to /file/<id>", async ({ page }) => {
   await page.getByText("Product brief.docx").first().click();
-  // PreviewStage mounts CasualDocEditor for kind='doc'. Wait for
-  // the editor's outer wrapper (the lazy chunk has to land first).
-  await expect(page.getByText(/Loading editor…|Couldn't open|Casual/i).first()).toBeVisible({
-    timeout: 15_000,
-  });
 
-  await page.getByRole("button", { name: /Open in editor/i }).click();
   await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
   await expect(page.getByTestId("file-fullscreen")).toBeVisible();
   await expect(page.getByTestId("file-fullscreen-title")).toHaveText("Product brief.docx");
@@ -98,7 +81,6 @@ test("/file/<unknown> cold load surfaces the not-found error", async ({ page }) 
 
 test("back arrow returns from /file/<id> to /", async ({ page }) => {
   await page.getByText("Q2 planning.xlsx").first().click();
-  await page.getByRole("button", { name: /Open in editor/i }).click();
   await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
   await page.getByTestId("file-fullscreen-back").click();
   await expect(page).toHaveURL(/\/(\?.*)?$/);
@@ -109,7 +91,6 @@ test("back arrow returns from /file/<id> to /", async ({ page }) => {
 
 test("document.title tracks the open file's name", async ({ page }) => {
   await page.getByText("Q2 planning.xlsx").first().click();
-  await page.getByRole("button", { name: /Open in editor/i }).click();
   await expect(page).toHaveURL(/\/file\//, { timeout: 5_000 });
   // Tab title flips to include the filename. (The fullscreen page
   // restores the prior title on unmount.)

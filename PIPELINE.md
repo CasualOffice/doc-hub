@@ -129,7 +129,6 @@ User flagged five post-reskin regressions in rapid succession. Capture verbatim,
 | BUG-KEBAB-INVISIBLE | Post-reskin: file-card context kebab is invisible — user sees a yellow box (likely default focus outline on an `opacity:0` button). Check `EntryMenu.tsx:263 kebabStyle()`. | — | P0 | Reproduced post-reskin |
 | BUG-RIGHT-CLICK | Right-click context menu does not open. `onContextMenu` handler may have been broken by the reskin's surface refactor; check `EntryMenu.tsx` + `FileCard` / `FileRow`. | — | P0 | Reproduced post-reskin |
 | BUG-CONSISTENCY | "no consistency" — post-reskin the surface lost the visual rhythm. Diagnose: sweep all surfaces (Sidebar, header, file cards, modals, settings, notes) and tighten spacing / type / color back to the design system. | [[design-reskin-slate-console]] | P0 | Walk every flow with the user |
-| BUG-EDITOR-DIALOG-DEFAULT | `.docx` / `.xlsx` open in the preview modal by default; user has repeatedly asked for these to route directly to `/file/<id>` (the editor route) instead. Editor-eligible files should bypass the modal entirely and land on the fullscreen editor. | [[project_unified_editor_lifecycle]] | P0 | User has reminded multiple times — this overrides the current modal-first default |
 
 ## Theme: Marketing site / docs
 
