@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight as ChevronRightSeparator, Link2, MoreHorizontal, UploadCloud } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { toast } from "sonner";
@@ -1869,23 +1869,29 @@ function GhostCard({ name }: { name: string }) {
   );
 }
 
-function Card({
-  children,
-  onClick,
-  folder,
-  kebab,
-  selected,
-}: {
-  children: React.ReactNode;
-  onClick?: (e: React.MouseEvent) => void;
-  folder?: boolean;
-  kebab?: React.ReactNode;
-  selected?: boolean;
-}) {
+// `Card` is a Radix `asChild` consumer (the `<EntryContextMenu>` wraps
+// every card with a `ContextMenu.Trigger asChild`). For that to work,
+// Card MUST forward refs AND spread arbitrary props through to the
+// underlying <div> — otherwise Radix's injected `onContextMenu` and
+// `ref` get dropped on the floor and right-click does nothing. This is
+// what BUG-RIGHT-CLICK turned out to be post-reskin: the surface
+// refactor lost the `...rest` spread.
+const Card = React.forwardRef<
+  HTMLDivElement,
+  {
+    children: React.ReactNode;
+    onClick?: (e: React.MouseEvent) => void;
+    folder?: boolean;
+    kebab?: React.ReactNode;
+    selected?: boolean;
+  } & Omit<React.HTMLAttributes<HTMLDivElement>, "onClick" | "children">
+>(function Card({ children, onClick, folder, kebab, selected, ...rest }, ref) {
   return (
     <div
+      ref={ref}
       onClick={onClick}
       className={folder ? "cd-folder-card" : "cd-file-card"}
+      {...rest}
       style={{
         background: selected ? "var(--bg-selected)" : "var(--card)",
         border: `${selected ? "2px" : "1px"} solid ${selected ? "var(--accent)" : "var(--line)"}`,
@@ -1896,6 +1902,7 @@ function Card({
         boxShadow: "var(--shadow)",
         position: "relative",
         userSelect: "none",
+        ...(rest.style ?? {}),
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = "translateY(-3px)";
@@ -1968,7 +1975,7 @@ function Card({
       `}</style>
     </div>
   );
-}
+});
 
 function CardMeta({
   name,
@@ -2104,42 +2111,38 @@ function ListView({
   );
 }
 
-function ListRow({
-  fileId,
-  name,
-  kind,
-  type,
-  modified,
-  size,
-  onClick,
-  last,
-  ghost,
-  kebab,
-  thumbnail,
-  thumbUrls,
-  selected,
-}: {
-  /** Optional — only the file rows have it; the upload-ghost row
-   * passes nothing because there's no committed id yet. When
-   * present, used to look up peer-viewing state for the dot. */
-  fileId?: string;
-  name: string;
-  kind: FileKind;
-  type: string;
-  modified: string;
-  size: string;
-  onClick?: (e: React.MouseEvent) => void;
-  last?: boolean;
-  ghost?: boolean;
-  kebab?: React.ReactNode;
-  thumbnail?: string | null;
-  thumbUrls?: { small: string; medium: string; large: string } | null;
-  selected?: boolean;
-}) {
+// Same `asChild` forwardRef contract as `Card` — without it the
+// list-row right-click context menu silently no-ops.
+const ListRow = React.forwardRef<
+  HTMLDivElement,
+  {
+    /** Optional — only the file rows have it; the upload-ghost row
+     * passes nothing because there's no committed id yet. When
+     * present, used to look up peer-viewing state for the dot. */
+    fileId?: string;
+    name: string;
+    kind: FileKind;
+    type: string;
+    modified: string;
+    size: string;
+    onClick?: (e: React.MouseEvent) => void;
+    last?: boolean;
+    ghost?: boolean;
+    kebab?: React.ReactNode;
+    thumbnail?: string | null;
+    thumbUrls?: { small: string; medium: string; large: string } | null;
+    selected?: boolean;
+  } & Omit<React.HTMLAttributes<HTMLDivElement>, "onClick">
+>(function ListRow(
+  { fileId, name, kind, type, modified, size, onClick, last, ghost, kebab, thumbnail, thumbUrls, selected, ...rest },
+  ref,
+) {
   return (
     <div
+      ref={ref}
       onClick={onClick}
       className="cd-list-row"
+      {...rest}
       style={{
         display: "grid",
         gridTemplateColumns: "2.5fr 1fr 1fr 80px 42px",
@@ -2206,7 +2209,7 @@ function ListRow({
       `}</style>
     </div>
   );
-}
+});
 
 function GridSkeleton({ view }: { view: ViewMode }) {
   if (view === "grid") {

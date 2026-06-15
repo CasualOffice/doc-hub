@@ -154,11 +154,11 @@ export function EntryKebab({
           style={kebabStyle()}
           onMouseOver={(e) => {
             e.currentTarget.style.background = "var(--bg-hover)";
-            e.currentTarget.style.borderColor = "var(--line-strong)";
+            e.currentTarget.style.borderColor = "var(--accent)";
           }}
           onMouseOut={(e) => {
-            e.currentTarget.style.background = "rgba(251,250,246,.92)";
-            e.currentTarget.style.borderColor = "var(--line)";
+            e.currentTarget.style.background = "var(--card)";
+            e.currentTarget.style.borderColor = "var(--line-strong)";
           }}
         >
           <MoreHorizontal size={15} strokeWidth={1.8} />
@@ -264,9 +264,12 @@ function kebabStyle(): React.CSSProperties {
   return {
     width: 26,
     height: 26,
-    border: "1px solid var(--line)",
+    border: "1px solid var(--line-strong)",
     borderRadius: 7,
-    background: "rgba(251,250,246,.92)",
+    // Slate Console — palette-aware, dark-mode-safe. The pre-reskin
+    // value was the warm-paper rgba(251,250,246,.92); against the new
+    // cool-paper #F6F8FA card surface it blended into invisibility.
+    background: "var(--card)",
     color: "var(--ink)",
     display: "inline-flex",
     alignItems: "center",
@@ -275,5 +278,6 @@ function kebabStyle(): React.CSSProperties {
     backdropFilter: "blur(6px)",
     WebkitBackdropFilter: "blur(6px)",
     transition: "background 150ms, border-color 150ms",
+    boxShadow: "0 1px 3px rgba(15, 23, 42, 0.08)",
   };
 }
