@@ -289,6 +289,16 @@ export function useViewingFile(fileId: string | null | undefined): PresenceUser 
   return users.find((u) => u.viewing === fileId) ?? null;
 }
 
+/** Every peer (excluding self) currently viewing the given file. Used
+ * by `<FileFullscreen>` to render a presence avatar stack in the
+ * editor header. Empty list when no peers are present or fileId is
+ * null/undefined. */
+export function usePeersViewingFile(fileId: string | null | undefined): PresenceUser[] {
+  const users = useCtx().users;
+  if (!fileId) return [];
+  return users.filter((u) => u.viewing === fileId);
+}
+
 /** Imperative setter for the caller's own "viewing this file" pin.
  * Wire from the preview modal / editor mount so peers see what
  * you're looking at. Pass `null` to clear. */

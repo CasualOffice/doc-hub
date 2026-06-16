@@ -34,6 +34,7 @@ import { toast } from "sonner";
 
 import { downloadUrl, getFile, renameFile, trashFile, type FileDto } from "../api/client.ts";
 import { EntryKebab } from "../components/EntryMenu.tsx";
+import { FilePresenceStack } from "../components/FilePresenceStack.tsx";
 import { inferKind } from "../components/FileThumb.tsx";
 import { SaveStatusPill } from "../components/editor/SaveStatusPill.tsx";
 import type { SaveStatus } from "../components/editor/save-status.ts";
@@ -279,6 +280,7 @@ function FullscreenHeader({
       <FilenameField name={file?.name ?? "Loading…"} editable={!!file} onCommit={onRename} />
       <SaveStatusPill status={saveStatus} />
       <div style={{ flex: 1 }} />
+      <FilePresenceStack fileId={file?.id} />
       {file && (
         <>
           <button
