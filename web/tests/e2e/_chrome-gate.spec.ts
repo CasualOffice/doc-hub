@@ -200,6 +200,21 @@ test("UX-EDITOR-5: xlsx preview shows friendly fallback instead of parse error",
   await expect(page.getByText(/Failed to load workbook/i)).toHaveCount(0);
 });
 
+test("UX-EDITOR-8 phase 2: FileFullscreen Details pill opens drawer with same panel", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await openSheetEditor(page);
+  await expect(page.getByTestId("file-fullscreen-details")).toBeVisible();
+  await page.getByTestId("file-fullscreen-details").click();
+  await page.getByTestId("file-fullscreen-details-drawer").waitFor({ timeout: 5_000 });
+  await expect(page.getByTestId("details-panel")).toBeVisible();
+  await expect(page.getByTestId("details-tab-info")).toBeVisible();
+  // Esc closes the drawer
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("file-fullscreen-details-drawer")).toHaveCount(0);
+});
+
 test("UX-EDITOR-8: PreviewModal Details panel mounts all 3 tabs", async ({ page }) => {
   test.setTimeout(60_000);
   await page.getByText("Q2 planning.xlsx").first().click();

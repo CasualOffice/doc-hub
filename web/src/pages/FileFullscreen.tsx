@@ -29,10 +29,11 @@
  */
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Share2 } from "lucide-react";
+import { ArrowLeft, Info, Share2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { downloadUrl, getFile, renameFile, trashFile, type FileDto } from "../api/client.ts";
+import { DetailsPanel } from "../components/DetailsPanel.tsx";
 import { EntryKebab } from "../components/EntryMenu.tsx";
 import { FilePresenceStack } from "../components/FilePresenceStack.tsx";
 import { inferKind } from "../components/FileThumb.tsx";
@@ -189,6 +190,10 @@ export function FileFullscreen({ fileId }: FileFullscreenProps) {
   // round-trips. The pill collapses to nothing in the idle state.
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
 
+  // Details drawer state — opens via the header Details pill, slides
+  // in from the right edge with the same DetailsPanel the modal uses.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <div
       data-testid="file-fullscreen"
@@ -206,6 +211,7 @@ export function FileFullscreen({ fileId }: FileFullscreenProps) {
         saveStatus={saveStatus}
         onBack={goBack}
         onRename={onRename}
+        onOpenDetails={() => setDetailsOpen(true)}
         onTrash={() => {
           if (state.kind !== "ready") return;
           void (async () => {
@@ -226,6 +232,9 @@ export function FileFullscreen({ fileId }: FileFullscreenProps) {
       <main style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <FullscreenBody state={state} onSaveStatus={setSaveStatus} />
       </main>
+      {state.kind === "ready" && (
+        <DetailsDrawer file={state.file} open={detailsOpen} onClose={() => setDetailsOpen(false)} />
+      )}
     </div>
   );
 }
@@ -235,6 +244,7 @@ function FullscreenHeader({
   saveStatus,
   onBack,
   onRename,
+  onOpenDetails,
   onTrash,
   onDownload,
 }: {
@@ -242,6 +252,7 @@ function FullscreenHeader({
   saveStatus: SaveStatus;
   onBack: () => void;
   onRename: (name: string) => void;
+  onOpenDetails: () => void;
   onTrash: () => void;
   onDownload: () => void;
 }) {
@@ -283,6 +294,29 @@ function FullscreenHeader({
       <FilePresenceStack fileId={file?.id} />
       {file && (
         <>
+          <button
+            type="button"
+            onClick={onOpenDetails}
+            aria-label="File details"
+            title="File details"
+            data-testid="file-fullscreen-details"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 12px",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              background: "var(--card)",
+              cursor: "pointer",
+              fontSize: "var(--text-sm)",
+              fontWeight: 500,
+              color: "var(--text)",
+            }}
+          >
+            <Info size={14} />
+            Details
+          </button>
           <button
             type="button"
             onClick={() => setShareOpen(true)}
@@ -531,5 +565,114 @@ function LoadingFallback() {
     >
       Loading editor…
     </div>
+  );
+}
+
+/** Right-edge slide-in drawer that hosts the shared DetailsPanel from
+ *  the Preview modal. 360 px wide, slides in over the editor. Close on
+ *  Esc, on backdrop click, or via the X button. Designed to feel like
+ *  Google Docs' "Document details" side panel — accessible alongside
+ *  the editor without forcing a navigation. */
+function DetailsDrawer({
+  file,
+  open,
+  onClose,
+}: {
+  file: FileDto;
+  open: boolean;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div
+        aria-hidden
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15, 23, 42, 0.18)",
+          backdropFilter: "blur(2px)",
+          WebkitBackdropFilter: "blur(2px)",
+          zIndex: 90,
+          animation: "cd-details-fade 180ms ease-out",
+        }}
+      />
+      <aside
+        role="dialog"
+        aria-label="File details"
+        data-testid="file-fullscreen-details-drawer"
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 360,
+          maxWidth: "92vw",
+          background: "var(--card)",
+          borderLeft: "1px solid var(--line)",
+          boxShadow: "var(--shadow-xl, -8px 0 28px rgba(15, 23, 42, 0.12))",
+          zIndex: 100,
+          display: "flex",
+          flexDirection: "column",
+          animation: "cd-details-slide 220ms cubic-bezier(.2,.7,.2,1)",
+        }}
+      >
+        <header
+          style={{
+            flex: "0 0 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text)" }}>
+            Details
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close details"
+            data-testid="file-fullscreen-details-close"
+            style={{
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              color: "var(--muted)",
+              padding: 4,
+              borderRadius: 6,
+              display: "inline-flex",
+            }}
+          >
+            <X size={16} />
+          </button>
+        </header>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <DetailsPanel file={file} />
+        </div>
+      </aside>
+      <style>{`
+        @keyframes cd-details-fade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes cd-details-slide {
+          from { transform: translateX(24px); opacity: 0.4; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
+    </>
   );
 }
