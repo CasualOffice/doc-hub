@@ -33,7 +33,7 @@ docker run -d --name drive \
   -e DRIVE_USERCONTENT_ORIGIN=https://usercontent-drive.your-server \
   -e DRIVE_STORAGE_BACKEND=fs \
   -e DRIVE_FS_ROOT=/data \
-  ghcr.io/schnsrw/casual-drive:latest
+  ghcr.io/casualoffice/drive:latest
 ```
 
 Visit `https://drive.your-server`, complete the one-time admin setup, upload a file, click it. That's the demo. Full env-var matrix at <https://drive.casualoffice.org/docs/configuration>.

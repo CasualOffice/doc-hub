@@ -102,7 +102,7 @@ Three pieces:
 
 ## Distribution
 
-- The `drive` Docker image gains a second binary (`drive-thumb-worker`) in the same layer. Operators running `docker run ghcr.io/schnsrw/casual-drive:latest` get both.
+- The `drive` Docker image gains a second binary (`drive-thumb-worker`) in the same layer. Operators running `docker run ghcr.io/casualoffice/drive:latest` get both.
 - Source builds: `cargo build --workspace` builds both binaries; install instructions get a one-line addition.
 - Bare-metal installs without `ffmpeg` on PATH gracefully degrade to "PDF thumbs only" (worker still spawns for PDFs).
 
