@@ -2,7 +2,7 @@
 
 **Revised 2026-06-08** — SDK is the primary integration. Iframe path is out of scope for Phase 1; the existing WOPI new-tab handoff covers the isolated-launch case.
 
-Companion to `08-editor-handoff.md` (current WOPI new-tab handoff) and `07-preview-surface.md` (where the editor mounts). Source contracts: [`13-iframe-protocol.md`](https://github.com/schnsrw/docx/blob/main/docs/internal/13-iframe-protocol.md) + [`14-sdk-delivery.md`](https://github.com/schnsrw/docx/blob/main/docs/internal/14-sdk-delivery.md).
+Companion to `08-editor-handoff.md` (current WOPI new-tab handoff) and `07-preview-surface.md` (where the editor mounts). Source contracts: [`13-iframe-protocol.md`](https://github.com/CasualOffice/docs/blob/main/docs/internal/13-iframe-protocol.md) + [`14-sdk-delivery.md`](https://github.com/CasualOffice/docs/blob/main/docs/internal/14-sdk-delivery.md).
 
 ## What's already shipped
 
@@ -195,8 +195,8 @@ Same-origin, same auth cookie, no token mint. Iframe + postMessage stay shipped 
 ## Required reading before code lands
 
 1. This doc.
-2. [Casual Editor SDK delivery](https://github.com/schnsrw/docx/blob/main/docs/internal/14-sdk-delivery.md) — `FileSource` interface contract.
-3. [Casual Sheets signing + embed](https://github.com/schnsrw/sheets/blob/main/docs/SDK_SIGNING_EMBED.md).
+2. [Casual Editor SDK delivery](https://github.com/CasualOffice/docs/blob/main/docs/internal/14-sdk-delivery.md) — `FileSource` interface contract.
+3. [Casual Sheets signing + embed](https://github.com/CasualOffice/sheets/blob/main/docs/SDK_SIGNING_EMBED.md).
 4. `08-editor-handoff.md` (existing WOPI path).
 5. `crates/drive-http/src/files.rs` — current file routes (add content endpoints alongside).
 

@@ -28,7 +28,7 @@ Companion to `docs/research/07-marketing-site.md`. Page-by-page surface spec for
 ┌─ Footer ──────────────────────────────────────────────────────────┐
 │  Casual Drive · part of Casual Office · MIT                       │
 │  Repo   Discussions   Issues   Releases   Sheet ↗   Document ↗    │
-│  © 2026 — schnsrw.live                                            │
+│  © 2026 — casualoffice.org                                            │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

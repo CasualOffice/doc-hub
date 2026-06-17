@@ -1,6 +1,6 @@
 // Demo-mode backend shim — no server, browser-storage backed.
 //
-// Compiled in when VITE_DEMO_MODE=1 (GitHub Pages build at drive.schnsrw.live).
+// Compiled in when VITE_DEMO_MODE=1 (GitHub Pages build at drive.casualoffice.org).
 // Metadata persists across reloads via localStorage under `cd-demo-state-v1`.
 // Uploaded file blobs live in a module-scope Map (not persisted — too large
 // for localStorage). Pipeline issue #12 upgrades blob persistence to IndexedDB.
@@ -190,12 +190,12 @@ function seedBlobs() {
           `## What works in the real build\n\n` +
           `1. Multi-backend storage (filesystem, S3, MinIO) via OpenDAL.\n` +
           `2. Argon2id passwords + tower-sessions cookies.\n` +
-          `3. WOPI handoff to [Casual Sheets](https://schnsrw.live) and\n` +
+          `3. WOPI handoff to [Casual Sheets](https://casualoffice.org) and\n` +
           `   Casual Editor for live co-editing.\n` +
           `4. Two-origin model — app bytes and file bytes never share an\n` +
           `   origin, so a malicious upload can't talk back to the SPA.\n\n` +
           `> Self-host the real thing from\n` +
-          `> [github.com/schnsrw/drive](https://github.com/schnsrw/drive).\n`,
+          `> [github.com/CasualOffice/drive](https://github.com/CasualOffice/drive).\n`,
       ],
       { type: "text/markdown" },
     ),
@@ -482,7 +482,7 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       git_sha: "demo",
       built_at: new Date().toISOString(),
       license: "Apache-2.0",
-      repository: "https://github.com/schnsrw/drive",
+      repository: "https://github.com/CasualOffice/drive",
       storage_backend: "Browser (localStorage)",
       db_backend: "Browser (localStorage)",
       signed_url_ttl_secs: 300,

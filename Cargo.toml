@@ -25,8 +25,8 @@ version      = "0.0.1"
 edition      = "2021"
 license      = "Apache-2.0"
 authors      = ["Casual Drive contributors"]
-repository   = "https://github.com/schnsrw/drive"
-homepage     = "https://schnsrw.live"
+repository   = "https://github.com/CasualOffice/drive"
+homepage     = "https://casualoffice.org"
 rust-version = "1.85"
 
 [workspace.dependencies]

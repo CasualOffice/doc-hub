@@ -1,7 +1,7 @@
 import { Sparkles } from "lucide-react";
 
 /**
- * Top-of-shell strip shown when VITE_DEMO_MODE=1 (the drive.schnsrw.live
+ * Top-of-shell strip shown when VITE_DEMO_MODE=1 (the drive.casualoffice.org
  * Pages build). Tells the visitor up front that there is no server and
  * their changes won't survive a reload.
  */
@@ -27,7 +27,7 @@ export function DemoBanner() {
       <span>
         <strong style={{ fontWeight: 600 }}>Demo</strong> · in-memory only · changes reset on reload ·{" "}
         <a
-          href="https://github.com/schnsrw/drive"
+          href="https://github.com/CasualOffice/drive"
           target="_blank"
           rel="noreferrer"
           style={{ color: "var(--accent)", textDecoration: "underline", textDecorationThickness: 1 }}
