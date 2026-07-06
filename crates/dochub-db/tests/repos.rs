@@ -406,7 +406,11 @@ async fn workspace_dek_get_or_create_roundtrip() {
     // First call creates + persists the row.
     let dek_a = deks.get_or_create(&ws1).await.unwrap();
     assert!(
-        WorkspaceKeysRepo::new(&db).get(&ws1).await.unwrap().is_some(),
+        WorkspaceKeysRepo::new(&db)
+            .get(&ws1)
+            .await
+            .unwrap()
+            .is_some(),
         "first get_or_create must persist a wrapped DEK"
     );
 

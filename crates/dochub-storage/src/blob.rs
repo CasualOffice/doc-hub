@@ -57,11 +57,7 @@ impl Storage {
     /// fresh random nonce, the same plaintext yields a different key each call;
     /// dedup happens at the *ciphertext* level — an identical ciphertext (i.e.
     /// the same key) is written at most once.
-    pub async fn put_blob(
-        &self,
-        dek: &Dek,
-        plaintext: &[u8],
-    ) -> Result<StorageKey, StorageError> {
+    pub async fn put_blob(&self, dek: &Dek, plaintext: &[u8]) -> Result<StorageKey, StorageError> {
         let ciphertext = seal(dek, plaintext).0;
         self.write_once(&ciphertext).await
     }
@@ -69,10 +65,14 @@ impl Storage {
     /// Read the blob at `key` and open it under `dek`, returning the plaintext.
     pub async fn get_blob(&self, dek: &Dek, key: &StorageKey) -> Result<Vec<u8>, StorageError> {
         validate_key(key.as_str())?;
-        let ciphertext = self.op.read(key.as_str()).await.map_err(|e| match e.kind() {
-            opendal::ErrorKind::NotFound => StorageError::NotFound(key.as_str().to_string()),
-            _ => StorageError::Backend(e),
-        })?;
+        let ciphertext = self
+            .op
+            .read(key.as_str())
+            .await
+            .map_err(|e| match e.kind() {
+                opendal::ErrorKind::NotFound => StorageError::NotFound(key.as_str().to_string()),
+                _ => StorageError::Backend(e),
+            })?;
         Ok(open(dek, &ciphertext.to_vec())?)
     }
 
@@ -110,7 +110,11 @@ mod tests {
 
         // Inspect the raw bytes the backend actually stored.
         let stored = storage.op.read(sk.as_str()).await.unwrap().to_vec();
-        assert_ne!(stored.as_slice(), plaintext, "stored bytes must be ciphertext");
+        assert_ne!(
+            stored.as_slice(),
+            plaintext,
+            "stored bytes must be ciphertext"
+        );
         assert!(
             !stored
                 .windows(plaintext.len())
@@ -156,7 +160,11 @@ mod tests {
         // Replace the stored bytes with a sentinel, then write the same
         // ciphertext again. If dedup holds, the second write is skipped and the
         // sentinel survives — proving no double-write / no overwrite.
-        storage.op.write(k1.as_str(), b"SENTINEL".to_vec()).await.unwrap();
+        storage
+            .op
+            .write(k1.as_str(), b"SENTINEL".to_vec())
+            .await
+            .unwrap();
         let k2 = storage.write_once(&ciphertext).await.unwrap();
         assert_eq!(k1, k2, "same ciphertext resolves to the same key");
         assert_eq!(
