@@ -38,8 +38,20 @@ const shots = [
 ];
 ---
 
-<section class="showcase cv-auto" aria-label="Product screenshots">
+<section class="showcase cv-auto" aria-label="Preview of today's Casual Drive UI">
   <div class="container">
+    <header class="section-header">
+      <p class="section-eyebrow">Preview</p>
+      <h2 class="section-title">A look at today's UI.</h2>
+      <p class="section-lede">
+        These shots are the current pre-pivot Casual Drive interface. The
+        Doc-Hub web app — history timeline, encrypted document view, native
+        editors — ships alongside the server in Phase 2 (see the
+        <a href="/roadmap">roadmap</a>). Until then, the demo reflects the Drive
+        UI.
+      </p>
+    </header>
+
     <div class="showcase-frame">
       <div class="showcase-tabs" role="tablist">
         {
@@ -145,6 +157,45 @@ const shots = [
 </script>
 
 <style>
+  .section-header {
+    text-align: center;
+    max-width: 680px;
+    margin: 0 auto var(--space-12);
+  }
+
+  .section-eyebrow {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent-strong);
+    margin-bottom: var(--space-3);
+  }
+
+  .section-title {
+    font-size: var(--text-3xl);
+    letter-spacing: -0.025em;
+    margin-bottom: var(--space-3);
+  }
+
+  @media (min-width: 768px) {
+    .section-title {
+      font-size: var(--text-4xl);
+    }
+  }
+
+  .section-lede {
+    color: var(--muted);
+    font-size: var(--text-md);
+    line-height: 1.6;
+  }
+
+  .section-lede a {
+    color: var(--accent-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .showcase {
     padding-block: var(--space-8) var(--space-16);
   }

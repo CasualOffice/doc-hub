@@ -1,0 +1,181 @@
+---
+/**
+ * /vision — long-form narrative adapted verbatim from VISION.md.
+ * Standalone page: wraps Base directly (no docs sidebar). Uses the global
+ * .container-narrow + .page-head + .prose utilities (see base.css §5).
+ */
+import Base from "../layouts/Base.astro";
+import ArrowRight from "../components/icons/ArrowRight.astro";
+
+const description =
+  "Why Doc-Hub exists: the pivot from a storage Drive to an encrypted, tamper-evident document registry — for teams and individuals who value ownership, durability, privacy, and proof.";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: "Doc-Hub — Vision",
+  description,
+  url: "https://drive.casualoffice.org/vision",
+};
+---
+
+<Base title="Vision" description={description} jsonLd={jsonLd}>
+  <div class="container-narrow">
+    <header class="page-head">
+      <p class="page-eyebrow">Vision</p>
+      <h1 class="page-title">Documents you can trust. History you can prove.</h1>
+      <p class="page-lede">
+        What Doc-Hub is, why it exists, who it's for, and how we build it — the
+        target the rest of the repository is measured against.
+      </p>
+    </header>
+
+    <article class="prose">
+      <h2>The pivot: from Casual Drive to Doc-Hub</h2>
+      <p>
+        This repository began as <strong>Casual Drive</strong> — a self-hosted,
+        file-centric Drive: upload anything, open <code>.xlsx</code>/<code>.docx</code>
+        in the browser, share links. A good storage product, but storage is a
+        crowded, commoditised lane. Competing there means competing on gigabytes
+        and sync clients.
+      </p>
+      <p>
+        The unmet need we kept running into is different. Teams don't struggle to
+        <em>store</em> documents — they struggle to <strong>trust</strong> them:
+        which version is authoritative, and what changed? Who edited this, when,
+        and can we <em>prove</em> it to an auditor? Is the sensitive contract
+        encrypted, or plaintext on a disk someone can walk off with? Can I find
+        the one document that mentions a name, a clause, an ID — across everything?
+      </p>
+      <p>
+        So we pivoted. <strong>Doc-Hub is not a Drive. It is a document registry
+        and hub</strong> — a place where documents are owned, versioned immutably,
+        encrypted, searchable by content, and accountable by an audit trail you
+        cannot rewrite. A DigiLocker for teams and individuals, that you run on
+        your own server.
+      </p>
+
+      <h2>What Doc-Hub is</h2>
+      <p>
+        An open-source, self-hosted document hub for a deliberately narrow set of
+        formats — <code>docx, xlsx, pdf, md, txt, csv, json, yaml</code>. It is
+        built on four promises:
+      </p>
+      <ol>
+        <li>
+          <strong>History is permanent.</strong> Every save appends a new,
+          hash-chained version. Nothing is overwritten or erased — tampering
+          breaks the chain and is detectable. A registry, not a folder.
+        </li>
+        <li>
+          <strong>Documents are encrypted.</strong> Every file is encrypted at
+          rest (AES-256-GCM envelope, per-workspace keys) and in transit. A
+          stolen disk or database dump is ciphertext.
+        </li>
+        <li>
+          <strong>Editing is native.</strong> Documents open in embedded Casual
+          Sheet / Docs / PDF / Markdown editors, with real-time co-editing — one
+          app, not a launcher.
+        </li>
+        <li>
+          <strong>Everything is findable and accountable.</strong> Full-text
+          search reads <em>inside</em> documents; an append-only audit log records
+          every action; compliance workflows (retention, legal hold, provenance)
+          sit on top.
+        </li>
+      </ol>
+
+      <h2>North star</h2>
+      <blockquote>
+        <p>
+          Become the best open-source place to keep documents you cannot afford
+          to lose, leak, or have altered — for organisations and individuals who
+          value ownership, durability, privacy, and proof.
+        </p>
+      </blockquote>
+
+      <h2>Who it's for</h2>
+      <ul>
+        <li>
+          <strong>Maintainers &amp; registrars</strong> keeping an authoritative,
+          tamper-evident record.
+        </li>
+        <li>
+          <strong>Compliance, legal &amp; HR teams</strong> who must prove what
+          changed, when, and by whom.
+        </li>
+        <li>
+          <strong>Privacy-first &amp; self-hosting teams</strong> who want their
+          documents on their own server, encrypted, no SaaS.
+        </li>
+        <li>
+          <strong>Individuals</strong> wanting a private, DigiLocker-style locker
+          for personal and professional papers.
+        </li>
+      </ul>
+
+      <h2>What Doc-Hub is not</h2>
+      <ul>
+        <li>
+          <strong>Not general cloud storage</strong> — documents only. No video,
+          media libraries, disk-image dumps, or "put anything here."
+        </li>
+        <li>
+          <strong>Not zero-knowledge E2E.</strong> The server holds keys
+          <em>by design</em>, so it can index content and power search + AI.
+          Encryption defeats a stolen disk or database — not a fully compromised,
+          trusted server. We state this plainly rather than over-promising.
+        </li>
+        <li>
+          <strong>Not a mailbox, calendar, sync client, or a native desktop
+          app</strong> — the local editing lane is Casual Desktop.
+        </li>
+      </ul>
+
+      <h2>How we build: documents-first</h2>
+      <p>
+        This repo is <strong>documents-first</strong>. Design, architecture, and
+        a clear target come <em>before</em> code — always.
+      </p>
+      <ol>
+        <li>
+          <strong>Target before work.</strong> No feature starts without a written
+          statement of what it is and why.
+        </li>
+        <li>
+          <strong>Design &amp; architecture before implementation.</strong>
+          <code>plan → present → ask → code</code> is the default loop.
+        </li>
+        <li>
+          <strong>Everything tested.</strong> Nothing merges without unit +
+          integration tests; user flows carry an e2e use-case; crypto and
+          immutability invariants carry property tests.
+        </li>
+        <li>
+          <strong>History is append-only</strong> — in the product <em>and</em> in
+          how we work: docs are updated in the same change as the code, never left
+          stale.
+        </li>
+      </ol>
+      <p>
+        The proof is this repository: a complete design, architecture, security
+        model, test contract, and phased plan — with no production code yet
+        written for the pivot. We build the map before the territory.
+      </p>
+
+      <p>Doc-Hub is Apache-2.0, self-hosted, and built in the open.</p>
+    </article>
+
+    <div class="page-cta">
+      <a href="/roadmap" class="btn btn-primary"
+        >See the roadmap <ArrowRight size={16} /></a
+      >
+      <a
+        href="https://github.com/CasualOffice/drive/discussions"
+        class="btn btn-secondary"
+        rel="noopener external"
+        target="_blank">Join the discussion</a
+      >
+    </div>
+  </div>
+</Base>

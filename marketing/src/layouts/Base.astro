@@ -35,7 +35,7 @@ const {
   bare = false,
 } = Astro.props;
 
-const fullTitle = title.endsWith("Casual Drive") ? title : `${title} · Casual Drive`;
+const fullTitle = title.endsWith("Doc-Hub") ? title : `${title} · Doc-Hub`;
 const siteUrl = Astro.site?.toString().replace(/\/$/, "") ?? "";
 const path = Astro.url.pathname.replace(/\/$/, "") || "/";
 const canonicalUrl = canonical ?? `${siteUrl}${path}`;
@@ -68,7 +68,7 @@ const ogUrl = ogImage.startsWith("http") ? ogImage : `${siteUrl}${ogImage}`;
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogUrl} />
     <meta property="og:url" content={canonicalUrl} />
-    <meta property="og:site_name" content="Casual Drive" />
+    <meta property="og:site_name" content="Doc-Hub" />
 
     {/* Twitter */}
     <meta name="twitter:card" content="summary_large_image" />

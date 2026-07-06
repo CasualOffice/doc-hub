@@ -18,10 +18,11 @@ import Cpu from "./icons/Cpu.astro";
       Documents you can trust. <span class="hero-h1-accent">History you can prove.</span>
     </h1>
     <p class="hero-lede">
-      Doc-Hub is an open-source, self-hosted document hub. Every
-      <code>.docx</code> and <code>.xlsx</code> is encrypted at rest,
-      versioned forever in a tamper-evident chain, and edited natively in your
-      browser — on your own server.
+      Doc-Hub is an open-source, self-hosted document <strong>hub</strong> — a
+      registry, not a folder. Every <code>.docx</code>, <code>.xlsx</code> and
+      <code>.pdf</code> is encrypted at rest, versioned forever in a
+      tamper-evident hash chain, edited natively in your browser, and searchable
+      by its contents — on your own server.
     </p>
 
     <div class="hero-ctas">
@@ -36,7 +37,7 @@ import Cpu from "./icons/Cpu.astro";
 
     <ul class="hero-bullets" role="list">
       <li><Star size={14} /> Apache-2.0 licensed</li>
-      <li><Cpu size={14} /> Encrypted at rest</li>
+      <li><Cpu size={14} /> Encrypted at rest &amp; in transit</li>
       <li><Box size={14} /> Single binary · Docker-ready</li>
     </ul>
   </div>
