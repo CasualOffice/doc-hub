@@ -59,6 +59,6 @@ The proof is this repository: a complete design, architecture, security model, t
 - **[`PLAN.md`](./PLAN.md)** — the detailed phased delivery plan with acceptance tests.
 - **[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** — how it fits together.
 - **[`docs/TESTING.md`](./docs/TESTING.md)** — the quality bar.
-- **[Discussions](https://github.com/CasualOffice/dochub/discussions)** — tell us where this vision is right or wrong.
+- **[Discussions](https://github.com/CasualOffice/drive/discussions)** — tell us where this vision is right or wrong.
 
 Doc-Hub is Apache-2.0, self-hosted, and built in the open.
