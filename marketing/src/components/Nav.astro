@@ -25,6 +25,12 @@ const isActive = (href: string) =>
     </a>
 
     <nav class="nav-desktop" aria-label="Primary">
+      <a href="/vision" class:list={["nav-link", isActive("/vision") && "active"]}>
+        Vision
+      </a>
+      <a href="/roadmap" class:list={["nav-link", isActive("/roadmap") && "active"]}>
+        Roadmap
+      </a>
       <details class="nav-docs">
         <summary class:list={["nav-link", isActive("/docs") && "active"]}>
           Docs
@@ -49,22 +55,34 @@ const isActive = (href: string) =>
           <li><a href="/docs/contributing" class="nav-dropdown-link">Contributing</a></li>
         </ul>
       </details>
-      <a href="/screenshots" class:list={["nav-link", isActive("/screenshots") && "active"]}>
-        Screenshots
-      </a>
       <a href="/demo" class:list={["nav-link", isActive("/demo") && "active"]}>
         Demo
       </a>
-      <a
-        href="https://github.com/CasualOffice/dochub"
-        class="nav-link nav-link-icon"
-        rel="noopener external"
-        target="_blank"
-        aria-label="View source on GitHub"
-      >
-        <GithubIcon size={16} />
-        <span>GitHub</span>
-      </a>
+      <details class="nav-docs">
+        <summary class="nav-link">
+          <GithubIcon size={16} />
+          GitHub
+          <svg
+            aria-hidden="true"
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+        <ul class="nav-dropdown" role="menu">
+          <li><a href="https://github.com/CasualOffice/drive" class="nav-dropdown-link" rel="noopener external" target="_blank">Source</a></li>
+          <li><a href="https://github.com/CasualOffice/drive/discussions" class="nav-dropdown-link" rel="noopener external" target="_blank">Discussions</a></li>
+          <li><a href="https://github.com/orgs/CasualOffice/projects" class="nav-dropdown-link" rel="noopener external" target="_blank">Project board</a></li>
+          <li><a href="https://github.com/CasualOffice/drive/issues" class="nav-dropdown-link" rel="noopener external" target="_blank">Issues</a></li>
+        </ul>
+      </details>
       <ThemeToggle />
     </nav>
 
@@ -74,22 +92,44 @@ const isActive = (href: string) =>
         <span class="nav-hamburger-close"><XIcon size={20} /></span>
       </summary>
       <div class="nav-mobile-panel">
+        <div class="nav-mobile-group-label">Product</div>
+        <a href="/vision" class="nav-mobile-link">Vision</a>
+        <a href="/roadmap" class="nav-mobile-link">Roadmap</a>
+        <div class="nav-mobile-sep" role="presentation"></div>
         <div class="nav-mobile-group-label">Docs</div>
         <a href="/docs/install" class="nav-mobile-link">Install</a>
         <a href="/docs/configuration" class="nav-mobile-link">Configuration</a>
         <a href="/docs/architecture" class="nav-mobile-link">Architecture</a>
         <a href="/docs/contributing" class="nav-mobile-link">Contributing</a>
         <div class="nav-mobile-sep" role="presentation"></div>
-        <a href="/screenshots" class="nav-mobile-link">Screenshots</a>
         <a href="/demo" class="nav-mobile-link nav-mobile-link-cta">Try the demo</a>
+        <div class="nav-mobile-group-label">GitHub</div>
         <a
-          href="https://github.com/CasualOffice/dochub"
+          href="https://github.com/CasualOffice/drive"
           class="nav-mobile-link"
           rel="noopener external"
           target="_blank"
         >
-          <GithubIcon size={16} /> GitHub
+          <GithubIcon size={16} /> Source
         </a>
+        <a
+          href="https://github.com/CasualOffice/drive/discussions"
+          class="nav-mobile-link"
+          rel="noopener external"
+          target="_blank"
+        >Discussions</a>
+        <a
+          href="https://github.com/orgs/CasualOffice/projects"
+          class="nav-mobile-link"
+          rel="noopener external"
+          target="_blank"
+        >Project board</a>
+        <a
+          href="https://github.com/CasualOffice/drive/issues"
+          class="nav-mobile-link"
+          rel="noopener external"
+          target="_blank"
+        >Issues</a>
         <div class="nav-mobile-sep" role="presentation"></div>
         <div class="nav-mobile-theme">
           <span>Theme</span>
@@ -114,14 +154,15 @@ const isActive = (href: string) =>
     });
   }
 
-  // Close the Docs dropdown when a link inside is clicked.
-  const docs = document.querySelector<HTMLDetailsElement>(".nav-docs");
-  if (docs) {
-    docs.addEventListener("click", (e) => {
+  // Close any nav dropdown (Docs, GitHub) when a link inside is clicked.
+  const dropdowns =
+    document.querySelectorAll<HTMLDetailsElement>(".nav-docs");
+  dropdowns.forEach((dropdown) => {
+    dropdown.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
-      if (t.closest("a")) docs.removeAttribute("open");
+      if (t.closest("a")) dropdown.removeAttribute("open");
     });
-  }
+  });
 </script>
 
 <style>

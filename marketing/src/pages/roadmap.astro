@@ -1,0 +1,353 @@
+---
+/**
+ * /roadmap — visual phase/tier roadmap adapted verbatim from ROADMAP.md.
+ * Standalone page (no docs sidebar). Uses the global .container + .page-head +
+ * .prose utilities (base.css §5). Reuses the Compare table + FeatureGrid card
+ * language via scoped styles lifted into this file — no new global CSS for those.
+ */
+import Base from "../layouts/Base.astro";
+import ArrowRight from "../components/icons/ArrowRight.astro";
+
+const description =
+  "The public, phase-gated plan for turning Casual Drive into Doc-Hub — release tiers (Foundation, Alpha, Beta, 1.0) and what's Now, Next, and Later.";
+
+const tiers = [
+  {
+    tier: "Foundation",
+    meaning:
+      "The registry spine: encryption + immutable history, provable and tested. Not yet a daily driver.",
+    gate: "Phases 0–1",
+  },
+  {
+    tier: "Alpha",
+    meaning:
+      "Self-hostable and usable end-to-end: edit, version, search. Rough edges expected.",
+    gate: "Phases 2–3",
+  },
+  {
+    tier: "Beta",
+    meaning:
+      "Compliance-ready: audit, retention, legal hold, provenance. Suitable for real records with care.",
+    gate: "Phase 4",
+  },
+  {
+    tier: "1.0",
+    meaning: "Production-grade, with the intelligence layer and hardening.",
+    gate: "Phase 5 + hardening",
+  },
+];
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: "Doc-Hub — Roadmap",
+  description,
+  url: "https://drive.casualoffice.org/roadmap",
+};
+---
+
+<Base title="Roadmap" description={description} jsonLd={jsonLd}>
+  <div class="container">
+    <header class="page-head">
+      <p class="page-eyebrow">Roadmap</p>
+      <h1 class="page-title">Built in the open, phase by phase.</h1>
+      <p class="page-lede">
+        The public, phase-gated plan for turning this repo from
+        <strong>Casual Drive</strong> into <strong>Doc-Hub</strong>. This roadmap
+        is a promise about <em>sequence</em>, not dates.
+      </p>
+      <div class="page-links">
+        <a
+          class="btn btn-secondary"
+          href="https://github.com/orgs/CasualOffice/projects"
+          rel="noopener external"
+          target="_blank">Roadmap project board</a
+        >
+        <a
+          class="btn btn-secondary"
+          href="https://github.com/CasualOffice/drive/discussions"
+          rel="noopener external"
+          target="_blank">Discussions</a
+        >
+      </div>
+    </header>
+
+    <article class="prose">
+      <h2>How we ship</h2>
+      <ul>
+        <li>
+          <strong>Documents-first.</strong> Design, architecture, and a clear
+          target are written before code. This roadmap is a promise about
+          <em>sequence</em>, not dates.
+        </li>
+        <li>
+          <strong>Phase-gated.</strong> A phase starts only when the previous
+          phase's acceptance tests are green. No phase-hopping.
+        </li>
+        <li>
+          <strong>Everything tested.</strong> Each phase ships green on the full
+          test contract — unit, integration, property (crypto/immutability), and
+          e2e use-cases.
+        </li>
+        <li>
+          <strong>Append-only.</strong> History is never rewritten — in the
+          product, and in these docs.
+        </li>
+      </ul>
+
+      <h2>Release tiers</h2>
+    </article>
+
+    <div class="compare-scroll">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col" class="compare-us">Tier</th>
+            <th scope="col">Meaning</th>
+            <th scope="col">Gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            tiers.map((t) => (
+              <tr>
+                <th scope="row" class="compare-us">{t.tier}</th>
+                <td>{t.meaning}</td>
+                <td class="compare-gate">{t.gate}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <article class="prose">
+      <h2>Now · Next · Later</h2>
+    </article>
+
+    <ul class="feature-grid" role="list">
+      <li class="feature feature-now">
+        <h3 class="feature-title">Now — Foundation (Phases 0–1)</h3>
+        <ul class="feature-list" role="list">
+          <li>
+            Rename + narrow to a documents-only registry; retire storage/Drive
+            surface area.
+          </li>
+          <li>
+            <code>dochub-crypto</code>: envelope encryption at rest, per-workspace
+            keys; boot refuses without a master key.
+          </li>
+          <li>
+            Immutable <strong>hash-chained version engine</strong>: append-only,
+            write-once, restore-as-new, tamper-evident; hash-chained audit log.
+          </li>
+          <li>
+            Key management (rotation without rewriting blobs), version history UI,
+            retention + legal hold enforcement.
+          </li>
+        </ul>
+      </li>
+
+      <li class="feature feature-next">
+        <h3 class="feature-title">Next — Alpha (Phases 2–3)</h3>
+        <ul class="feature-list" role="list">
+          <li>
+            <strong>Embedded native editing</strong> (Sheet/Docs/PDF/Markdown)
+            with real-time co-editing; every save is a new version.
+          </li>
+          <li>
+            <strong>Content search</strong> — <code>core</code>-backed extraction
+            → Tantivy full-text ("which document mentions X"), snippets, filters.
+          </li>
+        </ul>
+      </li>
+
+      <li class="feature feature-later">
+        <h3 class="feature-title">Later — Beta → 1.0 (Phases 4–5)</h3>
+        <ul class="feature-list" role="list">
+          <li>
+            <strong>Compliance &amp; governance</strong> — signed provenance
+            (registrar/issuer model), retention policies, legal hold, verifiable
+            audit/retention exports, optional transparency-log anchoring.
+          </li>
+          <li>
+            <strong>AI layer</strong> — semantic search, summaries, PII detection,
+            cross-document Q&amp;A; read-only, human-approved, audited; pluggable
+            provider with a local-model option for air-gapped installs.
+          </li>
+        </ul>
+      </li>
+    </ul>
+
+    <article class="prose">
+      <h2>Deliberately not on the roadmap</h2>
+      <p>
+        Zero-knowledge E2E, media/heavy-file storage, sync clients,
+        mailbox/calendar, a native desktop app (that is the Casual Desktop lane),
+        and full multi-IdP federation.
+      </p>
+
+      <h2>The demo</h2>
+      <blockquote>
+        <p>
+          The live web demo will be revamped alongside the
+          <strong>server + web-app</strong> implementation (Phase 2+), once the
+          <code>dochub-*</code> crates and the new SPA exist. Until then the demo
+          reflects the pre-pivot Casual Drive UI.
+        </p>
+      </blockquote>
+
+      <h2>Feedback shapes this</h2>
+      <p>
+        The order above is a default, not a contract. If your use-case needs Phase
+        4 compliance before Phase 3 search, say so in Discussions — priorities
+        move with real needs.
+      </p>
+    </article>
+
+    <div class="page-cta">
+      <a
+        href="https://github.com/CasualOffice/drive/discussions"
+        class="btn btn-primary"
+        rel="noopener external"
+        target="_blank">Shape the roadmap <ArrowRight size={16} /></a
+      >
+      <a href="/vision" class="btn btn-secondary">Read the vision</a>
+    </div>
+  </div>
+</Base>
+
+<style>
+  /* ── Release-tier table (lifted from Compare.astro) ─────────────────── */
+  .compare-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    margin-top: var(--space-4);
+  }
+
+  .compare {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+
+  .compare th,
+  .compare td {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-soft);
+    vertical-align: top;
+  }
+
+  .compare thead th {
+    color: var(--muted);
+    font-weight: 500;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: var(--paper-2);
+  }
+
+  .compare tbody tr:last-child th,
+  .compare tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .compare-us {
+    background: var(--accent-muted);
+    color: var(--ink);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .compare tbody .compare-us {
+    background: color-mix(in srgb, var(--accent-muted) 60%, transparent);
+  }
+
+  .compare-gate {
+    white-space: nowrap;
+    color: var(--muted);
+  }
+
+  /* ── Now / Next / Later cards (lifted from FeatureGrid.astro) ───────── */
+  .feature-grid {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-4) 0 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  @media (min-width: 1024px) {
+    .feature-grid {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+  }
+
+  .feature {
+    padding: var(--space-6);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
+
+  .feature-now {
+    border-top: 3px solid var(--accent);
+  }
+
+  .feature-next {
+    border-top: 3px solid var(--accent-strong);
+  }
+
+  .feature-later {
+    border-top: 3px solid var(--muted-2);
+  }
+
+  .feature-title {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-4);
+    letter-spacing: -0.015em;
+  }
+
+  .feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .feature-list li {
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    padding-left: var(--space-5);
+    position: relative;
+  }
+
+  .feature-list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .feature-later .feature-list li::before {
+    background: var(--muted-2);
+  }
+
+  .feature-list code {
+    font-size: 0.85em;
+  }
+</style>

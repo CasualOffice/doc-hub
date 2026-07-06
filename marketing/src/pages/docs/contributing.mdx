@@ -52,16 +52,16 @@ Set by the project owner, never broken. The `CLAUDE.md` at the repo root spells 
 2. **Plan UX.** Numbered flows before pixels. Spec lives in `docs/ux/`.
 3. **Consistent UI.** Surfaces, copy, motion all coherent.
 4. **Industry-standard secure coding.** No homebrew crypto or auth. OWASP-aware.
-5. **Polished, minimalistic design.** macOS-app-grade polish. The [10 commandments](https://github.com/CasualOffice/dochub/blob/main/docs/research/04-polish-principles.md) are enforced.
+5. **Polished, minimalistic design.** macOS-app-grade polish. The [10 commandments](https://github.com/CasualOffice/drive/blob/main/docs/research/04-polish-principles.md) are enforced.
 6. **History is append-only.** No code path may overwrite or hard-delete a committed document version, an audit event, or a hash-chain link. Destructive-looking operations are tombstones + retention, never erasure. This is the product.
-7. **Everything is tested.** No feature merges without unit + integration tests; user-facing flows carry an e2e use-case test; crypto and immutability invariants carry property tests. See [`docs/TESTING.md`](https://github.com/CasualOffice/dochub/blob/main/docs/TESTING.md).
+7. **Everything is tested.** No feature merges without unit + integration tests; user-facing flows carry an e2e use-case test; crypto and immutability invariants carry property tests. See [`docs/TESTING.md`](https://github.com/CasualOffice/drive/blob/main/docs/TESTING.md).
 
 A PR that breaks a polish commandment — or any of the above — has to call it out and explain.
 
 ## PR conventions
 
 - Small. Focused. One idea per PR.
-- Tests included. Behaviour ships with unit + integration tests; touched invariants (crypto, hash chain, immutability) ship property tests; UI flows ship a Playwright e2e use-case. See [`docs/TESTING.md`](https://github.com/CasualOffice/dochub/blob/main/docs/TESTING.md).
+- Tests included. Behaviour ships with unit + integration tests; touched invariants (crypto, hash chain, immutability) ship property tests; UI flows ship a Playwright e2e use-case. See [`docs/TESTING.md`](https://github.com/CasualOffice/drive/blob/main/docs/TESTING.md).
 - Docs updated **in the same commit**. Change a flow → update `docs/ux/01-flows.md`. Change the crypto layer → update `docs/ARCHITECTURE.md`. Stale docs poison every future contributor session.
 - Commits don't mention the model that helped write them. No `Co-Authored-By` on machine output.
 - UI icons are SVG (Lucide), never emoji.
@@ -84,7 +84,7 @@ Reopening any of these requires evidence the current choice is wrong, not a pref
 
 ## Phase awareness
 
-Always know which phase you're in. The current phase is at the top of [`PLAN.md`](https://github.com/CasualOffice/dochub/blob/main/PLAN.md); shipped / deferred status lives in `PIPELINE.md`. Phase 0 is the Drive→Doc-Hub rename + scope narrowing + encryption/immutability foundations. Don't start a later phase's code before its predecessors' acceptance tests are green.
+Always know which phase you're in. The current phase is at the top of [`PLAN.md`](https://github.com/CasualOffice/drive/blob/main/PLAN.md); shipped / deferred status lives in `PIPELINE.md`. Phase 0 is the Drive→Doc-Hub rename + scope narrowing + encryption/immutability foundations. Don't start a later phase's code before its predecessors' acceptance tests are green.
 
 ## Good first issues
 
