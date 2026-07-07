@@ -40,6 +40,7 @@ ulid          = { workspace = true }
 argon2        = { workspace = true }
 base64        = { workspace = true }
 infer         = { workspace = true }
+similar       = { workspace = true }
 hmac          = { workspace = true }
 sha2          = { workspace = true }
 subtle        = { workspace = true }

@@ -46,6 +46,11 @@ time              = { version = "0.3", features = ["serde", "formatting", "macro
 url               = "2"
 ulid              = { version = "1", features = ["serde"] }
 
+# Text diffing (build spec §2 — P1.5 version diff). Pure-Rust, dependency-light
+# Myers/patience line differ. MIT OR Apache-2.0 — both already allow-listed in
+# deny.toml, so no license exception is needed.
+similar           = "2"
+
 # Errors / logging
 anyhow            = "1"
 thiserror         = "2"
