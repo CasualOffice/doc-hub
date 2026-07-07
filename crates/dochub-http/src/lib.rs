@@ -12,6 +12,7 @@ mod access_log;
 mod activity;
 mod admin;
 mod compliance;
+mod diff;
 mod direct_upload;
 mod files;
 pub mod headers;
@@ -140,6 +141,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(auth_router)
         .merge(files_router)
         .merge(versions_router)
+        .merge(diff::router(state.clone()))
         .merge(share_router)
         .merge(workspaces_router)
         .merge(workspace_storage_router)
