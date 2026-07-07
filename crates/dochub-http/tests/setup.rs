@@ -50,6 +50,7 @@ async fn bare_fixture() -> (HttpState, Db) {
         is_prod: false,
         sheet_origin: None,
         document_origin: None,
+        collab_url: None,
         master_kek: dochub_core::dev_master_kek(),
         master_kek_next: None,
     };
