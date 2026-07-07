@@ -175,7 +175,7 @@ function seedBlobs() {
     "f_readme",
     new Blob(
       [
-        `# Welcome to Casual Drive\n\n` +
+        `# Welcome to Doc-Hub\n\n` +
           `This is a **demo build** running entirely in your browser — there is\n` +
           `no server. Your changes persist in localStorage and reset only when\n` +
           `you clear browser data.\n\n` +
@@ -1241,7 +1241,7 @@ export function demoDownloadUrl(fileId: string): string {
   // synthesize a tiny placeholder so the browser actually downloads
   // something the user can open.
   const placeholder = new Blob(
-    [`Casual Drive demo · ${file?.name ?? fileId}\n\nThis is placeholder content. The live build serves real bytes.\n`],
+    [`Doc-Hub demo · ${file?.name ?? fileId}\n\nThis is placeholder content. The live build serves real bytes.\n`],
     { type: "text/plain" },
   );
   return URL.createObjectURL(placeholder);

@@ -106,7 +106,7 @@ export function Recipient({ token }: { token: string }) {
         )}
       </main>
 
-      <footer style={footer()}>Powered by Casual Drive</footer>
+      <footer style={footer()}>Powered by Doc-Hub</footer>
     </div>
   );
 }

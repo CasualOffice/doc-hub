@@ -1,10 +1,15 @@
 /**
- * Casual Drive mark — black rounded square with a cloud silhouette.
- * `currentColor` paints the square so callers can flip light/dark via `color`.
- * The cloud fill (`--mark-fg`) defaults to the brand paper cream.
+ * Doc-Hub mark — an ink rounded square holding a stack of versioned
+ * documents (the registry motif). Source of truth: `logo.svg` (repo root)
+ * + web/public/favicon.svg. `currentColor` paints the square so callers
+ * flip ink/amber via `color`; the document stack paints in `--mark-fg`
+ * (the brand paper cream) so it reads opposite the square in any theme.
+ * The current (front) sheet carries ink text lines painted in
+ * `currentColor` so they track the square.
  *
- * Built from primitives (three bumps + flat baseline) rather than a single
- * path so the geometry stays editable and renders cleanly at favicon size.
+ * Built from primitives (three offset sheets + text bars) rather than a
+ * single path so the geometry stays editable and renders cleanly at
+ * favicon size.
  */
 export function Logo({ size = 38, className }: { size?: number; className?: string }) {
   return (
@@ -13,36 +18,40 @@ export function Logo({ size = 38, className }: { size?: number; className?: stri
       width={size}
       height={size}
       role="img"
-      aria-label="Casual Drive"
+      aria-label="Doc-Hub"
       className={className}
       style={{ display: "block" }}
     >
       <defs>
-        <clipPath id="cd-mark-clip">
+        <clipPath id="dh-mark-clip">
           <rect width="38" height="38" rx="10" />
         </clipPath>
       </defs>
-      <g clipPath="url(#cd-mark-clip)">
+      <g clipPath="url(#dh-mark-clip)">
         <rect width="38" height="38" fill="currentColor" />
-        {/* Cloud paints in the "paper" colour so it stays opposite the
-            square's currentColor whichever theme is active: light mode →
-            dark square, cream cloud; dark mode → cream square, dark cloud. */}
-        <g fill="var(--mark-fg, var(--paper, #F6F8FA))">
-          <circle cx="12" cy="22" r="5" />
-          <circle cx="26" cy="22" r="5" />
-          <circle cx="19" cy="15" r="7.5" />
-          <rect x="12" y="22" width="14" height="5" />
+        {/* Stack of versioned documents — the registry. The paper fill
+            stays opposite the square's currentColor whichever theme is
+            active; older versions peek behind at reduced opacity. */}
+        <g fill="var(--mark-fg, var(--paper, #F5F3EE))">
+          <rect x="15" y="6" width="15" height="18" rx="2.5" fillOpacity="0.4" />
+          <rect x="12" y="8.5" width="15" height="18" rx="2.5" fillOpacity="0.68" />
+          <rect x="9" y="11" width="15" height="18" rx="2.5" />
+        </g>
+        {/* Text lines on the current version — paint in the square colour
+            (ink) so they read as body text on the paper sheet. */}
+        <g fill="currentColor">
+          <rect x="11.5" y="16" width="10" height="1.6" rx="0.8" />
+          <rect x="11.5" y="19.5" width="10" height="1.6" rx="0.8" />
+          <rect x="11.5" y="23" width="6.5" height="1.6" rx="0.8" />
         </g>
       </g>
     </svg>
   );
 }
 
-/** The wordmark — "Casual" over uppercase letter-spaced "DRIVE".
- * `tone="rail"` flips colours to read on the dark sidebar (rail-text
- * for the muted "DRIVE", inherits `currentColor` for "Casual" from
- * the ancestor — so the parent can set the active-text colour and
- * the wordmark follows). Default tone is the legacy ink-on-paper. */
+/** The wordmark — "Doc-Hub", matching the logo's Inter wordmark.
+ * `tone="rail"` inherits `currentColor` so the wordmark follows the
+ * active-text colour of the dark sidebar; default is ink-on-paper. */
 export function Wordmark({ tone = "default" }: { tone?: "default" | "rail" }) {
   const isRail = tone === "rail";
   return (
@@ -57,21 +66,7 @@ export function Wordmark({ tone = "default" }: { tone?: "default" | "rail" }) {
           color: isRail ? "inherit" : "var(--ink)",
         }}
       >
-        Casual
-      </span>
-      <span
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontSize: 10,
-          letterSpacing: "4px",
-          textTransform: "uppercase",
-          color: isRail ? "var(--rail-muted)" : "var(--muted)",
-          fontWeight: 500,
-          marginTop: 3,
-          display: "block",
-        }}
-      >
-        Drive
+        Doc-Hub
       </span>
     </span>
   );

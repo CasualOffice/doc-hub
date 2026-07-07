@@ -129,7 +129,7 @@ export function FileFullscreen({ fileId }: FileFullscreenProps) {
   useEffect(() => {
     if (state.kind !== "ready") return;
     const prev = document.title;
-    document.title = `${state.file.name} — Casual Drive`;
+    document.title = `${state.file.name} — Doc-Hub`;
     return () => {
       document.title = prev;
     };

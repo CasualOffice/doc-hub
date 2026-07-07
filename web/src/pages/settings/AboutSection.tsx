@@ -23,7 +23,7 @@ export function AboutSection() {
     <>
       <SettingsHeader
         title="About"
-        description="The version of Doc-Hub currently running on this instance."
+        description="Doc-Hub — a self-hosted, encrypted, tamper-evident document hub. Every version is hash-chained and append-only. This is the build running on this instance."
       />
 
       <SettingsCard title="Build">

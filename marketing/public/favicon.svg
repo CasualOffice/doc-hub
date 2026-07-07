@@ -1,17 +1,22 @@
 <svg viewBox="0 0 172 172" role="img" xmlns="http://www.w3.org/2000/svg">
-  <title>Casual Drive</title>
+  <title>Doc-Hub</title>
+  <desc>Ink rounded square holding a stack of versioned documents.</desc>
   <defs>
-    <clipPath id="cd-fav">
+    <clipPath id="dh-fav">
       <rect x="0" y="0" width="172" height="172" rx="40"/>
     </clipPath>
   </defs>
-  <g clip-path="url(#cd-fav)">
+  <g clip-path="url(#dh-fav)">
     <rect width="172" height="172" fill="#16161A"/>
-    <g fill="#F5F3EE">
-      <circle cx="54"  cy="100" r="23"/>
-      <circle cx="118" cy="100" r="23"/>
-      <circle cx="86"  cy="68"  r="34"/>
-      <rect   x="54"   y="100"  width="64" height="23"/>
+    <!-- older versions, peeking behind -->
+    <rect x="70" y="30" width="66" height="86" rx="10" fill="#45454B"/>
+    <rect x="58" y="41" width="66" height="86" rx="10" fill="#8A8A92"/>
+    <!-- current version -->
+    <rect x="44" y="52" width="66" height="86" rx="10" fill="#F5F3EE"/>
+    <g fill="#16161A">
+      <rect x="56" y="72"  width="42" height="6" rx="3"/>
+      <rect x="56" y="86"  width="42" height="6" rx="3"/>
+      <rect x="56" y="100" width="28" height="6" rx="3"/>
     </g>
   </g>
 </svg>
