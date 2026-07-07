@@ -611,3 +611,189 @@ body {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   UI M6 — GLASS FOUNDATION (docs/design/ui-system-glass.md §2–§6)
+   Additive material + motion layer on top of the ink/paper + amber
+   identity. Nothing above is removed or repointed. Materials are
+   translucent frosted glass over an ambient ground; every glass surface
+   falls back to an opaque solid under `@supports not (backdrop-filter)`
+   and `prefers-reduced-transparency: reduce`, so WCAG AA is always
+   measured on the solid (never the translucent value). This app is
+   light-default (`:root`) with dark as a first-class peer, so the
+   dark-hero glass values live under the dark selectors and the light
+   "frosted paper" values are the `:root` default — same token names,
+   swapped values, exactly as the spec's §1.4 prescribes.
+   ═════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Ambient ground — light "frosted paper" (default theme) ─────── */
+  --ground: #eceae3;                          /* warm paper ground */
+  --ground-aurora-1: rgba(183, 121, 31, 0.10); /* amber bloom */
+  --ground-aurora-2: rgba(70, 70, 90, 0.08);   /* cool bloom */
+
+  /* ── Material hierarchy (translucency + blur) — light ───────────── */
+  --mat-ultrathin: rgba(255, 255, 255, 0.44);
+  --mat-thin:      rgba(255, 255, 255, 0.55);
+  --mat-regular:   rgba(255, 255, 255, 0.68);
+  --mat-thick:     rgba(255, 255, 255, 0.82);
+  --glass-solid:   #f4f2ec;   /* opaque fallback (AA measured here) */
+
+  /* ── Blur + saturation — shared across themes ───────────────────── */
+  --blur-mat:    20px;   /* regular panels          */
+  --blur-chrome: 30px;   /* sidebar / top bar       */
+  --blur-overlay:40px;   /* palette / dialogs       */
+  --saturate:    180%;
+
+  /* ── Edge light + ambient shadow — light ────────────────────────── */
+  --edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.60);
+  --edge-lo: inset 0 -1px 0 rgba(22, 22, 26, 0.08);
+  --shadow-float:   0 8px 30px rgba(22, 22, 26, 0.12), 0 2px 8px rgba(22, 22, 26, 0.08);
+  --shadow-overlay: 0 24px 70px rgba(22, 22, 26, 0.20);
+  --hairline-glass: 1px solid rgba(22, 22, 26, 0.10);
+
+  /* ── Amber, in glass (tamper / attention / focus) ───────────────── */
+  --accent-glow: 0 0 0 1px rgba(183, 121, 31, 0.50), 0 0 16px rgba(183, 121, 31, 0.35);
+
+  /* ── Spring motion (supersedes the flat fast/linear set) ────────── */
+  --ease-spring: linear(0, 0.35 7%, 0.9 18%, 1.05 28%, 1 38%, 1);
+  --dur-micro:   120ms;
+  --dur-panel:   220ms;
+  --dur-overlay: 260ms;
+}
+
+/* ── Dark-hero glass values ─────────────────────────────────────────── */
+:root[data-theme="dark"],
+.dark {
+  --ground: #0e0e12;                           /* near-black, faint blue */
+  --ground-aurora-1: rgba(183, 121, 31, 0.10);
+  --ground-aurora-2: rgba(70, 70, 90, 0.14);
+
+  --mat-ultrathin: rgba(28, 28, 34, 0.44);
+  --mat-thin:      rgba(28, 28, 34, 0.60);
+  --mat-regular:   rgba(24, 24, 30, 0.72);
+  --mat-thick:     rgba(20, 20, 26, 0.86);
+  --glass-solid:   #1b1b21;
+
+  --edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --edge-lo: inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+  --shadow-float:   0 8px 30px rgba(0, 0, 0, 0.38), 0 2px 8px rgba(0, 0, 0, 0.28);
+  --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.50);
+  --hairline-glass: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]),
+  :root[data-theme="system"] {
+    --ground: #0e0e12;
+    --ground-aurora-1: rgba(183, 121, 31, 0.10);
+    --ground-aurora-2: rgba(70, 70, 90, 0.14);
+
+    --mat-ultrathin: rgba(28, 28, 34, 0.44);
+    --mat-thin:      rgba(28, 28, 34, 0.60);
+    --mat-regular:   rgba(24, 24, 30, 0.72);
+    --mat-thick:     rgba(20, 20, 26, 0.86);
+    --glass-solid:   #1b1b21;
+
+    --edge-hi: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --edge-lo: inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+    --shadow-float:   0 8px 30px rgba(0, 0, 0, 0.38), 0 2px 8px rgba(0, 0, 0, 0.28);
+    --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.50);
+    --hairline-glass: 1px solid rgba(255, 255, 255, 0.10);
+  }
+}
+
+/* ── The `.glass` material mixin + depth modifiers ──────────────────── */
+.glass {
+  background: var(--mat-regular);
+  backdrop-filter: blur(var(--blur-mat)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur-mat)) saturate(var(--saturate));
+  border: var(--hairline-glass);
+  box-shadow: var(--edge-hi), var(--shadow-float);
+  border-radius: var(--radius-lg);
+}
+
+/* Ultra-thin — badges / chips. */
+.glass--ultrathin {
+  background: var(--mat-ultrathin);
+  backdrop-filter: blur(var(--blur-mat)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur-mat)) saturate(var(--saturate));
+}
+
+/* Thin — chrome (sidebar / top bar). */
+.glass--thin {
+  background: var(--mat-thin);
+  backdrop-filter: blur(var(--blur-chrome)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur-chrome)) saturate(var(--saturate));
+}
+
+/* Thick — near-solid data rows / dense panes (legibility). */
+.glass--thick {
+  background: var(--mat-thick);
+  backdrop-filter: blur(var(--blur-mat)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur-mat)) saturate(var(--saturate));
+}
+
+/* Overlay — Spotlight palette / dialogs / menus / toasts. */
+.glass--overlay {
+  background: var(--mat-thick);
+  backdrop-filter: blur(var(--blur-overlay)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur-overlay)) saturate(var(--saturate));
+  box-shadow: var(--edge-hi), var(--shadow-overlay);
+  border-radius: var(--radius-xl);
+}
+
+/* Fallback A — no backdrop-filter support → opaque solids, same geometry. */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass,
+  .glass--ultrathin,
+  .glass--thin,
+  .glass--thick,
+  .glass--overlay { background: var(--glass-solid); }
+}
+/* Some engines only ship the prefixed property. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass--ultrathin,
+  .glass--thin,
+  .glass--thick,
+  .glass--overlay { background: var(--glass-solid); }
+}
+
+/* Fallback B — user asks for reduced transparency → drop to solids, no blur. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass--ultrathin,
+  .glass--thin,
+  .glass--thick,
+  .glass--overlay {
+    background: var(--glass-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ── Immersive ambient ground (rendered by <AmbientGround/>) ────────── */
+.ambient-ground {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 50%, var(--ground-aurora-1) 0%, transparent 50%),
+    radial-gradient(circle at 70% 80%, var(--ground-aurora-2) 0%, transparent 60%),
+    var(--ground);
+  animation: cd-ground-drift 30s var(--ease-inout) infinite;
+  will-change: transform;
+}
+
+@keyframes cd-ground-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(8px, -12px); }
+}
+
+/* Ambient motion opts out under reduced-motion (belt-and-suspenders on
+   top of the global reducer above). */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-ground { animation: none; }
+}

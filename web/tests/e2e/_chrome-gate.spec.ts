@@ -158,45 +158,41 @@ test("UX-EDITOR-8 phase 2: FileFullscreen Details pill opens drawer with same pa
   await page.getByTestId("file-fullscreen-details").click();
   await page.getByTestId("file-fullscreen-details-drawer").waitFor({ timeout: 5_000 });
   await expect(page.getByTestId("details-panel")).toBeVisible();
-  await expect(page.getByTestId("details-tab-info")).toBeVisible();
+  await expect(page.getByTestId("details-compliance-card")).toBeVisible();
   // Esc closes the drawer
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("file-fullscreen-details-drawer")).toHaveCount(0);
 });
 
-test("UX-EDITOR-8: PreviewModal Details panel mounts all 3 tabs", async ({ page }) => {
-  test.setTimeout(60_000);
-  await page.getByText("Q2 planning.xlsx").first().click();
-  await page.getByTestId("details-panel").waitFor({ timeout: 5_000 });
-  await expect(page.getByTestId("details-tab-info")).toBeVisible();
-  await expect(page.getByTestId("details-tab-people")).toBeVisible();
-  await expect(page.getByTestId("details-tab-history")).toBeVisible();
-  // Info tab is the default — content panel renders the metadata grid.
-  await expect(page.getByTestId("details-tab-info-panel")).toBeVisible();
-});
-
-test("UX-EDITOR-8: Details People tab → empty state + Create share CTA", async ({ page }) => {
-  test.setTimeout(60_000);
-  await page.getByText("Q2 planning.xlsx").first().click();
-  await page.getByTestId("details-tab-people").click();
-  // Demo state starts with no shares for the seeded file → empty state.
-  await expect(page.getByTestId("details-tab-people-panel")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByTestId("details-people-create-share")).toBeVisible();
-});
-
-test("UX-EDITOR-8: Details History tab → hash-chained version-history surface", async ({
+test("UX-EDITOR-8: PreviewModal Details card shows compliance summary + links", async ({
   page,
 }) => {
   test.setTimeout(60_000);
   await page.getByText("Q2 planning.xlsx").first().click();
-  await page.getByTestId("details-tab-history").click();
-  // M2 replaced the former "coming soon" placeholder with the real
-  // append-only, hash-chained version-history surface (VersionHistory).
-  await expect(page.getByTestId("details-tab-history-panel")).toBeVisible({ timeout: 5_000 });
-  // The panel primary — always present on the history surface.
+  // M6/ui-v3 §3.2 made the Details panel opt-in: the modal opens as a
+  // single-column stage with the proof one-liner; the full compliance
+  // card discloses behind the footer "Details" toggle.
+  await expect(page.getByText(/Encrypted · v\d+ · ✓ Verified/)).toBeVisible({ timeout: 5_000 });
+  await page.getByTestId("preview-details-toggle").click();
+  await page.getByTestId("details-panel").waitFor({ timeout: 5_000 });
+  // Scope the button assertions to the card — the modal chrome has its own actions.
+  const card = page.getByTestId("details-compliance-card");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button", { name: /View full history/i })).toBeVisible();
+  await expect(card.getByRole("button", { name: /Share/i })).toBeVisible();
+});
+
+test("UX-EDITOR-8: Details compliance card links to full version history", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.getByText("Q2 planning.xlsx").first().click();
+  // Details is opt-in (§3.2) — reveal the card, then follow its primary link.
+  await page.getByTestId("preview-details-toggle").click();
+  await page.getByTestId("details-panel").waitFor({ timeout: 5_000 });
+  // The card's primary action is the ONE canonical version-history home.
+  await page.getByRole("button", { name: /View full history/i }).click();
+  await expect(page).toHaveURL(/\/document\/.*\/history/);
+  // The full route's panel primary — always present on the history surface.
   await expect(page.getByRole("button", { name: /Verify chain/i })).toBeVisible();
-  // Once the chain loads, the footer states the append-only guarantee.
-  await expect(page.getByText(/Append-only/i)).toBeVisible({ timeout: 5_000 });
 });
 
 // NB: the former "UX-EDITOR-7: video preview mounts the vidstack player"

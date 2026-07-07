@@ -13,10 +13,8 @@ test("`?` opens the keyboard-shortcut help modal", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Keyboard shortcuts" })).toBeHidden();
 });
 
-test("the help button in the top bar also opens the modal", async ({ page }) => {
-  await page.getByRole("button", { name: /keyboard shortcuts/i }).click();
-  await expect(page.getByRole("heading", { name: "Keyboard shortcuts" })).toBeVisible();
-});
+// UI-M6: the top-bar help IconButton was removed; the `?` shortcut above
+// remains the single path to the HelpModal, so no button-click test here.
 
 test("the notifications bell opens its dropdown and shows seeded events", async ({ page }) => {
   await page.getByRole("button", { name: "Notifications" }).click();

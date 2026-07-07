@@ -99,10 +99,7 @@ function Body({
       <EncryptionCard />
       <IntegrityCard />
       <RetentionCard />
-      <AuditExportCard onNavigate={onNavigate} />
-      <StorageCard system={system} />
-      <SessionsCard system={system} />
-      <RecentSignInsCard system={system} onNavigate={onNavigate} />
+      <AuditExportCard system={system} onNavigate={onNavigate} />
     </div>
   );
 }
@@ -110,9 +107,11 @@ function Body({
 // ── System card ────────────────────────────────────────────────────────
 
 function SystemCard({ system }: { system: AdminSystem }) {
+  const { fs_root, s3_bucket, s3_endpoint, s3_region } = system.storage_config;
   return (
     <Card
       title="System"
+      subtitle="Build, storage adapter, and live sessions for this instance. Storage is configured at boot via DOCHUB_STORAGE_BACKEND; switching backends requires a restart."
       status={
         system.healthy ? (
           <StatusChip tone="verified" icon={<ShieldCheck size={13} strokeWidth={STROKE} />} label="Healthy" />
@@ -134,6 +133,26 @@ function SystemCard({ system }: { system: AdminSystem }) {
         <Stat label="Database" value={system.db_backend} />
         <Stat label="Active sessions" value={String(system.active_sessions)} />
       </Grid>
+
+      <div style={{ marginTop: "var(--space-4)", borderTop: "1px solid var(--border-hair)", paddingTop: "var(--space-2)" }}>
+        {fs_root && <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Filesystem root" value={fs_root} mono />}
+        {s3_bucket && (
+          <>
+            <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="S3 bucket" value={s3_bucket} mono />
+            {s3_region && <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Region" value={s3_region} />}
+            {s3_endpoint && <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Endpoint" value={s3_endpoint} mono />}
+          </>
+        )}
+        {!fs_root && !s3_bucket && (
+          <div style={{ padding: "var(--space-1) 0", fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
+            In-memory backend — for tests + demo only.
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
+          <Users size={13} strokeWidth={STROKE} aria-hidden style={{ flexShrink: 0 }} />
+          <span>Per-device session list + per-device revoke ship in v0.2 with the sessions IP + user-agent columns.</span>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -176,7 +195,13 @@ function RetentionCard() {
   );
 }
 
-function AuditExportCard({ onNavigate }: { onNavigate: (target: "activity") => void }) {
+function AuditExportCard({
+  system,
+  onNavigate,
+}: {
+  system: AdminSystem;
+  onNavigate: (target: "activity") => void;
+}) {
   return (
     <Card
       title="Audit log"
@@ -193,61 +218,17 @@ function AuditExportCard({ onNavigate }: { onNavigate: (target: "activity") => v
         note="A signed, offline-verifiable report (date range + JSONL / CSV / PDF, chain head + Ed25519 signature over the range) lands with the export endpoint."
         actions={["Export signed report"]}
       />
+      <RecentSignIns system={system} />
     </Card>
   );
 }
 
-// ── Storage card ───────────────────────────────────────────────────────
+// ── Recent sign-ins (folded into the Audit log tile) ───────────────────
 
-function StorageCard({ system }: { system: AdminSystem }) {
-  const { fs_root, s3_bucket, s3_endpoint, s3_region } = system.storage_config;
+function RecentSignIns({ system }: { system: AdminSystem }) {
   return (
-    <Card
-      title="Storage adapter"
-      subtitle="Configured at boot via DOCHUB_STORAGE_BACKEND. Switching backends requires a restart."
-    >
-      <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Backend" value={system.storage_backend} />
-      {fs_root && <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Filesystem root" value={fs_root} mono />}
-      {s3_bucket && (
-        <>
-          <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="S3 bucket" value={s3_bucket} mono />
-          {s3_region && <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Region" value={s3_region} />}
-          {s3_endpoint && <Row icon={<HardDrive size={15} strokeWidth={STROKE} />} label="Endpoint" value={s3_endpoint} mono last />}
-        </>
-      )}
-      {!fs_root && !s3_bucket && (
-        <div style={{ padding: "var(--space-2) 0", fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
-          In-memory backend — for tests + demo only.
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ── Sessions ───────────────────────────────────────────────────────────
-
-function SessionsCard({ system }: { system: AdminSystem }) {
-  return (
-    <Card title="Sessions">
-      <Row icon={<Users size={15} strokeWidth={STROKE} />} label="Active sessions" value={String(system.active_sessions)} last />
-      <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
-        Per-device list + per-device revoke ship in v0.2 with the sessions IP + user-agent columns.
-      </div>
-    </Card>
-  );
-}
-
-// ── Recent sign-ins ────────────────────────────────────────────────────
-
-function RecentSignInsCard({
-  system,
-  onNavigate,
-}: {
-  system: AdminSystem;
-  onNavigate: (target: "activity") => void;
-}) {
-  return (
-    <Card title="Recent sign-ins" subtitle="Latest 10 events from the audit log.">
+    <div style={{ marginTop: "var(--space-4)", borderTop: "1px solid var(--border-hair)", paddingTop: "var(--space-3)" }}>
+      <div className="caps-label" style={{ marginBottom: "var(--space-2)" }}>Recent sign-ins</div>
       {system.recent_sign_ins.length === 0 ? (
         <div style={{ fontSize: "var(--text-sm)", color: "var(--fg-muted)" }}>No sign-in events recorded yet.</div>
       ) : (
@@ -283,13 +264,7 @@ function RecentSignInsCard({
           ))}
         </ul>
       )}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--space-3)" }}>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate("activity")}>
-          <ActivityIcon size={13} strokeWidth={STROKE} />
-          Open audit log
-        </Button>
-      </div>
-    </Card>
+    </div>
   );
 }
 

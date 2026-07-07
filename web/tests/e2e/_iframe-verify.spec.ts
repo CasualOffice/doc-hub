@@ -98,12 +98,18 @@ test("create new .xlsx → card double-click routes to /file/<id> + editor ifram
 
   // The blank.xlsx template parses, so the iframe actually paints Univer's
   // grid canvas — assert it renders inside, not just that the element exists.
-  await page.waitForTimeout(3_000);
-  const canvasCount = await page
-    .frameLocator('[data-testid="casual-sheet-workspace"]')
-    .locator("canvas")
-    .count();
-  expect(canvasCount).toBeGreaterThan(0);
+  // Poll rather than sleep-then-count: the wasm engine's first paint time
+  // varies under parallel load, so a fixed timeout races the canvas mount.
+  await expect
+    .poll(
+      () =>
+        page
+          .frameLocator('[data-testid="casual-sheet-workspace"]')
+          .locator("canvas")
+          .count(),
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
 
   // No console errors / page errors during the mount.
   if (errors.length > 0) {

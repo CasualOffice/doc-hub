@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 
+import { AmbientGround } from "./components/AmbientGround.tsx";
 import { AuthProvider, useAuth } from "./auth/AuthContext.tsx";
 import { FileFullscreen } from "./pages/FileFullscreen.tsx";
 import { InviteAccept } from "./pages/InviteAccept.tsx";
@@ -102,6 +103,9 @@ function Router() {
 export function App() {
   return (
     <AuthProvider>
+      {/* UI M6 — immersive ambient ground behind the whole app; the glass
+          chrome above blurs it for vibrancy. Fixed, z-index:-1, inert. */}
+      <AmbientGround />
       <WorkspaceProvider>
         {/* RT2 — PresenceContext subscribes to the active workspace's
             SSE stream + beats every 25s. Sits inside WorkspaceProvider

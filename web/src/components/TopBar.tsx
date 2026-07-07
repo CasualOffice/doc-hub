@@ -1,11 +1,15 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { Grid3x3, HelpCircle, List, Rows3, Rows4, Search } from "lucide-react";
+import { KeyRound, Search } from "lucide-react";
 
 import { clearRecent, getRecent, type RecentSearch } from "../lib/recentSearches.ts";
 import { markKeystroke } from "../lib/searchMetrics.ts";
 import { NotificationsBell } from "./NotificationsBell.tsx";
 import { RecentSearchesPopover } from "./RecentSearchesPopover.tsx";
 
+/** Kept for source compatibility — Files/Shell still type the shared
+ * view + density state against these. The view/density toggles moved out
+ * of the top bar to Settings › Display (§ UI-M6 amendment); the types stay
+ * here so their consumers don't have to re-home the import. */
 export type ViewMode = "grid" | "list";
 export type Density = "comfortable" | "compact";
 
@@ -16,19 +20,11 @@ const RECENTS_LISTBOX_ID = "cd-search-recents-listbox";
 export function TopBar({
   query,
   onQueryChange,
-  view,
-  onViewChange,
-  density,
-  onDensityChange,
-  onShowHelp,
+  username,
 }: {
   query: string;
   onQueryChange: (q: string) => void;
-  view: ViewMode;
-  onViewChange: (v: ViewMode) => void;
-  density: Density;
-  onDensityChange: (d: Density) => void;
-  onShowHelp: () => void;
+  username: string;
 }) {
   // SR11 — recent-searches dropdown state. Recents are loaded lazily
   // (only when the input gains focus, so a never-focused TopBar
@@ -52,11 +48,16 @@ export function TopBar({
   const popoverOpen = inputFocused && recents.length > 0;
   return (
     <header
+      className="glass--thin"
       style={{
         display: "flex",
         alignItems: "center",
         gap: "var(--space-2)",
         height: 48,
+        padding: "0 var(--space-3)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--edge-hi)",
+        border: "var(--hairline-glass)",
       }}
     >
       <div
@@ -161,156 +162,73 @@ export function TopBar({
         />
       </div>
 
-      <ViewToggle value={view} onChange={onViewChange} />
-      <DensityToggle value={density} onChange={onDensityChange} />
       <NotificationsBell />
-      <IconButton
-        ariaLabel="Keyboard shortcuts"
-        title="Keyboard shortcuts (?)"
-        onClick={onShowHelp}
-      >
-        <HelpCircle size={16} strokeWidth={1.5} />
-      </IconButton>
+      <EncryptionGlyph />
+      <AccountButton username={username} />
     </header>
   );
 }
 
-function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
+/** Always-on trust cue in the chrome — encryption at rest is a product
+ * invariant. Non-interactive; amber glow reads as "protected" without
+ * encoding state in translucency alone (icon + accessible label). */
+function EncryptionGlyph() {
   return (
-    <ToggleGroup>
-      <ToggleButton active={value === "grid"} onClick={() => onChange("grid")} title="Grid view">
-        <Grid3x3 size={16} strokeWidth={1.5} />
-      </ToggleButton>
-      <ToggleButton active={value === "list"} onClick={() => onChange("list")} title="List view">
-        <List size={16} strokeWidth={1.5} />
-      </ToggleButton>
-    </ToggleGroup>
-  );
-}
-
-/** SR4 — row-density toggle. `Rows3` = comfortable; `Rows4` = compact. */
-function DensityToggle({ value, onChange }: { value: Density; onChange: (d: Density) => void }) {
-  return (
-    <ToggleGroup label="Row density">
-      <ToggleButton
-        active={value === "comfortable"}
-        onClick={() => onChange("comfortable")}
-        title="Comfortable density"
-      >
-        <Rows3 size={16} strokeWidth={1.5} />
-      </ToggleButton>
-      <ToggleButton
-        active={value === "compact"}
-        onClick={() => onChange("compact")}
-        title="Compact density"
-      >
-        <Rows4 size={16} strokeWidth={1.5} />
-      </ToggleButton>
-    </ToggleGroup>
-  );
-}
-
-function ToggleGroup({ children, label }: { children: React.ReactNode; label?: string }) {
-  return (
-    <div
-      role={label ? "group" : undefined}
-      aria-label={label}
-      style={{
-        display: "flex",
-        border: "1px solid var(--border-hair)",
-        borderRadius: "var(--radius-sm)",
-        background: "var(--bg-surface)",
-        padding: 2,
-        gap: 2,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ToggleButton({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-pressed={active}
-      onClick={onClick}
-      style={{
-        border: "none",
-        background: active ? "var(--accent-wash)" : "transparent",
-        cursor: "pointer",
-        width: 24,
-        height: 24,
-        borderRadius: "var(--radius-xs)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: active ? "var(--fg-default)" : "var(--fg-muted)",
-        transition: "background var(--dur-base), color var(--dur-base)",
-      }}
-      onMouseOver={(e) => {
-        if (!active) e.currentTarget.style.background = "var(--bg-hover)";
-      }}
-      onMouseOut={(e) => {
-        if (!active) e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function IconButton({
-  ariaLabel,
-  title,
-  onClick,
-  children,
-}: {
-  ariaLabel: string;
-  title: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      title={title}
-      onClick={onClick}
+    <span
+      role="img"
+      aria-label="Encrypted at rest with AES-256-GCM"
+      title="All documents are encrypted at rest with AES-256-GCM"
       style={{
         width: 28,
         height: 28,
         borderRadius: "var(--radius-sm)",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "var(--status-verified-700)",
+        boxShadow: "var(--accent-glow)",
+        flexShrink: 0,
+      }}
+    >
+      <KeyRound size={15} strokeWidth={1.6} aria-hidden="true" />
+    </span>
+  );
+}
+
+/** Account entry point in the chrome. Monogram button; the menu itself is
+ * owned elsewhere, so this stays a labelled affordance. */
+function AccountButton({ username }: { username: string }) {
+  const monogram = username.charAt(0).toUpperCase() || "?";
+  return (
+    <button
+      type="button"
+      aria-label={`Account — ${username}`}
+      title={username}
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: "var(--radius-pill)",
         border: "none",
-        background: "transparent",
-        color: "var(--fg-muted)",
+        background: "var(--accent)",
+        color: "var(--accent-fg)",
         cursor: "pointer",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        transition: "background var(--dur-fast), color var(--dur-fast)",
+        fontFamily: "var(--font-display)",
+        fontWeight: "var(--weight-semibold)",
+        fontSize: "var(--text-sm)",
+        flexShrink: 0,
+        transition: "background var(--dur-fast), transform var(--dur-instant)",
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.background = "var(--bg-hover)";
-        e.currentTarget.style.color = "var(--fg-default)";
+        e.currentTarget.style.background = "var(--accent-hover)";
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.background = "transparent";
-        e.currentTarget.style.color = "var(--fg-muted)";
+        e.currentTarget.style.background = "var(--accent)";
       }}
     >
-      {children}
+      {monogram}
     </button>
   );
 }
