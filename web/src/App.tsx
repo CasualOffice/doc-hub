@@ -8,6 +8,7 @@ import { Recipient } from "./pages/Recipient.tsx";
 import { Setup } from "./pages/Setup.tsx";
 import { SignIn } from "./pages/SignIn.tsx";
 import { Shell } from "./pages/Shell.tsx";
+import { VersionHistoryPage } from "./pages/VersionHistoryPage.tsx";
 import { PresenceProvider } from "./state/PresenceContext.tsx";
 import { WorkspaceProvider } from "./state/WorkspaceContext.tsx";
 
@@ -24,6 +25,15 @@ function shareToken(): string | null {
 function fileRouteId(): string | null {
   if (typeof window === "undefined") return null;
   const match = window.location.pathname.match(/^\/file\/([^/?#]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** `/document/<id>/history` — the flagship version-history + integrity
+ *  surface (UX-18). Auth-gated like the Shell; the page owns its own
+ *  back-navigation. */
+function historyRouteId(): string | null {
+  if (typeof window === "undefined") return null;
+  const match = window.location.pathname.match(/^\/document\/([^/?#]+)\/history/);
   return match ? decodeURIComponent(match[1]) : null;
 }
 
@@ -69,6 +79,8 @@ function Router() {
   if (status.kind === "needs-setup") return <Setup />;
   if (status.kind !== "authed") return <SignIn />;
   // Authed paths.
+  const historyId = historyRouteId();
+  if (historyId) return <VersionHistoryPage fileId={historyId} />;
   const fileId = fileRouteId();
   if (fileId) return <FileFullscreen fileId={fileId} />;
   return <Shell />;
@@ -91,15 +103,15 @@ export function App() {
         position="bottom-center"
         toastOptions={{
           style: {
-            background: "var(--ink)",
-            color: "var(--paper)",
-            border: "none",
-            borderRadius: 13,
+            background: "var(--bg-raised)",
+            color: "var(--fg-default)",
+            border: "1px solid var(--border-hair)",
+            borderRadius: "var(--radius-md)",
             fontFamily: "var(--font-sans)",
             fontSize: "var(--text-sm)",
             fontWeight: 500,
-            padding: "12px 18px",
-            boxShadow: "0 10px 30px rgba(15, 23, 42,.3)",
+            padding: "10px 14px",
+            boxShadow: "var(--shadow-md)",
           },
         }}
       />

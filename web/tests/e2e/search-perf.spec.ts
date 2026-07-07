@@ -29,7 +29,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("search keystroke→paint latency stays under the permissive ceiling", async ({ page }) => {
-  const search = page.getByPlaceholder("Search files and folders");
+  const search = page.getByPlaceholder("Search documents and folders");
 
   // Exercise the search pipeline a few times against the seeded demo
   // corpus. Each iteration: clear, type, wait for visible result, blur.
