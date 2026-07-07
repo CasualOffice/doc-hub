@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   Activity,
-  Clock,
   FileText,
   FolderClosed,
   Gauge,
@@ -10,9 +9,7 @@ import {
   NotebookPen,
   Plus,
   Settings,
-  Share2,
   Sheet,
-  Star,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -25,9 +22,6 @@ import { WorkspaceSwitcher as RealWorkspaceSwitcher } from "./WorkspaceSwitcher.
 export type NavId =
   | "home"
   | "notes"
-  | "recent"
-  | "starred"
-  | "shared"
   | "trash"
   | "activity"
   | "settings"
@@ -41,12 +35,11 @@ interface NavItem {
   comingSoon?: boolean;
 }
 
+// UI-M6: the coming-soon Recent / Starred / Shared entries are removed —
+// dead nav surfaces don't ship. Library is the real, working scope.
 const LIBRARY: NavItem[] = [
   { id: "home", label: "My Drive", icon: Home },
   { id: "notes", label: "Notes", icon: NotebookPen },
-  { id: "recent", label: "Recent", icon: Clock, comingSoon: true },
-  { id: "starred", label: "Starred", icon: Star, comingSoon: true },
-  { id: "shared", label: "Shared", icon: Share2, comingSoon: true },
 ];
 
 const WORKSPACE: NavItem[] = [
@@ -85,9 +78,12 @@ export function Sidebar({
 
   return (
     <aside
+      className="glass--thin"
       style={{
         // Dark ink rail (§7.1 dark-on-light) — stays dark even when the
-        // rest of the app is in light mode.
+        // rest of the app is in light mode. The glass mixin adds the
+        // chrome blur + edge light; the opaque rail background is kept
+        // inline so body text stays AA on the solid (never the frost).
         width: 240,
         flexShrink: 0,
         height: "100vh",
@@ -97,7 +93,9 @@ export function Sidebar({
         gap: 4,
         background: "var(--rail)",
         color: "var(--rail-text)",
+        borderRadius: 0,
         borderRight: "1px solid var(--rail-line)",
+        boxShadow: "var(--edge-hi)",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 8px 12px" }}>
@@ -336,13 +334,17 @@ function NavRow({
 function EncryptionFooterChip() {
   return (
     <div
+      className="glass--thin"
       title="All documents are encrypted at rest with AES-256-GCM"
       style={{
         display: "flex",
         alignItems: "center",
         gap: 6,
-        padding: "8px 10px 4px",
-        color: "var(--rail-muted)",
+        margin: "6px 2px 0",
+        padding: "6px 10px",
+        borderRadius: "var(--radius-pill)",
+        border: "var(--hairline-glass)",
+        color: "var(--rail-text)",
         fontSize: "var(--text-2xs)",
         fontWeight: "var(--weight-medium)",
         lineHeight: 1.3,
@@ -350,7 +352,11 @@ function EncryptionFooterChip() {
         userSelect: "none",
       }}
     >
-      <Lock size={12} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+      <Lock
+        size={12}
+        strokeWidth={1.6}
+        style={{ flexShrink: 0, color: "var(--accent)", borderRadius: "50%", boxShadow: "var(--accent-glow)" }}
+      />
       <span>Encrypted at rest · AES-256-GCM</span>
     </div>
   );

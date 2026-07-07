@@ -197,6 +197,7 @@ function TamperAlarm({ eventId }: { eventId: string | null }) {
         background: "var(--amber-tint)",
         borderRadius: "var(--radius-md)",
         borderLeft: "3px solid var(--amber-700)",
+        boxShadow: "var(--accent-glow)",
         color: "var(--fg-default)",
         fontSize: "var(--text-sm)",
         lineHeight: "var(--leading-sm)",
@@ -225,10 +226,13 @@ function Timeline({ events }: { events: ActivityEvent[] }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       {groups.map(([label, items]) => (
         <section key={label}>
-          <div className="caps-label" style={{ padding: "0 0 6px", borderBottom: "1px solid var(--border-hair)" }}>
+          <div
+            className="caps-label glass--thin"
+            style={{ padding: "5px var(--space-3)", marginBottom: "var(--space-1)" }}
+          >
             {label}
           </div>
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          <ul className="glass--thick" style={{ listStyle: "none", margin: 0, padding: "0 var(--space-2)" }}>
             {items.map((e) => (
               <Row key={e.id} event={e} />
             ))}

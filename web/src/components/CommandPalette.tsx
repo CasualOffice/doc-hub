@@ -12,17 +12,18 @@ import { useCallback, useEffect, useState } from "react";
 import { Command } from "cmdk";
 import {
   Activity as ActivityIcon,
+  FilePlus,
   FileText,
   Folder,
+  FolderPlus,
   Gauge,
   HelpCircle,
   Home,
   NotebookPen,
   Search,
   Settings as SettingsIcon,
-  Share2,
-  Star,
   Trash2,
+  Upload,
 } from "lucide-react";
 
 import {
@@ -44,12 +45,19 @@ type NavAction = {
   hint?: string;
 };
 
+type CreateAction = {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  kbd?: string;
+  run: () => void;
+};
+
+// UI-M6: coming-soon destinations (Recent / Starred / Shared) are filtered
+// out of GO TO — only real, navigable surfaces appear.
 const NAV_ACTIONS: NavAction[] = [
   { id: "home", label: "My Drive", icon: Home, hint: "Files + folders" },
   { id: "notes", label: "Notes", icon: NotebookPen, hint: "Pages + wiki" },
-  { id: "recent", label: "Recent", icon: Star, hint: "Recently opened" },
-  { id: "starred", label: "Starred", icon: Star, hint: "Pinned items" },
-  { id: "shared", label: "Shared", icon: Share2, hint: "Shared with you" },
   { id: "activity", label: "Activity", icon: ActivityIcon, hint: "Audit feed" },
   { id: "admin", label: "Admin", icon: Gauge, hint: "System + users" },
   { id: "trash", label: "Trash", icon: Trash2, hint: "Deleted items" },
@@ -63,6 +71,9 @@ export function CommandPalette({
   onOpenFile,
   onOpenNote,
   onShowHelp,
+  onNewDocument,
+  onNewFolder,
+  onUpload,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
@@ -70,6 +81,9 @@ export function CommandPalette({
   onOpenFile: (file: FileDto) => void;
   onOpenNote: (id: string) => void;
   onShowHelp: () => void;
+  onNewDocument: () => void;
+  onNewFolder: () => void;
+  onUpload: () => void;
 }) {
   const workspaceId = useActiveWorkspaceId();
   const [query, setQuery] = useState("");
@@ -149,13 +163,22 @@ export function CommandPalette({
   if (!open) return null;
 
   const navResults = NAV_ACTIONS.filter((a) => navMatches(a, query));
+
+  const CREATE_ACTIONS: CreateAction[] = [
+    { key: "doc", label: "New document", icon: FilePlus, kbd: "⌘N", run: onNewDocument },
+    { key: "folder", label: "New folder", icon: FolderPlus, kbd: "⌘⇧N", run: onNewFolder },
+    { key: "upload", label: "Upload files", icon: Upload, run: onUpload },
+  ];
+  const createResults = CREATE_ACTIONS.filter((c) => createMatches(c, query));
+
   const showEmpty =
     query.trim().length >= 2 &&
     !loading &&
     folders.length === 0 &&
     files.length === 0 &&
     notes.length === 0 &&
-    navResults.length === 0;
+    navResults.length === 0 &&
+    createResults.length === 0;
 
   return (
     <div
@@ -166,7 +189,7 @@ export function CommandPalette({
       }}
       style={overlayStyle()}
     >
-      <div style={panelStyle()}>
+      <div className="glass--overlay" style={panelStyle()}>
         <style>{`
           [cmdk-group-heading] {
             font-size: var(--text-2xs);
@@ -181,7 +204,17 @@ export function CommandPalette({
             background: var(--bg-selected);
             color: var(--fg-default);
           }
+          /* Amber glow on the leading icon of the active row. */
+          [cmdk-item][data-selected="true"] > span:first-child {
+            box-shadow: var(--accent-glow);
+            color: var(--accent);
+          }
           [cmdk-item]:hover { background: var(--bg-hover); }
+          @keyframes cd-cmd-overlay { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes cd-cmd-pop {
+            from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+          }
         `}</style>
         <Command label="Command palette" loop shouldFilter={false} filter={itemFilter}>
           <div style={inputRowStyle()}>
@@ -254,6 +287,33 @@ export function CommandPalette({
                 <Kbd>?</Kbd>
               </Command.Item>
             </Command.Group>
+
+            {/* Quick-create — the New menu, one keystroke away. Filtered by
+                the same substring match so typing "upload" surfaces it. */}
+            {createResults.length > 0 && (
+              <Command.Group heading="Quick create" style={groupStyle()}>
+                {createResults.map((c) => {
+                  const Icon = c.icon;
+                  return (
+                    <Command.Item
+                      key={`create:${c.key}`}
+                      value={`create:${c.key}`}
+                      onSelect={() => {
+                        c.run();
+                        close();
+                      }}
+                      style={itemStyle()}
+                    >
+                      <span style={iconBoxStyle()}>
+                        <Icon size={14} strokeWidth={1.5} />
+                      </span>
+                      <span style={{ flex: 1 }}>{c.label}</span>
+                      {c.kbd && <Kbd>{c.kbd}</Kbd>}
+                    </Command.Item>
+                  );
+                })}
+              </Command.Group>
+            )}
 
             {folders.length > 0 && (
               <Command.Group heading="Folders" style={groupStyle()}>
@@ -365,6 +425,12 @@ function navMatches(a: NavAction, query: string): boolean {
   );
 }
 
+function createMatches(c: CreateAction, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return c.label.toLowerCase().includes(q) || c.key.includes(q);
+}
+
 function formatBytes(b: number): string {
   if (!b) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -384,6 +450,8 @@ function overlayStyle(): React.CSSProperties {
     position: "fixed",
     inset: 0,
     background: "var(--bg-overlay)",
+    backdropFilter: "blur(2px)",
+    WebkitBackdropFilter: "blur(2px)",
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "center",
@@ -393,19 +461,18 @@ function overlayStyle(): React.CSSProperties {
   };
 }
 
+/** Spotlight panel — glass--overlay class supplies material, blur, border,
+ * radius, and the overlay shadow (with solid fallbacks). Inline only carries
+ * geometry + the spring entrance. */
 function panelStyle(): React.CSSProperties {
   return {
     width: "100%",
     maxWidth: 560,
-    background: "var(--bg-raised)",
-    border: "1px solid var(--border-hair)",
-    borderRadius: "var(--radius-lg)",
-    boxShadow: "var(--shadow-md)",
     overflow: "hidden",
     fontFamily: "var(--font-sans)",
     color: "var(--fg-default)",
     margin: "0 16px",
-    animation: "cd-cmd-pop 180ms var(--ease)",
+    animation: "cd-cmd-pop var(--dur-overlay) var(--ease-spring)",
   };
 }
 

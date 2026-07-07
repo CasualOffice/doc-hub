@@ -8,7 +8,6 @@ import {
   Folder as FolderIcon,
   FolderPlus,
   Link2,
-  Lock,
   MoreHorizontal,
   Upload,
   UploadCloud,
@@ -38,7 +37,6 @@ import { SearchToolbar } from "../components/SearchToolbar.tsx";
 import { generateThumbnail } from "../api/thumbnail.ts";
 import { forbiddenUploadExtension } from "../api/uploadPolicy.ts";
 import { EmptyState, EmptyStateButton } from "../components/EmptyState.tsx";
-import { StatusChip } from "../components/ds/StatusChip.tsx";
 import { SkeletonRow, VAULT_GRID } from "../components/ds/SkeletonRow.tsx";
 import { EntryContextMenu, EntryKebab, type Entry as MenuEntry, type EntryMenuHandlers } from "../components/EntryMenu.tsx";
 import { FileMiniIcon, FileThumb, inferKind, type FileKind } from "../components/FileThumb.tsx";
@@ -2144,10 +2142,8 @@ function ListView({
     <div
       role="table"
       aria-label="Documents"
+      className="glass"
       style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border-hair)",
-        borderRadius: "var(--radius-md)",
         overflow: "hidden",
       }}
     >
@@ -2162,10 +2158,8 @@ function ListView({
               <VaultRow
                 name={e.folder.name}
                 kind="fold"
-                kindLabel="Folder"
                 version={null}
                 modified={relative(e.folder.modified_at)}
-                encrypted={false}
                 last={last}
                 selected={selection.has(e.folder.id)}
                 onClick={(ev) => onEntryClick(ev, e)}
@@ -2185,10 +2179,8 @@ function ListView({
               fileId={e.file.id}
               name={e.file.name}
               kind={kind}
-              kindLabel={docKindLabel(e.file.name, e.file.content_type)}
               version={e.file.version}
               modified={relative(e.file.modified_at)}
-              encrypted
               status={e.file.status}
               selected={selection.has(e.file.id)}
               onClick={(ev) => onEntryClick(ev, e)}
@@ -2205,10 +2197,8 @@ function ListView({
           key={name}
           name={name}
           kind="generic"
-          kindLabel="Uploading…"
           version={null}
           modified=""
-          encrypted={false}
           status="uploading"
           ghost
           last
@@ -2237,6 +2227,7 @@ function VaultHeader() {
   return (
     <div
       role="row"
+      className="glass--thin"
       style={{
         display: "grid",
         gridTemplateColumns: VAULT_GRID,
@@ -2247,7 +2238,6 @@ function VaultHeader() {
         position: "sticky",
         top: 0,
         zIndex: 1,
-        background: "var(--bg-surface)",
         borderBottom: "1px solid var(--border-hair)",
         fontSize: "var(--text-sm)",
         fontWeight: "var(--weight-semibold)",
@@ -2256,11 +2246,8 @@ function VaultHeader() {
     >
       <span aria-hidden />
       <span style={cell}>Name</span>
-      <span style={cell}>Kind</span>
       <span style={cell}>Version</span>
       <span style={cell}>Updated</span>
-      <span style={cell}>Lock</span>
-      <span style={cell}>Encryption</span>
       <span aria-hidden />
     </div>
   );
@@ -2275,11 +2262,8 @@ const VaultRow = React.forwardRef<
     fileId?: string;
     name: string;
     kind: FileKind;
-    kindLabel: string;
     version: number | null;
     modified: string;
-    /** Encryption-at-rest invariant — true for committed documents. */
-    encrypted: boolean;
     status?: "uploading" | "ready" | "failed";
     onClick?: (e: React.MouseEvent) => void;
     onDoubleClick?: () => void;
@@ -2294,10 +2278,8 @@ const VaultRow = React.forwardRef<
     fileId,
     name,
     kind,
-    kindLabel,
     version,
     modified,
-    encrypted,
     status,
     onClick,
     onDoubleClick,
@@ -2311,8 +2293,11 @@ const VaultRow = React.forwardRef<
   ref,
 ) {
   const Icon = kindIconFor(kind);
-  const failed = status === "failed";
   const uploading = status === "uploading";
+  // M6 — Version is compliance-conditional: only surface `v{n}` when the
+  // document has an append-only chain worth flagging (versions > 1). The
+  // cell stays present (empty) otherwise so the grid template holds.
+  const showVersion = version !== null && version !== undefined && version > 1;
   const cell: React.CSSProperties = {
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -2331,7 +2316,7 @@ const VaultRow = React.forwardRef<
           onDoubleClick();
         }
       }}
-      className="cd-vault-row"
+      className="cd-vault-row glass--thick"
       {...rest}
       style={{
         display: "grid",
@@ -2343,7 +2328,10 @@ const VaultRow = React.forwardRef<
         cursor: onClick ? "pointer" : "default",
         borderBottom: last ? "none" : "1px solid var(--border-hair)",
         opacity: ghost ? 0.6 : 1,
-        background: selected ? "var(--bg-selected)" : "transparent",
+        // Near-solid glass rows (legibility); selected wins with an
+        // amber wash + left rule. Leaving background undefined lets the
+        // `.glass--thick` material own the resting fill.
+        background: selected ? "var(--bg-selected)" : undefined,
         boxShadow: selected ? "inset 2px 0 0 var(--accent)" : "none",
         userSelect: "none",
         outlineOffset: -2,
@@ -2386,54 +2374,14 @@ const VaultRow = React.forwardRef<
         </span>
       </div>
 
-      {/* Kind */}
-      <span
-        style={{
-          ...cell,
-          fontSize: "var(--text-sm)",
-          color: failed ? "var(--status-danger-700)" : "var(--fg-muted)",
-        }}
-      >
-        {failed ? "Failed" : uploading ? "Uploading…" : kindLabel}
-      </span>
-
-      {/* Version */}
+      {/* Version — compliance-conditional (empty when versions ≤ 1) */}
       <span className="mono" style={{ fontSize: "var(--text-sm)", color: "var(--fg-muted)" }}>
-        {version === null || version === undefined ? "—" : `v${version}`}
+        {showVersion ? `v${version}` : ""}
       </span>
 
       {/* Updated */}
       <span style={{ ...cell, fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
         {modified}
-      </span>
-
-      {/* Lock — ambient encryption-at-rest glyph */}
-      <span style={{ display: "flex", alignItems: "center" }}>
-        {encrypted ? (
-          <span
-            title="Encrypted at rest"
-            aria-label="Encrypted at rest"
-            style={{ display: "inline-flex", color: "var(--fg-subtle)" }}
-          >
-            <Lock size={13} strokeWidth={1.5} />
-          </span>
-        ) : (
-          <span style={{ color: "var(--fg-subtle)", fontSize: "var(--text-sm)" }}>—</span>
-        )}
-      </span>
-
-      {/* Encryption cluster */}
-      <span style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
-        {encrypted ? (
-          <StatusChip
-            icon={<Lock size={11} strokeWidth={1.5} />}
-            label="AES-256-GCM"
-            tone="ambient"
-            title="Encrypted at rest with AES-256-GCM"
-          />
-        ) : (
-          <span style={{ color: "var(--fg-subtle)", fontSize: "var(--text-2xs)" }}>—</span>
-        )}
       </span>
 
       {/* Actions */}
@@ -2478,10 +2426,8 @@ function GridSkeleton({ view }: { view: ViewMode }) {
   }
   return (
     <div
+      className="glass"
       style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border-hair)",
-        borderRadius: "var(--radius-md)",
         overflow: "hidden",
       }}
     >
@@ -2505,37 +2451,6 @@ function kindIconFor(kind: FileKind) {
       return FileText;
     default:
       return FileGeneric;
-  }
-}
-
-/** Human kind label restricted to the documents-only ingest allowlist —
- * no Video/Audio/Archive branches (they can't be uploaded). */
-function docKindLabel(name: string, contentType: string | null): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  switch (ext) {
-    case "docx":
-      return "Document";
-    case "xlsx":
-    case "xlsm":
-      return "Spreadsheet";
-    case "pptx":
-      return "Slides";
-    case "pdf":
-      return "PDF";
-    case "md":
-      return "Markdown";
-    case "csv":
-      return "CSV";
-    case "json":
-      return "JSON";
-    case "yaml":
-    case "yml":
-      return "YAML";
-    case "txt":
-      return "Text";
-    default:
-      if (contentType?.startsWith("text/")) return "Text";
-      return ext.toUpperCase() || "Document";
   }
 }
 

@@ -219,14 +219,14 @@ function Header({
 }) {
   return (
     <header
+      className="glass--thin"
       style={{
         flex: "0 0 auto",
         display: "flex",
         alignItems: "center",
         gap: "var(--space-3)",
-        paddingBottom: "var(--space-3)",
+        padding: "var(--space-3)",
         marginBottom: "var(--space-2)",
-        borderBottom: "1px solid var(--border-hair)",
       }}
     >
       <div style={{ minWidth: 0, flex: 1 }}>
@@ -304,6 +304,7 @@ function TamperAlarm({ atSeq }: { atSeq: number }) {
         background: "var(--amber-tint)",
         borderRadius: "var(--radius-md)",
         borderLeft: "3px solid var(--amber-700)",
+        boxShadow: "var(--accent-glow)",
         color: "var(--fg-default)",
         fontSize: "var(--text-sm)",
         lineHeight: "var(--leading-sm)",
@@ -418,8 +419,11 @@ function VersionNode({
         )}
       </div>
 
-      {/* Body */}
-      <div style={{ flex: 1, minWidth: 0, paddingBottom: "var(--space-4)" }}>
+      {/* Body — a near-solid glass node card. */}
+      <div
+        className="glass--thick"
+        style={{ flex: 1, minWidth: 0, padding: "var(--space-3)", marginBottom: "var(--space-3)" }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
           <span
             className="mono"
@@ -555,7 +559,7 @@ function LoadingTimeline() {
 
 function OneVersion() {
   return (
-    <div style={emptyBox}>
+    <div className="glass" style={emptyBox}>
       <RegistryMotif overlay="layers" />
       <div style={{ fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)", color: "var(--fg-default)" }}>
         One version so far
@@ -570,7 +574,7 @@ function OneVersion() {
 
 function EmptyChain() {
   return (
-    <div style={emptyBox}>
+    <div className="glass" style={emptyBox}>
       <RegistryMotif overlay="scroll-text" />
       <div style={{ fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)", color: "var(--fg-default)" }}>
         No versions yet
@@ -585,14 +589,14 @@ function EmptyChain() {
 function Footer({ count, verified }: { count: number; verified: boolean }) {
   return (
     <footer
+      className="glass--thin"
       style={{
         flex: "0 0 auto",
         display: "flex",
         alignItems: "center",
         gap: "var(--space-2)",
-        paddingTop: "var(--space-2)",
+        padding: "var(--space-2) var(--space-3)",
         marginTop: "var(--space-1)",
-        borderTop: "1px solid var(--border-hair)",
         fontSize: "var(--text-xs)",
         color: "var(--fg-subtle)",
       }}

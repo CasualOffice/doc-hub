@@ -8,14 +8,10 @@
  */
 import { useState } from "react";
 import {
-  Activity,
   Bell,
-  Building2,
-  Database,
-  Gavel,
-  Info,
   Key,
   KeyRound,
+  Monitor,
   Share2,
   ShieldCheck,
   Users,
@@ -25,26 +21,21 @@ import {
 
 import { ComingSoon } from "../components/ComingSoon.tsx";
 import { AccountSection } from "./settings/AccountSection.tsx";
-import { AboutSection } from "./settings/AboutSection.tsx";
+import { DisplaySection } from "./settings/DisplaySection.tsx";
 import { EncryptionSection } from "./settings/EncryptionSection.tsx";
 import { MembersSection } from "./settings/MembersSection.tsx";
-import { StorageSection } from "./settings/StorageSection.tsx";
 
-type GroupId = "you" | "team" | "security" | "system";
+type GroupId = "personal" | "workspace" | "compliance";
 
 type SectionId =
   | "account"
-  | "workspace"
+  | "display"
+  | "notifications"
+  | "tokens"
   | "members"
   | "roles"
   | "sharing"
-  | "encryption"
-  | "retention"
-  | "storage"
-  | "notifications"
-  | "tokens"
-  | "audit"
-  | "about";
+  | "encryption";
 
 interface SectionDef {
   id: SectionId;
@@ -53,26 +44,24 @@ interface SectionDef {
   group: GroupId;
 }
 
+// M6 relayout: 12 → 8 sections in three groups. About / Storage moved to
+// Admin › System; Retention moved to Admin › Retention & legal hold; the
+// Audit-log stub is gone (the live feed lives on the Activity surface).
 const SECTIONS: SectionDef[] = [
-  { id: "account", label: "Account", icon: UserCircle, group: "you" },
-  { id: "workspace", label: "Workspace", icon: Building2, group: "team" },
-  { id: "members", label: "Members", icon: Users, group: "team" },
-  { id: "roles", label: "Roles & permissions", icon: ShieldCheck, group: "team" },
-  { id: "sharing", label: "Sharing", icon: Share2, group: "team" },
-  { id: "encryption", label: "Encryption & keys", icon: KeyRound, group: "security" },
-  { id: "retention", label: "Retention & holds", icon: Gavel, group: "security" },
-  { id: "storage", label: "Storage", icon: Database, group: "system" },
-  { id: "notifications", label: "Notifications", icon: Bell, group: "system" },
-  { id: "tokens", label: "API tokens", icon: Key, group: "system" },
-  { id: "audit", label: "Audit log", icon: Activity, group: "system" },
-  { id: "about", label: "About", icon: Info, group: "system" },
+  { id: "account", label: "Account", icon: UserCircle, group: "personal" },
+  { id: "display", label: "Display", icon: Monitor, group: "personal" },
+  { id: "notifications", label: "Notifications", icon: Bell, group: "personal" },
+  { id: "tokens", label: "Tokens & sessions", icon: Key, group: "personal" },
+  { id: "members", label: "Members", icon: Users, group: "workspace" },
+  { id: "roles", label: "Roles & permissions", icon: ShieldCheck, group: "workspace" },
+  { id: "sharing", label: "Sharing", icon: Share2, group: "workspace" },
+  { id: "encryption", label: "Encryption & keys", icon: KeyRound, group: "compliance" },
 ];
 
 const GROUPS: { id: GroupId; label: string }[] = [
-  { id: "you", label: "You" },
-  { id: "team", label: "Workspace" },
-  { id: "security", label: "Security" },
-  { id: "system", label: "System" },
+  { id: "personal", label: "Personal" },
+  { id: "workspace", label: "Workspace" },
+  { id: "compliance", label: "Compliance" },
 ];
 
 export function Settings() {
@@ -206,26 +195,12 @@ function renderSection(def: SectionDef): React.ReactNode {
   switch (def.id) {
     case "account":
       return <AccountSection />;
+    case "display":
+      return <DisplaySection />;
     case "encryption":
       return <EncryptionSection />;
-    case "storage":
-      return <StorageSection />;
-    case "about":
-      return <AboutSection />;
     case "members":
       return <MembersSection />;
-    case "workspace":
-      return (
-        <ComingSoon
-          title="Workspace"
-          description="Rename your workspace, change the icon, and set the default visibility for new documents."
-          bullets={[
-            "Workspace name + monogram avatar",
-            "Default document visibility (private / link-restricted / org)",
-            "Workspace deletion + transfer-of-ownership",
-          ]}
-        />
-      );
     case "roles":
       return (
         <ComingSoon
@@ -250,18 +225,6 @@ function renderSection(def: SectionDef): React.ReactNode {
           ]}
         />
       );
-    case "retention":
-      return (
-        <ComingSoon
-          title="Retention & holds"
-          description="Set how long a tombstoned document ages before it is purge-eligible, and place or release legal holds."
-          bullets={[
-            "Per-project retention window (30 / 90 / 365 days / never)",
-            "Place a legal hold — blocks tombstone + purge until released",
-            "Release a hold — audited, chained event",
-          ]}
-        />
-      );
     case "notifications":
       return (
         <ComingSoon
@@ -277,24 +240,12 @@ function renderSection(def: SectionDef): React.ReactNode {
     case "tokens":
       return (
         <ComingSoon
-          title="API tokens"
-          description="Issue personal API tokens for scripts, sync clients, and CI. Each token is scoped + revocable."
+          title="Tokens & sessions"
+          description="Issue personal API tokens for scripts, sync clients, and CI, and review the sessions signed in to your account. Each token is scoped + revocable."
           bullets={[
-            "Per-token scope (read / write / admin)",
-            "Per-token expiry + last-used timestamp",
+            "Per-token scope (read / write / admin) + expiry",
+            "Per-device session list with per-device revoke",
             "Audit log entry on every issue / revoke",
-          ]}
-        />
-      );
-    case "audit":
-      return (
-        <ComingSoon
-          title="Audit log"
-          description="The append-only, hash-chained event feed lives on the Activity surface. A signed export report lands here."
-          bullets={[
-            "Grouped by day, type-tagged, owner-filterable",
-            "Append-only audit_log — hash-chained for compliance",
-            "Signed, offline-verifiable JSONL / CSV / PDF export",
           ]}
         />
       );

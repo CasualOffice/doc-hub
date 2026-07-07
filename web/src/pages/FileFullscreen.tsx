@@ -309,6 +309,7 @@ function FullscreenHeader({
 
   return (
     <header
+      className="glass--thin"
       style={{
         flex: "0 0 auto",
         display: "flex",
@@ -317,7 +318,6 @@ function FullscreenHeader({
         height: 48,
         padding: "0 16px",
         borderBottom: "1px solid var(--border-hair)",
-        background: "var(--bg-surface)",
       }}
     >
       <button
@@ -756,6 +756,7 @@ function DetailsDrawer({
         role="dialog"
         aria-label="File details"
         data-testid="file-fullscreen-details-drawer"
+        className="glass"
         style={{
           position: "fixed",
           top: 0,
@@ -763,9 +764,9 @@ function DetailsDrawer({
           bottom: 0,
           width: 360,
           maxWidth: "92vw",
-          background: "var(--card)",
-          borderLeft: "1px solid var(--line)",
-          boxShadow: "var(--shadow-xl, -8px 0 28px rgba(15, 23, 42, 0.12))",
+          // Flush right edge — glass owns the fill/border/shadow; drop the
+          // rounded corners so the drawer meets the viewport cleanly.
+          borderRadius: 0,
           zIndex: 100,
           display: "flex",
           flexDirection: "column",

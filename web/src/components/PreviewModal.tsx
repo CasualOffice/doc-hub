@@ -16,8 +16,6 @@ import {
   ExternalLink,
   Maximize2,
   Share2,
-  Star,
-  X,
 } from "lucide-react";
 
 import type { UseFileSourceAutoSaveReturn } from "@schnsrw/docx-js-editor";
@@ -124,6 +122,7 @@ export function PreviewModal({
         />
         <Dialog.Content
           aria-describedby={undefined}
+          className="glass glass--overlay"
           style={{
             position: "fixed",
             top: "50%",
@@ -131,13 +130,9 @@ export function PreviewModal({
             transform: "translate(-50%, -50%)",
             width: "min(1000px, calc(100% - 60px))",
             height: "min(640px, 90vh)",
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border-hair)",
-            borderRadius: "var(--radius-xl)",
             overflow: "hidden",
             display: "grid",
             gridTemplateColumns: "1fr 320px",
-            boxShadow: "var(--shadow-lg)",
             zIndex: "var(--z-modal)" as unknown as number,
             animation: "cd-modal-in 320ms var(--ease)",
           }}
@@ -214,11 +209,8 @@ export function PreviewModal({
               >
                 <Maximize2 size={16} strokeWidth={1.5} />
               </IconButton>
-              <Dialog.Close asChild>
-                <IconButton aria-label="Close" title="Close (Esc)">
-                  <X size={16} strokeWidth={1.5} />
-                </IconButton>
-              </Dialog.Close>
+              {/* M6 — the redundant × is gone: Esc and scrim-click already
+                  close the modal (Radix Dialog `onOpenChange`). */}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 6px" }}>
@@ -272,9 +264,6 @@ export function PreviewModal({
               <ActionButton onClick={() => setShareOpen(true)}>
                 <Share2 size={15} strokeWidth={1.5} />
                 Share
-              </ActionButton>
-              <ActionButton icon aria-label="Star" onClick={() => {}}>
-                <Star size={15} strokeWidth={1.5} />
               </ActionButton>
             </div>
 
