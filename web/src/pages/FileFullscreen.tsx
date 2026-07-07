@@ -29,7 +29,7 @@
  */
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Info, Share2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Info, Share2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { downloadUrl, getFile, renameFile, trashFile, type FileDto } from "../api/client.ts";
@@ -201,7 +201,7 @@ export function FileFullscreen({ fileId }: FileFullscreenProps) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "var(--bg)",
+        background: "var(--bg-canvas)",
         display: "flex",
         flexDirection: "column",
       }}
@@ -265,10 +265,11 @@ function FullscreenHeader({
         flex: "0 0 auto",
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: "10px 18px",
-        borderBottom: "1px solid var(--line)",
-        background: "var(--card)",
+        gap: 10,
+        height: 48,
+        padding: "0 16px",
+        borderBottom: "1px solid var(--border-hair)",
+        background: "var(--bg-surface)",
       }}
     >
       <button
@@ -278,17 +279,39 @@ function FullscreenHeader({
         data-testid="file-fullscreen-back"
         title="Back to Drive (Esc)"
         style={{
-          padding: 6,
-          border: "1px solid var(--line)",
-          borderRadius: 8,
-          background: "var(--card)",
+          width: 28,
+          height: 28,
+          border: "1px solid var(--border-hair)",
+          borderRadius: "var(--radius-sm)",
+          background: "var(--bg-raised)",
           cursor: "pointer",
           display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--fg-default)",
         }}
       >
-        <ArrowLeft size={16} />
+        <ArrowLeft size={16} strokeWidth={1.5} />
       </button>
       <FilenameField name={file?.name ?? "Loading…"} editable={!!file} onCommit={onRename} />
+      {file && file.version > 0 && (
+        <span
+          className="mono"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 16,
+            padding: "0 5px",
+            fontSize: "var(--text-2xs)",
+            color: "var(--fg-muted)",
+            background: "var(--bg-sunken)",
+            border: "1px solid var(--border-hair)",
+            borderRadius: "var(--radius-xs)",
+          }}
+        >
+          v{file.version}
+        </span>
+      )}
       <SaveStatusPill status={saveStatus} />
       <div style={{ flex: 1 }} />
       <FilePresenceStack fileId={file?.id} />
@@ -304,17 +327,18 @@ function FullscreenHeader({
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              padding: "6px 12px",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              background: "var(--card)",
+              height: 28,
+              padding: "0 12px",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--bg-raised)",
               cursor: "pointer",
               fontSize: "var(--text-sm)",
-              fontWeight: 500,
-              color: "var(--text)",
+              fontWeight: "var(--weight-medium)",
+              color: "var(--fg-default)",
             }}
           >
-            <Info size={14} />
+            <Info size={14} strokeWidth={1.5} />
             Details
           </button>
           <button
@@ -326,17 +350,18 @@ function FullscreenHeader({
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              padding: "6px 12px",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              background: "var(--card)",
+              height: 28,
+              padding: "0 12px",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--bg-raised)",
               cursor: "pointer",
               fontSize: "var(--text-sm)",
-              fontWeight: 500,
-              color: "var(--text)",
+              fontWeight: "var(--weight-medium)",
+              color: "var(--fg-default)",
             }}
           >
-            <Share2 size={14} />
+            <Share2 size={14} strokeWidth={1.5} />
             Share
           </button>
           <EntryKebab
@@ -412,8 +437,8 @@ function FilenameField({
         style={{
           fontSize: "var(--text-sm)",
           fontWeight: 600,
-          color: "var(--text)",
-          background: "var(--bg)",
+          color: "var(--fg-default)",
+          background: "var(--bg-canvas)",
           border: "1px solid var(--accent)",
           borderRadius: 6,
           padding: "4px 8px",
@@ -435,7 +460,7 @@ function FilenameField({
       style={{
         fontSize: "var(--text-sm)",
         fontWeight: 600,
-        color: "var(--text)",
+        color: "var(--fg-default)",
         background: "transparent",
         border: "1px solid transparent",
         borderRadius: 6,
@@ -470,17 +495,40 @@ function FullscreenBody({
     return (
       <div
         data-testid="file-fullscreen-loading"
+        role="status"
+        aria-label="Opening file"
         style={{
           width: "100%",
           height: "100%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: "var(--text-sm)",
-          color: "var(--text-muted)",
+          padding: 24,
+          boxSizing: "border-box",
+          background: "var(--bg-canvas)",
         }}
       >
-        Opening file…
+        <div
+          style={{
+            width: "min(640px, 100%)",
+            height: "min(100%, 520px)",
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border-hair)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-sm)",
+            padding: "32px clamp(20px, 6vw, 44px)",
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            overflow: "hidden",
+          }}
+        >
+          <div className="skeleton" style={{ height: 20, width: "48%", borderRadius: "var(--radius-xs)", marginBottom: 8 }} />
+          {["96%", "88%", "92%", "70%", "94%", "82%", "90%", "58%"].map((w, i) => (
+            <div key={i} className="skeleton" style={{ height: 11, width: w, borderRadius: "var(--radius-2xs)" }} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -489,6 +537,7 @@ function FullscreenBody({
     return (
       <div
         data-testid="file-fullscreen-error"
+        role="alert"
         style={{
           width: "100%",
           height: "100%",
@@ -496,15 +545,26 @@ function FullscreenBody({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 8,
+          gap: 10,
           padding: 24,
           textAlign: "center",
+          background: "var(--bg-canvas)",
         }}
       >
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-          Couldn't open this file
-        </div>
-        <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 420 }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            fontSize: "var(--text-md)",
+            fontWeight: "var(--weight-semibold)",
+            color: "var(--status-danger-700)",
+          }}
+        >
+          <AlertTriangle size={16} strokeWidth={1.5} aria-hidden />
+          Couldn&apos;t open this file
+        </span>
+        <div style={{ fontSize: "var(--text-base)", color: "var(--fg-muted)", maxWidth: 420 }}>
           {state.message}
         </div>
       </div>
@@ -529,23 +589,19 @@ function FullscreenBody({
     );
   }
 
-  // Every other kind — image / pdf / video / audio / text / md /
-  // generic — falls through to PreviewStage. The fullscreen route
-  // gets the same per-kind viewer the modal uses, just without the
-  // surrounding modal chrome. PreviewStage already takes the full
-  // available space so it scales correctly to the route layout.
+  // Every other document kind — pdf / text / md / generic / opaque —
+  // falls through to PreviewStage (documents-only; no media renderers).
+  // The fullscreen route gets the same per-kind viewer the modal uses,
+  // just without the surrounding modal chrome. PreviewStage fills the
+  // available space and owns its own scroll + padding.
   return (
     <div
       data-testid="file-fullscreen-viewer"
       style={{
         width: "100%",
         height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        boxSizing: "border-box",
-        overflow: "auto",
+        overflow: "hidden",
+        background: "var(--bg-canvas)",
       }}
     >
       <Suspense fallback={<LoadingFallback />}>
@@ -565,7 +621,7 @@ function LoadingFallback() {
         alignItems: "center",
         justifyContent: "center",
         fontSize: "var(--text-sm)",
-        color: "var(--text-muted)",
+        color: "var(--fg-muted)",
       }}
     >
       Loading editor…
@@ -646,7 +702,7 @@ function DetailsDrawer({
             borderBottom: "1px solid var(--line)",
           }}
         >
-          <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text)" }}>
+          <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--fg-default)" }}>
             Details
           </div>
           <button
