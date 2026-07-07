@@ -8,7 +8,10 @@ import {
   Folder as FolderIcon,
   FolderPlus,
   Link2,
+  Lock,
   MoreHorizontal,
+  ShieldAlert,
+  ShieldCheck,
   Upload,
   UploadCloud,
   X,
@@ -2181,7 +2184,9 @@ function ListView({
               kind={kind}
               version={e.file.version}
               modified={relative(e.file.modified_at)}
+              size={e.file.size}
               status={e.file.status}
+              chainVerified={readChainVerified(e.file)}
               selected={selection.has(e.file.id)}
               onClick={(ev) => onEntryClick(ev, e)}
               onDoubleClick={onEntryDoubleClick ? () => onEntryDoubleClick(e) : undefined}
@@ -2207,6 +2212,10 @@ function ListView({
       <style>{`
         [data-density="compact"] .cd-vault-row { height: 28px; }
         .cd-vault-row:hover { background: var(--bg-hover); }
+        /* Actions rest hidden and fade in on hover/focus (§2.2 "actions
+           fade in right"). Kept in CSS — not an inline opacity — so the
+           :hover / :focus-within rules can actually win. */
+        .cd-vault-kebab { opacity: 0; transition: opacity var(--dur-base); }
         .cd-vault-row:hover .cd-vault-kebab,
         .cd-vault-row:focus-within .cd-vault-kebab { opacity: 1; }
         .cd-vault-row:hover .cd-vault-select,
@@ -2247,8 +2256,9 @@ function VaultHeader() {
       <span aria-hidden />
       <span style={cell}>Name</span>
       <span style={cell}>Version</span>
+      <span style={cell}>Status</span>
       <span style={cell}>Updated</span>
-      <span aria-hidden />
+      <span style={{ ...cell, textAlign: "right" }}>Size</span>
     </div>
   );
 }
@@ -2264,7 +2274,12 @@ const VaultRow = React.forwardRef<
     kind: FileKind;
     version: number | null;
     modified: string;
+    /** Byte size — file rows only; folders/ghosts leave it undefined. */
+    size?: number;
     status?: "uploading" | "ready" | "failed";
+    /** Hash-chain verification state (§2.3 compliance cue). `false` is the
+     * only tamper alarm; `undefined`/`true` read as verified. */
+    chainVerified?: boolean;
     onClick?: (e: React.MouseEvent) => void;
     onDoubleClick?: () => void;
     onToggle?: () => void;
@@ -2280,7 +2295,9 @@ const VaultRow = React.forwardRef<
     kind,
     version,
     modified,
+    size,
     status,
+    chainVerified,
     onClick,
     onDoubleClick,
     onToggle,
@@ -2294,6 +2311,9 @@ const VaultRow = React.forwardRef<
 ) {
   const Icon = kindIconFor(kind);
   const uploading = status === "uploading";
+  // Compliance cue + size render for real document rows only — folders
+  // and the upload-ghost placeholder carry neither.
+  const isFile = kind !== "fold" && !ghost;
   // M6 — Version is compliance-conditional: only surface `v{n}` when the
   // document has an append-only chain worth flagging (versions > 1). The
   // cell stays present (empty) otherwise so the grid template holds.
@@ -2319,6 +2339,7 @@ const VaultRow = React.forwardRef<
       className="cd-vault-row glass--thick"
       {...rest}
       style={{
+        position: "relative",
         display: "grid",
         gridTemplateColumns: VAULT_GRID,
         alignItems: "center",
@@ -2379,26 +2400,123 @@ const VaultRow = React.forwardRef<
         {showVersion ? `v${version}` : ""}
       </span>
 
+      {/* Status — the row's compliance payload (§2.3). Files only. */}
+      <span style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+        {isFile && <VaultStatusPill chainVerified={chainVerified} />}
+      </span>
+
       {/* Updated */}
       <span style={{ ...cell, fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}>
         {modified}
       </span>
 
-      {/* Actions */}
+      {/* Size — right-hairline-aligned numeric (ui-system). */}
       <span
-        className="cd-vault-kebab"
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          opacity: 0.55,
-          transition: "opacity var(--dur-base)",
-        }}
+        className="tnum"
+        style={{ ...cell, textAlign: "right", fontSize: "var(--text-xs)", color: "var(--fg-muted)" }}
       >
-        {kebab}
+        {isFile && size !== undefined ? formatSize(size) : ""}
       </span>
+
+      {/* Actions — overlaid on the right edge, fade in on hover/focus
+          (§2.2). Not a grid track, so it never steals column width; the
+          `.cd-vault-kebab` opacity lives in the ListView <style> block so
+          the hover/focus rule can win (an inline opacity can't be
+          overridden by a stylesheet :hover rule). */}
+      {kebab && (
+        <span
+          className="cd-vault-kebab"
+          style={{
+            position: "absolute",
+            top: "50%",
+            right: "var(--space-3)",
+            transform: "translateY(-50%)",
+            display: "flex",
+            alignItems: "center",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--bg-surface)",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          {kebab}
+        </span>
+      )}
     </div>
   );
 });
+
+/** Dense compliance cue for a vault row (ui-redesign-v3 §2.3). Encryption
+ * is universal (AES-256-GCM), so every document is `encrypted`; the
+ * hash-chain verify state rides alongside it in the same pill. A
+ * `chain_verified === false` is the sole tamper alarm — `undefined`/`true`
+ * read as verified (the quiet default, matching Activity.tsx's handling of
+ * the same field). Icon + label always, never colour-only; tamper adds an
+ * `--accent-glow` alarm.
+ *
+ * FOLLOW-UP: the full status cluster in the spec also carries `gavel`
+ * (legal hold) and `badge-check` (signed) states — those need backend
+ * FileDto fields (`held` / `requires_signature` / `retention_due`) that
+ * the wire shape doesn't expose yet, so they're intentionally omitted
+ * here rather than fabricated. Extend this pill when they land. */
+function VaultStatusPill({ chainVerified }: { chainVerified?: boolean }) {
+  const tampered = chainVerified === false;
+  const label = tampered ? "Tamper" : "Verified";
+  const Shield = tampered ? ShieldAlert : ShieldCheck;
+  const fg = tampered ? "var(--status-danger-700)" : "var(--status-verified-700)";
+  const iconColor = tampered ? "var(--status-danger)" : "var(--status-verified)";
+  return (
+    <span
+      className="glass--ultrathin"
+      title={
+        tampered
+          ? "Encrypted (AES-256-GCM) · hash-chain tamper detected — open history"
+          : "Encrypted (AES-256-GCM) · hash chain verified"
+      }
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        maxWidth: "100%",
+        padding: "1px 6px",
+        borderRadius: "var(--radius-pill)",
+        border: "var(--hairline-glass)",
+        fontSize: "var(--text-2xs)",
+        fontWeight: "var(--weight-medium)",
+        lineHeight: 1,
+        color: fg,
+        // Amber-glow alarm on tamper — icon + label carry it too (never colour-only).
+        boxShadow: tampered ? "var(--accent-glow)" : undefined,
+      }}
+    >
+      {/* Lock = encrypted (always); shield = chain-verify state. */}
+      <Lock size={11} strokeWidth={2} style={{ color: iconColor, flexShrink: 0 }} aria-hidden />
+      <Shield size={11} strokeWidth={2} style={{ color: iconColor, flexShrink: 0 }} aria-hidden />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+    </span>
+  );
+}
+
+/** Read the (optional) hash-chain verify flag off a FileDto. The field is
+ * not on the wire shape yet — `find_by_id` doesn't project it — so this is
+ * `undefined` today and the pill treats that as verified. Widened locally
+ * (rather than touching the shared `FileDto` type) so the surface is ready
+ * the moment the backend starts emitting it. */
+function readChainVerified(f: FileDto): boolean | undefined {
+  return (f as FileDto & { chain_verified?: boolean }).chain_verified;
+}
+
+/** Compact byte-size formatter for the vault Size column. */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+}
 
 function GridSkeleton({ view }: { view: ViewMode }) {
   if (view === "grid") {

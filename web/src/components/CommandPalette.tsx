@@ -12,16 +12,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Command } from "cmdk";
 import {
   Activity as ActivityIcon,
+  FileDown,
   FilePlus,
   FileText,
   Folder,
   FolderPlus,
   Gauge,
+  Gavel,
   HelpCircle,
   Home,
   NotebookPen,
+  PenLine,
   Search,
   Settings as SettingsIcon,
+  ShieldCheck,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -52,6 +56,25 @@ type CreateAction = {
   kbd?: string;
   run: () => void;
 };
+
+// UI-M6 (gap 3): context-aware compliance/registry commands. Shown only
+// when a document is the active context (the top document match). Every
+// one lands on `/document/{id}/history` — the verify + provenance +
+// legal-hold compliance surface — so none is a dead no-op.
+type DocAction = {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  kbd?: string;
+  hint: string;
+};
+
+const DOC_ACTIONS: DocAction[] = [
+  { key: "verify", label: "Verify chain", icon: ShieldCheck, kbd: "⌘⇧V", hint: "Recompute hash chain" },
+  { key: "sign", label: "Sign", icon: PenLine, hint: "Provenance signature" },
+  { key: "hold", label: "Place legal hold", icon: Gavel, hint: "Freeze from deletion" },
+  { key: "provenance", label: "Export provenance bundle", icon: FileDown, hint: "Signed audit export" },
+];
 
 // UI-M6: coming-soon destinations (Recent / Starred / Shared) are filtered
 // out of GO TO — only real, navigable surfaces appear.
@@ -155,6 +178,40 @@ export function CommandPalette({
   }, [open, query, workspaceId]);
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
+
+  // UI-M6 (gap 3): route to a document's compliance surface. Seeds
+  // history.state with the FileDto so VersionHistoryPage names it on the
+  // hot path (falls back to a cold GET on deep-link), matching the
+  // Files.tsx "Version history" navigation exactly.
+  const openCompliance = useCallback(
+    (file: FileDto) => {
+      const url = `/document/${encodeURIComponent(file.id)}/history`;
+      window.history.pushState({ file }, "", url);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      close();
+    },
+    [close],
+  );
+
+  // The active document context = the top document match. Its compliance
+  // commands (Verify chain / Sign / Place hold / Export provenance) ride
+  // in an ACTIONS group below.
+  const activeDoc = files[0] ?? null;
+
+  // ⌘⇧V — Verify chain accelerator. Live only while the palette is open
+  // AND a document is the active context, so it's never a dead binding.
+  useEffect(() => {
+    if (!open || !activeDoc) return;
+    function onKey(e: KeyboardEvent) {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.shiftKey && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        openCompliance(activeDoc!);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, activeDoc, openCompliance]);
 
   // cmdk groups items by their `value` for matching; we want the input
   // to be the source of truth, so disable the built-in filter.
@@ -373,6 +430,35 @@ export function CommandPalette({
               </Command.Group>
             )}
 
+            {/* Actions — compliance/registry commands for the active
+                document (the top match). Keyboard-driven; every item
+                lands on the verify + provenance surface. */}
+            {activeDoc && (
+              <Command.Group
+                heading={`Actions · ${truncateName(activeDoc.name)}`}
+                style={groupStyle()}
+              >
+                {DOC_ACTIONS.map((a) => {
+                  const Icon = a.icon;
+                  return (
+                    <Command.Item
+                      key={`docaction:${a.key}`}
+                      value={`docaction:${a.key}`}
+                      onSelect={() => openCompliance(activeDoc)}
+                      style={itemStyle()}
+                    >
+                      <span style={iconBoxStyle()}>
+                        <Icon size={14} strokeWidth={1.5} />
+                      </span>
+                      <span style={{ flex: 1 }}>{a.label}</span>
+                      <span style={hintStyle()}>{a.hint}</span>
+                      {a.kbd && <Kbd>{a.kbd}</Kbd>}
+                    </Command.Item>
+                  );
+                })}
+              </Command.Group>
+            )}
+
             {notes.length > 0 && (
               <Command.Group heading="Notes" style={groupStyle()}>
                 {notes.map((n) => (
@@ -429,6 +515,10 @@ function createMatches(c: CreateAction, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return c.label.toLowerCase().includes(q) || c.key.includes(q);
+}
+
+function truncateName(name: string, max = 28): string {
+  return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
 }
 
 function formatBytes(b: number): string {

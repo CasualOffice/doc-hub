@@ -169,9 +169,13 @@ test("UX-EDITOR-8: PreviewModal Details card shows compliance summary + links", 
 }) => {
   test.setTimeout(60_000);
   await page.getByText("Q2 planning.xlsx").first().click();
+  // M6/ui-v3 §3.2 made the Details panel opt-in: the modal opens as a
+  // single-column stage with the proof one-liner; the full compliance
+  // card discloses behind the footer "Details" toggle.
+  await expect(page.getByText(/Encrypted · v\d+ · ✓ Verified/)).toBeVisible({ timeout: 5_000 });
+  await page.getByTestId("preview-details-toggle").click();
   await page.getByTestId("details-panel").waitFor({ timeout: 5_000 });
-  // M6 replaced the three tabs with a single glass compliance card. Scope
-  // the button assertions to the card — the modal chrome has its own Share.
+  // Scope the button assertions to the card — the modal chrome has its own actions.
   const card = page.getByTestId("details-compliance-card");
   await expect(card).toBeVisible();
   await expect(card.getByRole("button", { name: /View full history/i })).toBeVisible();
@@ -181,6 +185,8 @@ test("UX-EDITOR-8: PreviewModal Details card shows compliance summary + links", 
 test("UX-EDITOR-8: Details compliance card links to full version history", async ({ page }) => {
   test.setTimeout(60_000);
   await page.getByText("Q2 planning.xlsx").first().click();
+  // Details is opt-in (§3.2) — reveal the card, then follow its primary link.
+  await page.getByTestId("preview-details-toggle").click();
   await page.getByTestId("details-panel").waitFor({ timeout: 5_000 });
   // The card's primary action is the ONE canonical version-history home.
   await page.getByRole("button", { name: /View full history/i }).click();
