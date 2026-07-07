@@ -9,7 +9,16 @@
  */
 import { lazy, Suspense, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { ChevronLeft, ChevronRight, Download, Maximize2, Share2, Star, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  Maximize2,
+  Share2,
+  Star,
+  X,
+} from "lucide-react";
 
 import type { UseFileSourceAutoSaveReturn } from "@schnsrw/docx-js-editor";
 
@@ -122,12 +131,13 @@ export function PreviewModal({
             transform: "translate(-50%, -50%)",
             width: "min(1000px, calc(100% - 60px))",
             height: "min(640px, 90vh)",
-            background: "var(--card)",
-            borderRadius: 24,
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border-hair)",
+            borderRadius: "var(--radius-xl)",
             overflow: "hidden",
             display: "grid",
             gridTemplateColumns: "1fr 320px",
-            boxShadow: "var(--shadow-xl)",
+            boxShadow: "var(--shadow-lg)",
             zIndex: "var(--z-modal)" as unknown as number,
             animation: "cd-modal-in 320ms var(--ease)",
           }}
@@ -139,7 +149,8 @@ export function PreviewModal({
             style={{
               position: "relative",
               overflow: "hidden",
-              background: "var(--bg-subtle)",
+              background: "var(--bg-canvas)",
+              borderRight: "1px solid var(--border-hair)",
             }}
           >
             <PreviewStage file={file} kind={kind} onAutosaveState={setAutosaveState} />
@@ -152,12 +163,13 @@ export function PreviewModal({
                   right: 12,
                   zIndex: 2,
                   fontSize: "var(--text-xs)",
-                  color: "var(--ink-soft)",
-                  background: "rgba(255,255,255,0.85)",
+                  color: "var(--fg-muted)",
+                  background: "var(--bg-raised)",
+                  border: "1px solid var(--border-hair)",
                   padding: "3px 9px",
-                  borderRadius: 8,
+                  borderRadius: "var(--radius-sm)",
+                  boxShadow: "var(--shadow-sm)",
                   pointerEvents: "none",
-                  backdropFilter: "blur(4px)",
                 }}
               >
                 <Suspense fallback={null}>
@@ -180,47 +192,44 @@ export function PreviewModal({
           {/* Side */}
           <aside
             style={{
-              padding: "24px 26px 22px",
+              padding: "16px 20px 18px",
               display: "flex",
               flexDirection: "column",
-              borderLeft: "1px solid var(--line)",
               overflowY: "auto",
             }}
           >
-            <div style={{ alignSelf: "flex-end", display: "flex", gap: 4, alignItems: "center" }}>
-              <button
-                type="button"
+            <div style={{ alignSelf: "flex-end", display: "flex", gap: 2, alignItems: "center" }}>
+              <IconButton
+                aria-label="Download"
+                title="Download"
+                onClick={() => window.location.assign(downloadUrl(file.id))}
+              >
+                <Download size={16} strokeWidth={1.5} />
+              </IconButton>
+              <IconButton
                 aria-label="Expand to fullscreen"
                 title="Open in full view"
                 data-testid="preview-expand"
                 onClick={() => openInFullscreen(file)}
-                style={iconBtn()}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
               >
-                <Maximize2 size={16} />
-              </button>
+                <Maximize2 size={16} strokeWidth={1.5} />
+              </IconButton>
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  style={iconBtn()}
-                  onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                  onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <X size={18} />
-                </button>
+                <IconButton aria-label="Close" title="Close (Esc)">
+                  <X size={16} strokeWidth={1.5} />
+                </IconButton>
               </Dialog.Close>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 11, margin: "6px 0 4px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 6px" }}>
               <span
                 style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 6,
+                  width: 24,
+                  height: 24,
+                  borderRadius: "var(--radius-sm)",
                   overflow: "hidden",
                   flexShrink: 0,
+                  border: "1px solid var(--border-hair)",
                 }}
               >
                 <FileThumb name={file.name} kind={kind} size="small" thumbnail={file.thumbnail} />
@@ -228,39 +237,50 @@ export function PreviewModal({
               <h3
                 style={{
                   fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 500,
+                  fontSize: "var(--text-lg)",
+                  fontWeight: "var(--weight-semibold)",
                   letterSpacing: "var(--tracking-tight)",
                   wordBreak: "break-word",
+                  color: "var(--fg-default)",
                   margin: 0,
                 }}
               >
                 {file.name}
               </h3>
             </div>
-            <div style={{ fontSize: "var(--text-xs)", color: "var(--muted)", marginBottom: 20 }}>
-              {typeLabel}
-              {file.size > 0 && ` · ${formatBytes(file.size)}`}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: "var(--text-xs)",
+                color: "var(--fg-muted)",
+                marginBottom: 18,
+              }}
+            >
+              <span>{typeLabel}</span>
+              {file.version > 0 && <VersionChip version={file.version} />}
+              {file.size > 0 && <span>· {formatBytes(file.size)}</span>}
             </div>
 
             {/* Actions */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
               <ActionButton primary onClick={primary.onClick}>
-                <primary.Icon size={15} strokeWidth={2} />
+                <primary.Icon size={15} strokeWidth={1.5} />
                 {primary.label}
               </ActionButton>
               <ActionButton onClick={() => setShareOpen(true)}>
-                <Share2 size={15} strokeWidth={2} />
+                <Share2 size={15} strokeWidth={1.5} />
                 Share
               </ActionButton>
-              <ActionButton icon onClick={() => {}}>
-                <Star size={15} strokeWidth={1.8} />
+              <ActionButton icon aria-label="Star" onClick={() => {}}>
+                <Star size={15} strokeWidth={1.5} />
               </ActionButton>
             </div>
 
             {/* Real tabbed Details panel — Info / People / History.
                 Replaces the prior 4-row Details stub. */}
-            <div style={{ flex: 1, minHeight: 0, marginTop: 4, marginLeft: -26, marginRight: -26 }}>
+            <div style={{ flex: 1, minHeight: 0, marginTop: 4, marginLeft: -20, marginRight: -20 }}>
               <DetailsPanel file={file} onCreateShare={() => setShareOpen(true)} />
             </div>
           </aside>
@@ -281,18 +301,57 @@ export function PreviewModal({
   );
 }
 
-function iconBtn(): React.CSSProperties {
-  return {
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    color: "var(--muted)",
-    padding: 4,
-    borderRadius: 8,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-  };
+/** 28×28 ghost icon button (ui-system §7.9). Hover → --bg-hover; the
+ *  global :focus-visible ring supplies keyboard focus. */
+function IconButton({
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      {...props}
+      style={{
+        width: 28,
+        height: 28,
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        color: "var(--fg-muted)",
+        borderRadius: "var(--radius-sm)",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "background var(--dur-instant) var(--ease-out)",
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+      onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** `v12` version chip — mono, tabular, muted (ui-system §7.2). */
+function VersionChip({ version }: { version: number }) {
+  return (
+    <span
+      className="mono"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        height: 16,
+        padding: "0 5px",
+        fontSize: "var(--text-2xs)",
+        color: "var(--fg-muted)",
+        background: "var(--bg-sunken)",
+        border: "1px solid var(--border-hair)",
+        borderRadius: "var(--radius-xs)",
+      }}
+    >
+      v{version}
+    </span>
+  );
 }
 
 function NavArrow({ side, onClick }: { side: "prev" | "next"; onClick: () => void }) {
@@ -307,29 +366,28 @@ function NavArrow({ side, onClick }: { side: "prev" | "next"; onClick: () => voi
           top: "50%",
           transform: "translateY(-50%)",
           [side === "prev" ? "left" : "right"]: 16,
-          width: 38,
-          height: 38,
-          borderRadius: "50%",
-          background: "var(--card)",
-          border: "1px solid var(--line-strong)",
+          width: 32,
+          height: 32,
+          borderRadius: "var(--radius-pill)",
+          background: "var(--bg-raised)",
+          border: "1px solid var(--border-strong)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
-          color: "var(--ink)",
-          transition: "transform 200ms var(--ease), box-shadow 200ms",
+          color: "var(--fg-default)",
+          boxShadow: "var(--shadow-sm)",
+          transition: "background var(--dur-instant) var(--ease-out)",
         } as React.CSSProperties
       }
-      onMouseOver={(e) => {
-        e.currentTarget.style.transform = "translateY(-50%) scale(1.07)";
-        e.currentTarget.style.boxShadow = "var(--shadow)";
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.transform = "translateY(-50%)";
-        e.currentTarget.style.boxShadow = "";
-      }}
+      onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+      onMouseOut={(e) => (e.currentTarget.style.background = "var(--bg-raised)")}
     >
-      {side === "prev" ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+      {side === "prev" ? (
+        <ChevronLeft size={16} strokeWidth={1.5} />
+      ) : (
+        <ChevronRight size={16} strokeWidth={1.5} />
+      )}
     </button>
   );
 }
@@ -339,46 +397,44 @@ function ActionButton({
   onClick,
   primary,
   icon,
+  "aria-label": ariaLabel,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   primary?: boolean;
   icon?: boolean;
+  "aria-label"?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       style={{
-        flex: icon ? "0 0 42px" : primary ? 1.4 : 1,
-        border: `1px solid ${primary ? "var(--ink)" : "var(--line)"}`,
-        background: primary ? "var(--ink)" : "var(--paper)",
-        color: primary ? "var(--paper)" : "var(--ink)",
+        flex: icon ? "0 0 34px" : primary ? 1.4 : 1,
+        height: 34,
+        border: `1px solid ${primary ? "var(--fg-default)" : "var(--border-strong)"}`,
+        background: primary ? "var(--fg-default)" : "var(--bg-raised)",
+        color: primary ? "var(--bg-surface)" : "var(--fg-default)",
         cursor: "pointer",
-        padding: 10,
-        borderRadius: 11,
+        padding: "0 12px",
+        borderRadius: "var(--radius-sm)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         gap: 7,
         fontFamily: "var(--font-sans)",
         fontSize: "var(--text-sm)",
-        fontWeight: 500,
-        transition: "background 150ms, transform 150ms, border-color 150ms",
+        fontWeight: "var(--weight-medium)",
+        transition: "background var(--dur-fast) var(--ease-out)",
       }}
       onMouseOver={(e) => {
-        if (primary) {
-          e.currentTarget.style.background = "#000";
-          e.currentTarget.style.transform = "translateY(-1px)";
-        } else {
-          e.currentTarget.style.background = "var(--bg-hover)";
-          e.currentTarget.style.borderColor = "var(--line-strong)";
-        }
+        if (primary) e.currentTarget.style.opacity = "0.88";
+        else e.currentTarget.style.background = "var(--bg-hover)";
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.background = primary ? "var(--ink)" : "var(--paper)";
-        e.currentTarget.style.transform = "";
-        e.currentTarget.style.borderColor = primary ? "var(--ink)" : "var(--line)";
+        if (primary) e.currentTarget.style.opacity = "1";
+        else e.currentTarget.style.background = "var(--bg-raised)";
       }}
     >
       {children}
@@ -401,13 +457,13 @@ function primaryAction(
       // for that wiring; not surfaced by default.
       return {
         label: "Open in editor",
-        Icon: Download,
+        Icon: ExternalLink,
         onClick: () => openInFullscreen(file),
       };
     case "doc":
       return {
         label: "Open in editor",
-        Icon: Download,
+        Icon: ExternalLink,
         onClick: () => openInFullscreen(file),
       };
     default:
