@@ -75,7 +75,7 @@ test("sort menu reverses item order", async ({ page }) => {
 });
 
 test("global search narrows the result set", async ({ page }) => {
-  const search = page.getByPlaceholder("Search files and folders");
+  const search = page.getByPlaceholder("Search documents and folders");
   await search.fill("planning");
   // Debounce is 200ms; allow generous slack for demo latency.
   await expect(page.getByText("Q2 planning.xlsx")).toBeVisible({ timeout: 3_000 });
