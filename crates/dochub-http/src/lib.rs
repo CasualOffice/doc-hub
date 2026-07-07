@@ -11,6 +11,7 @@ mod about;
 mod access_log;
 mod activity;
 mod admin;
+mod collab;
 mod compliance;
 mod diff;
 mod direct_upload;
@@ -117,6 +118,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .saturating_mul(1024)
         .saturating_mul(1024);
     let files_router: Router = files::router(state.clone(), body_limit_bytes);
+    let collab_router: Router = collab::router(state.clone(), body_limit_bytes);
     let versions_router: Router = versions::router(state.clone());
     let share_router: Router = share::router(state.clone());
     let workspaces_router: Router = workspaces::router(state.clone());
@@ -140,6 +142,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(wopi_router)
         .merge(auth_router)
         .merge(files_router)
+        .merge(collab_router)
         .merge(versions_router)
         .merge(diff::router(state.clone()))
         .merge(share_router)

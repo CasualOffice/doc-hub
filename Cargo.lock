@@ -783,6 +783,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "infer",
+ "jsonwebtoken",
  "mime_guess",
  "rust-embed",
  "serde",

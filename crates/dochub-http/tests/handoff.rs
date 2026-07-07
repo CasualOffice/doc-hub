@@ -57,6 +57,7 @@ async fn fixture(with_editors: bool) -> HttpState {
         is_prod: false,
         sheet_origin: with_editors.then(|| Url::parse("http://sheet.test").unwrap()),
         document_origin: with_editors.then(|| Url::parse("http://document.test").unwrap()),
+        collab_url: None,
         master_kek: dochub_core::dev_master_kek(),
         master_kek_next: None,
     };

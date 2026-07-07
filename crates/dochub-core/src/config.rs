@@ -79,6 +79,12 @@ pub struct Config {
     /// Casual Editor origin (e.g. `https://document.casualoffice.org`).
     /// Same opt-in semantics as `sheet_origin`.
     pub document_origin: Option<Url>,
+    /// Real-time co-editing server origin (the sibling `collab` Hocuspocus/Yjs
+    /// service, e.g. `https://collab.casualoffice.org`). Opt-in (build spec
+    /// §3): when `None`, the `/api/files/{id}/collab*` room-brokering endpoints
+    /// return 404 and editing falls back to single-user (P2.1). Parsed from
+    /// `DOCHUB_COLLAB_URL`.
+    pub collab_url: Option<Url>,
     /// Phase 3 §12 — OIDC sign-in. All four fields go together; either
     /// the operator configures the whole set or none of it.
     pub oidc: Option<OidcConfig>,
@@ -239,6 +245,13 @@ impl Config {
             ),
             _ => None,
         };
+        let collab_url = match std::env::var("DOCHUB_COLLAB_URL").ok() {
+            Some(s) if !s.is_empty() => Some(
+                Url::parse(&s)
+                    .map_err(|e| ConfigError::Invalid("DOCHUB_COLLAB_URL", e.to_string()))?,
+            ),
+            _ => None,
+        };
 
         Ok(Self {
             app_origin,
@@ -267,6 +280,7 @@ impl Config {
             allow_password_auth: env_bool("DOCHUB_ALLOW_PASSWORD_AUTH").unwrap_or(true),
             sheet_origin,
             document_origin,
+            collab_url,
         })
     }
 
