@@ -40,7 +40,7 @@ const NO_OP_UNSUBSCRIBE = () => {};
  */
 export class DriveFileSource implements FileSource {
   readonly kind = "personal" as const;
-  readonly label = "Casual Drive";
+  readonly label = "Doc-Hub";
 
   /** Mirrors the FileDto the SPA had at construction; refreshed on save. */
   private file: FileDto;

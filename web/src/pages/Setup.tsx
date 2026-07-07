@@ -84,7 +84,7 @@ function Header() {
           color: "var(--ink)",
         }}
       >
-        Welcome to Casual Drive
+        Welcome to Doc-Hub
       </h1>
       <p style={{ margin: 0, fontSize: "var(--text-base)", color: "var(--muted)", textAlign: "center" }}>
         Let&apos;s set up your administrator account.
@@ -129,9 +129,9 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           lineHeight: "var(--leading-normal)",
         }}
       >
-        Casual Drive is a self-hosted, file-centric Drive that opens spreadsheets and documents in the
-        Casual Office suite. This is a one-time setup — you&apos;ll create the first administrator account
-        and then you&apos;re in.
+        Doc-Hub is a self-hosted, encrypted, tamper-evident document hub — part of the Casual Office
+        suite. Every version is hash-chained and append-only. This is a one-time setup — you&apos;ll
+        create the first administrator account and then you&apos;re in.
       </p>
       <PrimaryButton onClick={onNext}>Get started</PrimaryButton>
     </div>

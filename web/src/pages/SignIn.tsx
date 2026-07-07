@@ -113,7 +113,7 @@ export function SignIn() {
               color: "var(--ink)",
             }}
           >
-            Casual Drive
+            Doc-Hub
           </h1>
           <p style={{ margin: 0, fontSize: "var(--text-base)", color: "var(--muted)" }}>
             {DEMO_MODE && passwordEnabled
