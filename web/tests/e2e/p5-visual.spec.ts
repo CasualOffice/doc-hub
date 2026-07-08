@@ -49,6 +49,33 @@ async function newFile(page: Page, item: RegExp, createdToast: RegExp) {
 // Both are Drive's own values; neither is the SDK's cyan.
 const DRIVE_VIOLET = { light: "#8b5cf6", dark: "#9b6cff" } as const;
 
+/**
+ * P6 neobrutalist-chrome guard. The Drive-owned editor chrome (back button,
+ * Share button, save pill) must carry the redesign's signature: a 2px solid
+ * ink border. This asserts the resolved `border-width` on the back + share
+ * buttons is 2px (i.e. `--border-w`, not a leftover 1px hairline) so the
+ * chrome reads as a first-class neobrutalist surface, not a soft transplant.
+ */
+async function assertNeobrutalChrome(page: Page) {
+  const back = page.getByTestId("file-fullscreen-back");
+  const share = page.getByTestId("file-fullscreen-share");
+  for (const btn of [back, share]) {
+    const bw = await btn.evaluate((el) => getComputedStyle(el).borderTopWidth);
+    expect(bw).toBe("2px");
+  }
+  // The Share CTA carries Drive's violet signal fill.
+  const shareBg = await share.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // rgb(139, 92, 246) light / rgb(155, 108, 255) dark — either is Drive's violet.
+  expect(shareBg).toMatch(/rgb\((139|155),/);
+}
+
+/** Capture the fullscreen header strip (Drive-owned chrome) on its own so the
+ *  restyled back/title/save-pill/presence/Details/Share read at a glance. */
+async function shotHeader(page: Page, name: string) {
+  const header = page.getByTestId("file-fullscreen-back").locator("xpath=ancestor::header[1]");
+  await header.screenshot({ path: `${OUT}/${name}` }).catch(() => {});
+}
+
 async function assertNoSdkBleed(page: Page, theme: "light" | "dark") {
   const tokens = await page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -96,14 +123,19 @@ test("docx — editor + preview, light + dark", async ({ page }) => {
 
   await setTheme(page, "light");
   await page.screenshot({ path: `${OUT}/docx-editor-light.png`, fullPage: false });
+  await shotHeader(page, "docx-header-light.png");
   // With the docs SDK stylesheet now injected, Drive's chrome tokens must still
   // resolve to Drive's own values (violet signal, no SDK cyan bleed) in light.
   await assertNoSdkBleed(page, "light");
+  // P6 — Drive-owned editor chrome carries the neobrutalist signature.
+  await assertNeobrutalChrome(page);
   await setTheme(page, "dark");
   await page.screenshot({ path: `${OUT}/docx-editor-dark.png`, fullPage: false });
+  await shotHeader(page, "docx-header-dark.png");
   // …and in dark (Drive brightens its own --violet-500 to #9b6cff; the
   // SDK-overlapping tokens still resolve to Drive's, not the SDK's, values).
   await assertNoSdkBleed(page, "dark");
+  await assertNeobrutalChrome(page);
 
   // The editor wrapper reflects the resolved theme (item 1a — docs SDK follows
   // Drive's dark via the wrapper's data-theme, incl. the scoped path).
@@ -140,8 +172,12 @@ test("xlsx — editor + preview, light + dark", async ({ page }) => {
 
   await setTheme(page, "light");
   await page.screenshot({ path: `${OUT}/xlsx-editor-light.png`, fullPage: false });
+  await shotHeader(page, "xlsx-header-light.png");
+  await assertNeobrutalChrome(page);
   await setTheme(page, "dark");
   await page.screenshot({ path: `${OUT}/xlsx-editor-dark.png`, fullPage: false });
+  await shotHeader(page, "xlsx-header-dark.png");
+  await assertNeobrutalChrome(page);
 
   // ── Preview (single-click modal) ──
   await page.getByTestId("file-fullscreen-back").click();

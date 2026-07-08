@@ -343,13 +343,24 @@ export function CasualSheetWorkspace({
           alignItems: "center",
           justifyContent: "center",
           padding: 24,
-          textAlign: "center",
-          fontSize: "var(--text-sm)",
-          color: "var(--fg-muted)",
           background: "var(--bg-canvas)",
         }}
       >
-        Couldn&apos;t open this spreadsheet.
+        <div
+          style={{
+            padding: "22px 28px",
+            textAlign: "center",
+            fontSize: "var(--text-sm)",
+            fontWeight: "var(--weight-semibold)",
+            color: "var(--ink-soft)",
+            background: "var(--bg-surface)",
+            border: "var(--border-w) solid var(--border)",
+            borderRadius: "var(--radius)",
+            boxShadow: "var(--shadow)",
+          }}
+        >
+          Couldn&apos;t open this spreadsheet.
+        </div>
       </div>
     );
   }

@@ -621,9 +621,9 @@ function FullscreenBody({
             width: "min(640px, 100%)",
             height: "min(100%, 520px)",
             background: "var(--bg-surface)",
-            border: "1px solid var(--border-hair)",
-            borderRadius: "var(--radius-lg)",
-            boxShadow: "var(--shadow-sm)",
+            border: "var(--border-w) solid var(--border)",
+            borderRadius: "var(--radius)",
+            boxShadow: "var(--shadow)",
             padding: "32px clamp(20px, 6vw, 44px)",
             boxSizing: "border-box",
             display: "flex",
@@ -650,30 +650,43 @@ function FullscreenBody({
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 10,
           padding: 24,
-          textAlign: "center",
           background: "var(--bg-canvas)",
         }}
       >
-        <span
+        <div
           style={{
-            display: "inline-flex",
+            display: "flex",
+            flexDirection: "column",
             alignItems: "center",
-            gap: 7,
-            fontSize: "var(--text-md)",
-            fontWeight: "var(--weight-semibold)",
-            color: "var(--status-danger-700)",
+            gap: 10,
+            textAlign: "center",
+            maxWidth: 460,
+            padding: "28px 32px",
+            background: "var(--bg-surface)",
+            border: "var(--border-w) solid var(--border)",
+            borderRadius: "var(--radius)",
+            boxShadow: "var(--shadow)",
           }}
         >
-          <AlertTriangle size={16} strokeWidth={1.5} aria-hidden />
-          Couldn&apos;t open this file
-        </span>
-        <div style={{ fontSize: "var(--text-base)", color: "var(--fg-muted)", maxWidth: 420 }}>
-          {state.message}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              fontSize: "var(--text-md)",
+              fontWeight: "var(--weight-bold)",
+              color: "var(--danger)",
+            }}
+          >
+            <AlertTriangle size={16} strokeWidth={2.2} aria-hidden />
+            Couldn&apos;t open this file
+          </span>
+          <div style={{ fontSize: "var(--text-base)", color: "var(--ink-soft)" }}>
+            {state.message}
+          </div>
         </div>
       </div>
     );
@@ -751,17 +764,40 @@ function FullscreenBody({
 function LoadingFallback() {
   return (
     <div
+      role="status"
+      aria-label="Loading editor"
       style={{
         width: "100%",
         height: "100%",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontSize: "var(--text-sm)",
-        color: "var(--fg-muted)",
+        padding: 24,
+        boxSizing: "border-box",
+        background: "var(--bg-canvas)",
       }}
     >
-      Loading editor…
+      <div
+        style={{
+          width: "min(640px, 100%)",
+          height: "min(100%, 520px)",
+          background: "var(--bg-surface)",
+          border: "var(--border-w) solid var(--border)",
+          borderRadius: "var(--radius)",
+          boxShadow: "var(--shadow)",
+          padding: "32px clamp(20px, 6vw, 44px)",
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          overflow: "hidden",
+        }}
+      >
+        <div className="skeleton" style={{ height: 20, width: "48%", borderRadius: "var(--radius-xs)", marginBottom: 8 }} />
+        {["96%", "88%", "92%", "70%", "94%", "82%", "90%", "58%"].map((w, i) => (
+          <div key={i} className="skeleton" style={{ height: 11, width: w, borderRadius: "var(--radius-2xs)" }} />
+        ))}
+      </div>
     </div>
   );
 }

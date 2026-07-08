@@ -274,10 +274,10 @@ function GlyphFallback({ file, kind }: { file: FileDto; kind: FileKind }) {
         style={{
           width: "min(300px, 68%)",
           aspectRatio: isFolder ? "1 / 1" : "1 / 1.3",
-          borderRadius: "var(--radius-lg)",
+          borderRadius: "var(--radius)",
           overflow: "hidden",
-          border: "1px solid var(--border-hair)",
-          boxShadow: "var(--shadow-md)",
+          border: "var(--border-w) solid var(--border)",
+          boxShadow: "var(--shadow)",
         }}
       >
         <FileThumb name={file.name} kind={kind} size="big" thumbnail={file.thumbnail} />
@@ -330,9 +330,9 @@ function PreviewSkeleton({ lines }: { lines?: boolean }) {
           width: "min(640px, 100%)",
           height: "min(100%, 520px)",
           background: "var(--bg-surface)",
-          border: "1px solid var(--border-hair)",
-          borderRadius: "var(--radius-lg)",
-          boxShadow: "var(--shadow-sm)",
+          border: "var(--border-w) solid var(--border)",
+          borderRadius: "var(--radius)",
+          boxShadow: "var(--shadow)",
           padding: lines ? "32px clamp(20px, 6vw, 44px)" : 20,
           boxSizing: "border-box",
           display: "flex",
@@ -385,10 +385,10 @@ function ErrorState({ file }: { file: FileDto }) {
         style={{
           width: "min(220px, 52%)",
           aspectRatio: "1 / 1.3",
-          borderRadius: "var(--radius-lg)",
+          borderRadius: "var(--radius)",
           overflow: "hidden",
-          border: "1px solid var(--border-hair)",
-          boxShadow: "var(--shadow-md)",
+          border: "var(--border-w) solid var(--border)",
+          boxShadow: "var(--shadow)",
           opacity: 0.9,
         }}
       >
@@ -401,11 +401,11 @@ function ErrorState({ file }: { file: FileDto }) {
             alignItems: "center",
             gap: 6,
             fontSize: "var(--text-sm)",
-            fontWeight: "var(--weight-medium)",
-            color: "var(--status-danger-700)",
+            fontWeight: "var(--weight-bold)",
+            color: "var(--danger)",
           }}
         >
-          <AlertTriangle size={14} strokeWidth={1.5} aria-hidden />
+          <AlertTriangle size={14} strokeWidth={2.2} aria-hidden />
           Couldn&apos;t load the preview.
         </span>
         <DownloadButton file={file} />
@@ -419,23 +419,24 @@ function DownloadButton({ file }: { file: FileDto }) {
     <a
       href={downloadUrl(file.id)}
       download
+      className="press-sink"
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        height: 28,
-        padding: "0 12px",
-        border: "1px solid var(--border-strong)",
+        height: 32,
+        padding: "0 14px",
+        border: "var(--border-w) solid var(--border)",
         borderRadius: "var(--radius-sm)",
-        background: "var(--bg-raised)",
-        color: "var(--fg-default)",
+        background: "var(--bg-surface)",
+        color: "var(--ink)",
         fontFamily: "var(--font-sans)",
         fontSize: "var(--text-sm)",
-        fontWeight: "var(--weight-medium)",
+        fontWeight: "var(--weight-bold)",
         textDecoration: "none",
       }}
     >
-      <Download size={14} strokeWidth={1.5} aria-hidden />
+      <Download size={14} strokeWidth={2.2} aria-hidden />
       Download
     </a>
   );
@@ -449,13 +450,14 @@ function TruncatedBanner({ cap }: { cap: number }) {
         alignItems: "center",
         gap: 7,
         padding: "8px 16px",
-        background: "var(--accent-wash)",
-        borderBottom: "1px solid var(--border-hair)",
+        background: "var(--violet-100)",
+        borderBottom: "var(--border-w) solid var(--border)",
         fontSize: "var(--text-xs)",
-        color: "var(--amber-700)",
+        fontWeight: "var(--weight-semibold)",
+        color: "var(--violet-600)",
       }}
     >
-      <ScrollText size={13} strokeWidth={1.5} aria-hidden />
+      <ScrollText size={13} strokeWidth={2} aria-hidden />
       Showing the first {formatBytes(cap)}. Download the full file for the rest.
     </div>
   );
