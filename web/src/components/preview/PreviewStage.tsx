@@ -276,8 +276,8 @@ function GlyphFallback({ file, kind }: { file: FileDto; kind: FileKind }) {
           aspectRatio: isFolder ? "1 / 1" : "1 / 1.3",
           borderRadius: "var(--radius-lg)",
           overflow: "hidden",
-          border: "1px solid var(--border-hair)",
-          boxShadow: "var(--shadow-md)",
+          border: "var(--border-w) solid var(--border)",
+          boxShadow: "var(--shadow)",
         }}
       >
         <FileThumb name={file.name} kind={kind} size="big" thumbnail={file.thumbnail} />
@@ -330,7 +330,7 @@ function PreviewSkeleton({ lines }: { lines?: boolean }) {
           width: "min(640px, 100%)",
           height: "min(100%, 520px)",
           background: "var(--bg-surface)",
-          border: "1px solid var(--border-hair)",
+          border: "var(--border-w) solid var(--border)",
           borderRadius: "var(--radius-lg)",
           boxShadow: "var(--shadow-sm)",
           padding: lines ? "32px clamp(20px, 6vw, 44px)" : 20,
@@ -387,8 +387,8 @@ function ErrorState({ file }: { file: FileDto }) {
           aspectRatio: "1 / 1.3",
           borderRadius: "var(--radius-lg)",
           overflow: "hidden",
-          border: "1px solid var(--border-hair)",
-          boxShadow: "var(--shadow-md)",
+          border: "var(--border-w) solid var(--border)",
+          boxShadow: "var(--shadow)",
           opacity: 0.9,
         }}
       >
@@ -425,8 +425,9 @@ function DownloadButton({ file }: { file: FileDto }) {
         gap: 6,
         height: 28,
         padding: "0 12px",
-        border: "1px solid var(--border-strong)",
+        border: "var(--border-w) solid var(--border)",
         borderRadius: "var(--radius-sm)",
+        boxShadow: "var(--shadow-sm)",
         background: "var(--bg-raised)",
         color: "var(--fg-default)",
         fontFamily: "var(--font-sans)",
@@ -450,7 +451,7 @@ function TruncatedBanner({ cap }: { cap: number }) {
         gap: 7,
         padding: "8px 16px",
         background: "var(--accent-wash)",
-        borderBottom: "1px solid var(--border-hair)",
+        borderBottom: "var(--border-w) solid var(--border)",
         fontSize: "var(--text-xs)",
         color: "var(--amber-700)",
       }}
