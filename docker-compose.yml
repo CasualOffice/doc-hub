@@ -93,6 +93,9 @@ services:
       # NOT dial the gateway itself. Host-published value, never compose DNS.
       DOCHUB_COLLAB_URL: "${DOCHUB_COLLAB_URL:-http://localhost:8082}"
       # Dev-only secrets — DO NOT use these in prod. Override via .env.
+      # DOCHUB_MASTER_KEY (base64 32-byte KEK) is REQUIRED — the binary refuses
+      # to boot without it (dochub-core config). Generate: `openssl rand -base64 32`.
+      DOCHUB_MASTER_KEY: "${DOCHUB_MASTER_KEY:-SUE1Sjdva3RpaVBiUlhGcWlPVHluWGw0dGdKakpFM1k=}"
       # DOCHUB_WOPI_HMAC_SECRET is ALSO the collab gateway's CASUAL_JWT_SECRET.
       DOCHUB_SESSION_SECRET: "${DOCHUB_SESSION_SECRET:-dev-only-32-byte-secret-DO-NOT-USE-aa}"
       DOCHUB_WOPI_HMAC_SECRET: "${DOCHUB_WOPI_HMAC_SECRET:-dev-only-32-byte-secret-DO-NOT-USE-bb}"
