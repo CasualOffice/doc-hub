@@ -1066,7 +1066,9 @@ export function Files({
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        background: "var(--bg-canvas)",
+        // Translucent so the Aura mesh glows through the vault (ui-vision
+        // §2.4 defect #1) instead of an opaque pane occluding the ground.
+        background: "color-mix(in oklab, var(--bg-canvas) 78%, transparent)",
         overflow: "auto",
         padding: "var(--space-4) var(--space-6) 40px",
       }}

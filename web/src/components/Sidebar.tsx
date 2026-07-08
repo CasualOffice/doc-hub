@@ -6,7 +6,6 @@ import {
   Gauge,
   Home,
   Lock,
-  NotebookPen,
   Plus,
   Settings,
   Sheet,
@@ -37,9 +36,9 @@ interface NavItem {
 
 // UI-M6: the coming-soon Recent / Starred / Shared entries are removed —
 // dead nav surfaces don't ship. Library is the real, working scope.
+// Doc-Hub is documents-only, so the legacy "Notes" nav entry is dropped.
 const LIBRARY: NavItem[] = [
   { id: "home", label: "My Drive", icon: Home },
-  { id: "notes", label: "Notes", icon: NotebookPen },
 ];
 
 const WORKSPACE: NavItem[] = [

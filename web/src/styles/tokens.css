@@ -932,9 +932,10 @@ body {
 :root[data-theme="dark"] .ambient-ground,
 .dark .ambient-ground {
   background:
-    radial-gradient(70% 55% at 18% 12%, rgba(242, 163, 36, 0.16) 0%, transparent 60%),
-    radial-gradient(60% 60% at 85% 8%,  rgba(96, 110, 170, 0.14) 0%, transparent 55%),
-    radial-gradient(80% 70% at 60% 100%, rgba(242, 163, 36, 0.10) 0%, transparent 60%),
+    radial-gradient(78% 62% at 16% 10%, rgba(242, 163, 36, 0.26) 0%, transparent 62%),
+    radial-gradient(66% 66% at 86% 6%,  rgba(104, 122, 190, 0.20) 0%, transparent 58%),
+    radial-gradient(90% 78% at 62% 102%, rgba(242, 163, 36, 0.18) 0%, transparent 64%),
+    radial-gradient(50% 45% at 45% 48%, rgba(242, 163, 36, 0.05) 0%, transparent 70%),
     var(--bg-canvas);
 }
 
@@ -942,9 +943,10 @@ body {
   :root:not([data-theme]) .ambient-ground,
   :root[data-theme="system"] .ambient-ground {
     background:
-      radial-gradient(70% 55% at 18% 12%, rgba(242, 163, 36, 0.16) 0%, transparent 60%),
-      radial-gradient(60% 60% at 85% 8%,  rgba(96, 110, 170, 0.14) 0%, transparent 55%),
-      radial-gradient(80% 70% at 60% 100%, rgba(242, 163, 36, 0.10) 0%, transparent 60%),
+      radial-gradient(78% 62% at 16% 10%, rgba(242, 163, 36, 0.26) 0%, transparent 62%),
+      radial-gradient(66% 66% at 86% 6%,  rgba(104, 122, 190, 0.20) 0%, transparent 58%),
+      radial-gradient(90% 78% at 62% 102%, rgba(242, 163, 36, 0.18) 0%, transparent 64%),
+      radial-gradient(50% 45% at 45% 48%, rgba(242, 163, 36, 0.05) 0%, transparent 70%),
       var(--bg-canvas);
   }
 }

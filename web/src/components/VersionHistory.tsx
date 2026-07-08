@@ -39,10 +39,26 @@ import {
 } from "../api/client.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { RegistryMotif } from "./ds/RegistryMotif.tsx";
+import { SealBadge } from "./ds/SealBadge.tsx";
 import { SkeletonRow } from "./ds/SkeletonRow.tsx";
 import { StatusChip } from "./ds/StatusChip.tsx";
 
 const STROKE = 1.5;
+
+/** Per-node step of the travelling verify sweep up the Spine. */
+const SPINE_STEP_MS = 90;
+
+/** The Spine's live-verify phase: `idle` (steady), `sweep` (amber travelling
+ *  node-to-node UP the chain), `sealed` (settled verified glow). */
+type SpinePhase = "idle" | "sweep" | "sealed";
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 /** null = not yet verified this session; falls back to the list's
  * `chain_verified`. Otherwise the outcome of an explicit Verify. */
@@ -70,6 +86,10 @@ export function VersionHistory({
   const [badge, setBadge] = useState<BadgeState>({ kind: "unknown" });
   const [verifying, setVerifying] = useState(false);
   const [restoreSeq, setRestoreSeq] = useState<number | null>(null);
+  // The Spine's travelling-verify animation phase + a monotonic key that
+  // remounts the Seal badge to replay its sweep on each successful verify.
+  const [spinePhase, setSpinePhase] = useState<SpinePhase>("idle");
+  const [sealKey, setSealKey] = useState(0);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -79,6 +99,7 @@ export function VersionHistory({
       setVersions(sorted);
       setChainVerified(resp.chain_verified);
       setBadge(resp.chain_verified ? { kind: "unknown" } : { kind: "broken", atSeq: resp.head_seq });
+      setSpinePhase("idle");
     } catch (e) {
       setErr((e as ApiError).message ?? "Couldn't load version history.");
       setVersions([]);
@@ -97,10 +118,24 @@ export function VersionHistory({
       if (r.status === "intact") {
         setBadge({ kind: "intact" });
         setChainVerified(true);
+        setSealKey((k) => k + 1);
+        // Travel the amber up the Spine, then settle into the verified glow.
+        // Reduced-motion jumps straight to the settled state (no travel).
+        const nodes = versions?.length ?? 0;
+        if (prefersReducedMotion() || nodes === 0) {
+          setSpinePhase("sealed");
+        } else {
+          setSpinePhase("sweep");
+          window.setTimeout(
+            () => setSpinePhase("sealed"),
+            nodes * SPINE_STEP_MS + 420,
+          );
+        }
         toast.success("Chain verified · every link intact");
       } else {
         setBadge({ kind: "broken", atSeq: r.at_seq });
         setChainVerified(false);
+        setSpinePhase("idle");
       }
     } catch (e) {
       toast.error((e as ApiError).message ?? "Verification failed.");
@@ -137,6 +172,7 @@ export function VersionHistory({
         verifying={verifying}
         onVerify={runVerify}
         canVerify={!!versions && versions.length > 0}
+        sealKey={sealKey}
       />
 
       {broken != null && <TamperAlarm atSeq={broken} />}
@@ -158,6 +194,7 @@ export function VersionHistory({
               versions={versions}
               fileId={fileId}
               broken={broken}
+              phase={spinePhase}
               onRestore={setRestoreSeq}
             />
             <OneVersion />
@@ -167,6 +204,7 @@ export function VersionHistory({
             versions={versions}
             fileId={fileId}
             broken={broken}
+            phase={spinePhase}
             onRestore={setRestoreSeq}
           />
         )}
@@ -209,6 +247,7 @@ function Header({
   verifying,
   onVerify,
   canVerify,
+  sealKey,
 }: {
   fileName: string;
   variant: "panel" | "full";
@@ -216,6 +255,8 @@ function Header({
   verifying: boolean;
   onVerify: () => void;
   canVerify: boolean;
+  /** Bumped on each successful verify to replay the Seal sweep. */
+  sealKey: number;
 }) {
   return (
     <header
@@ -249,7 +290,7 @@ function Header({
           {fileName}
         </div>
         <div style={{ marginTop: 3 }}>
-          <Badge badge={badge} />
+          <Badge badge={badge} sealKey={sealKey} />
         </div>
       </div>
       <button
@@ -266,8 +307,9 @@ function Header({
 }
 
 /** The two-variant verification badge (§7.5) — icon + label, never
- *  colour alone. `unknown` reads as the calm verified default. */
-function Badge({ badge }: { badge: BadgeState }) {
+ *  colour alone. `unknown` reads as the calm verified default; `intact`
+ *  (a fresh explicit verify) plays the Seal moment (§6). */
+function Badge({ badge, sealKey }: { badge: BadgeState; sealKey: number }) {
   if (badge.kind === "broken") {
     return (
       <StatusChip
@@ -275,6 +317,17 @@ function Badge({ badge }: { badge: BadgeState }) {
         icon={<ShieldOff size={13} strokeWidth={STROKE} />}
         label="Tamper detected"
         title={`Tamper detected — chain verification failed at v${badge.atSeq}`}
+      />
+    );
+  }
+  if (badge.kind === "intact") {
+    // The Seal — an amber specular sweep settling into the mono caption.
+    // Remounted by `sealKey` so each successful verify replays it.
+    return (
+      <SealBadge
+        key={sealKey}
+        caption="Verified · SHA-256 · sealed"
+        title="Chain intact — every link verified"
       />
     );
   }
@@ -328,25 +381,37 @@ function TamperAlarm({ atSeq }: { atSeq: number }) {
 
 // ── Timeline ───────────────────────────────────────────────────────────
 
+/** The Spine (ui-vision-2026 §5.4) — the hash chain rendered as a living
+ *  vertical ledger: a connective amber-capable axis, glass version nodes,
+ *  the current version emphasised, mono hash pills. On Verify the amber
+ *  travels node-to-node UP the spine (`phase="sweep"`, staggered by reverse
+ *  index) and settles into a verified glow (`phase="sealed"`). */
 function Timeline({
   versions,
   fileId,
   broken,
+  phase,
   onRestore,
 }: {
   versions: FileVersion[];
   fileId: string;
   broken: number | null;
+  phase: SpinePhase;
   onRestore: (seq: number) => void;
 }) {
+  const count = versions.length;
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: "var(--space-2) 0 0" }}>
+    <ul className="cd-spine" data-phase={phase} style={{ listStyle: "none", margin: 0, padding: "var(--space-2) 0 0" }}>
+      <SpineStyle />
       {versions.map((v, i) => {
         const isHead = i === 0;
-        const isLast = i === versions.length - 1;
+        const isLast = i === count - 1;
         // The connector below a node carries the link to its predecessor
         // (the next, lower-seq node). It breaks at the reported seq.
         const linkBroken = broken != null && v.seq === broken;
+        // Reverse index: the oldest (bottom) node is 0 so the verify sweep
+        // lights it first and travels UP, arriving at the head last.
+        const rev = count - 1 - i;
         return (
           <VersionNode
             key={v.seq}
@@ -355,11 +420,80 @@ function Timeline({
             isHead={isHead}
             isLast={isLast}
             linkBroken={linkBroken}
+            rev={rev}
             onRestore={onRestore}
           />
         );
       })}
     </ul>
+  );
+}
+
+/** Self-contained Spine motion + finish — a real connective axis that the
+ *  verify sweep travels up, then settles to a verified glow. Only opacity /
+ *  transform / colour animate; reduced-motion drops the travel. */
+function SpineStyle() {
+  return (
+    <style>{`
+      .cd-spine-dot {
+        color: var(--fg-subtle);
+        display: inline-flex;
+        margin-top: 2px;
+        transition: color var(--dur-base) var(--ease-out),
+                    filter var(--dur-base) var(--ease-out),
+                    transform var(--dur-base) var(--ease-out);
+      }
+      .cd-spine-dot[data-head="true"] { color: var(--accent); }
+      .cd-spine-link {
+        flex: 1;
+        width: 2px;
+        min-height: 18px;
+        margin: 2px 0;
+        background: var(--border-hair);
+        transition: background var(--dur-base) var(--ease-out),
+                    box-shadow var(--dur-base) var(--ease-out);
+      }
+      .cd-spine-link[data-broken="true"] {
+        width: 0;
+        background: transparent;
+        border-left: 2px dashed var(--amber-700);
+        box-shadow: none !important;
+      }
+      /* Settled verified glow along the whole chain. */
+      .cd-spine[data-phase="sealed"] .cd-spine-dot {
+        color: var(--accent);
+        filter: drop-shadow(0 0 4px var(--amber-glow-1));
+      }
+      .cd-spine[data-phase="sealed"] .cd-spine-link:not([data-broken="true"]) {
+        background: var(--amber-glow-1);
+        box-shadow: 0 0 6px var(--amber-glow-2);
+      }
+      /* The travelling sweep — each node lights in turn, bottom → head. */
+      .cd-spine[data-phase="sweep"] .cd-spine-dot {
+        animation: cd-spine-dot-lit var(--dur-base) var(--ease-seal) both;
+        animation-delay: calc(var(--rev, 0) * ${SPINE_STEP_MS}ms);
+      }
+      .cd-spine[data-phase="sweep"] .cd-spine-link:not([data-broken="true"]) {
+        animation: cd-spine-link-lit var(--dur-base) var(--ease-out) both;
+        animation-delay: calc(var(--rev, 0) * ${SPINE_STEP_MS}ms);
+      }
+      @keyframes cd-spine-dot-lit {
+        0%   { color: var(--fg-subtle); transform: scale(1);
+               filter: drop-shadow(0 0 0 transparent); }
+        55%  { color: var(--accent); transform: scale(1.35);
+               filter: drop-shadow(0 0 7px var(--amber-glow-1)); }
+        100% { color: var(--accent); transform: scale(1);
+               filter: drop-shadow(0 0 4px var(--amber-glow-1)); }
+      }
+      @keyframes cd-spine-link-lit {
+        0%   { background: var(--border-hair); box-shadow: none; }
+        100% { background: var(--amber-glow-1); box-shadow: 0 0 6px var(--amber-glow-2); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .cd-spine[data-phase="sweep"] .cd-spine-dot,
+        .cd-spine[data-phase="sweep"] .cd-spine-link { animation: none; }
+      }
+    `}</style>
   );
 }
 
@@ -369,6 +503,7 @@ function VersionNode({
   isHead,
   isLast,
   linkBroken,
+  rev,
   onRestore,
 }: {
   v: FileVersion;
@@ -376,11 +511,12 @@ function VersionNode({
   isHead: boolean;
   isLast: boolean;
   linkBroken: boolean;
+  rev: number;
   onRestore: (seq: number) => void;
 }) {
   const author = v.author?.name ?? v.author_name ?? "—";
   return (
-    <li style={{ display: "flex", gap: "var(--space-3)" }}>
+    <li style={{ display: "flex", gap: "var(--space-3)", ["--rev" as string]: rev }}>
       {/* Rail — node dot + connector (the connector IS the chain). */}
       <div
         aria-hidden
@@ -392,13 +528,7 @@ function VersionNode({
           width: 20,
         }}
       >
-        <span
-          style={{
-            color: isHead ? "var(--accent)" : "var(--fg-subtle)",
-            display: "inline-flex",
-            marginTop: 2,
-          }}
-        >
+        <span className="cd-spine-dot" data-head={isHead ? "true" : undefined}>
           <GitCommitHorizontal
             size={18}
             strokeWidth={STROKE}
@@ -406,16 +536,7 @@ function VersionNode({
           />
         </span>
         {!isLast && (
-          <span
-            style={{
-              flex: 1,
-              width: linkBroken ? 0 : 2,
-              minHeight: 18,
-              background: linkBroken ? "transparent" : "var(--border-hair)",
-              borderLeft: linkBroken ? "2px dashed var(--amber-700)" : "none",
-              margin: "2px 0",
-            }}
-          />
+          <span className="cd-spine-link" data-broken={linkBroken ? "true" : undefined} />
         )}
       </div>
 
