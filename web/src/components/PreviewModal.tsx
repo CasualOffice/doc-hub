@@ -25,7 +25,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import type { UseFileSourceAutoSaveReturn } from "@schnsrw/docx-js-editor";
+import type { UseFileSourceAutoSaveReturn } from "@casualoffice/docs";
 
 import { downloadUrl, type FileDto } from "../api/client.ts";
 import { useReportViewing } from "../state/PresenceContext.tsx";
@@ -39,7 +39,7 @@ import { ShareDialog } from "./ShareDialog.tsx";
 // never load at app boot. Suspense fallback is null because the dot
 // is decorative chrome only shown when a .docx is open.
 const AutosaveStatus = lazy(() =>
-  import("@schnsrw/docx-js-editor").then((m) => ({ default: m.AutosaveStatus })),
+  import("@casualoffice/docs").then((m) => ({ default: m.AutosaveStatus })),
 );
 
 export function PreviewModal({

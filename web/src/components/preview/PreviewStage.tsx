@@ -21,7 +21,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { AlertTriangle, Download, ScrollText } from "lucide-react";
 
-import type { UseFileSourceAutoSaveReturn } from "@schnsrw/docx-js-editor";
+import type { UseFileSourceAutoSaveReturn } from "@casualoffice/docs";
 
 import { downloadUrl, type FileDto } from "../../api/client.ts";
 import { FileThumb, inferKind, type FileKind } from "../FileThumb.tsx";

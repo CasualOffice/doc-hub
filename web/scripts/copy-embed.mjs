@@ -19,7 +19,7 @@
  *     imports, plus the parser/exporter workers. Pure copy, no patching.
  *     (The crypto/Buffer/theme-lock shims older Drive builds carried were
  *     workarounds for pre-0.11 SDK packaging bugs that are now fixed.)
- *   - @schnsrw/docx-js-editor: its `embed.html` imports `./embed-runtime.js`
+ *   - @casualoffice/docs: its `embed.html` imports `./embed-runtime.js`
  *     while the dist file is `.mjs`, so rewrite that import. Its
  *     `embed-runtime.css` is shipped + linked correctly; concatenate the
  *     editor `styles.css` into it as a belt-and-suspenders for older builds
@@ -37,7 +37,7 @@ const require_ = createRequire(import.meta.url);
 const PACKAGES = [
   // [npm name, public/embed/<subdir>, exports-key anchoring the embed dir]
   ["@casualoffice/sheets", "sheets", "embed/embed.html"],
-  ["@schnsrw/docx-js-editor", "docs", "embed/embed.html"],
+  ["@casualoffice/docs", "docs", "embed/embed.html"],
 ];
 
 let failed = false;
@@ -60,7 +60,7 @@ for (const [pkg, subdir, anchor] of PACKAGES) {
     cpSync(srcEmbedDir, dstDir, { recursive: true });
 
     // docs-only fix-ups. The sheets embed needs none — it's copied as-is.
-    if (pkg === "@schnsrw/docx-js-editor") {
+    if (pkg === "@casualoffice/docs") {
       // Concatenate the editor's tailwind-compiled styles into the embed
       // CSS so the toolbar + canvas paint with full layout even on builds
       // whose embed-runtime.css shipped only ProseMirror base styles.

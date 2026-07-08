@@ -1,6 +1,6 @@
 /**
  * CasualDocEditor — Drive's mount for `.docx` files via the iframe
- * variant `<CasualEditorIframe>` from `@schnsrw/docx-js-editor@>=1.1.0`.
+ * variant `<CasualEditorIframe>` from `@casualoffice/docs@>=1.1.0`.
  *
  * Why the iframe variant (not the direct mount):
  *   - CSS isolation. Univer's design tokens + the docx editor's CSS
@@ -14,13 +14,13 @@
  *
  * The iframe is same-origin: its `src` resolves under Drive's own
  * domain (`${BASE_URL}embed/docs/embed.html?...`) — the embed runtime
- * is copied from `@schnsrw/docx-js-editor/embed/*` into Drive's
+ * is copied from `@casualoffice/docs/embed/*` into Drive's
  * `public/embed/docs/` by `scripts/copy-embed.mjs` at prebuild time.
  */
 
 import { useMemo, useRef } from "react";
 
-import { CasualEditorIframe } from "@schnsrw/docx-js-editor";
+import { CasualEditorIframe } from "@casualoffice/docs";
 
 import { type FileDto } from "../../api/client.ts";
 import { DriveFileSource } from "../../file-source/DriveFileSource.ts";
