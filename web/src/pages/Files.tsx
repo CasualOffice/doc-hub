@@ -1107,6 +1107,7 @@ export function Files({
               }
             : undefined
         }
+        contentCount={contentHits.length}
         onBack={goBack}
         onJumpTo={jumpTo}
         sort={sort}
@@ -1798,6 +1799,7 @@ function Header({
   path,
   searching,
   count,
+  contentCount = 0,
   searchTotals,
   onBack,
   onJumpTo,
@@ -1808,6 +1810,9 @@ function Header({
   path: Crumb[];
   searching: boolean;
   count: number;
+  /** Content (in-document) match count — folded into the search subtitle so
+   * it never reads "No matches" while content hits are listed below. */
+  contentCount?: number;
   /** When present (search mode), drives the per-kind count chip
    * ("142 files · 6 folders · 3 notes"). */
   searchTotals?: { files: number; folders: number; notes: number; exact: boolean };
@@ -1890,15 +1895,15 @@ function Header({
           >
             {searching ? "Search results" : current.name}
           </h1>
-          {searchTotals ? (
+          {searching ? (
             <span
               aria-live="polite"
               style={{ fontSize: "var(--text-sm)", color: "var(--muted)", paddingBottom: 4 }}
             >
-              {formatSearchTotals(searchTotals)}
+              {formatSearchTotals(searchTotals, contentCount)}
             </span>
           ) : (
-            (count > 0 || searching) && (
+            count > 0 && (
               <span style={{ fontSize: "var(--text-sm)", color: "var(--muted)", paddingBottom: 4 }}>
                 {count} {count === 1 ? "item" : "items"}
               </span>
@@ -1916,18 +1921,22 @@ function Header({
   );
 }
 
-function formatSearchTotals(t: {
-  files: number;
-  folders: number;
-  notes: number;
-  exact: boolean;
-}): string {
+function formatSearchTotals(
+  t: { files: number; folders: number; notes: number; exact: boolean } | undefined,
+  contentCount: number,
+): string {
   const parts: string[] = [];
-  if (t.files > 0) parts.push(`${t.files} ${t.files === 1 ? "file" : "files"}`);
-  if (t.folders > 0) parts.push(`${t.folders} ${t.folders === 1 ? "folder" : "folders"}`);
-  if (t.notes > 0) parts.push(`${t.notes} ${t.notes === 1 ? "note" : "notes"}`);
-  const body = parts.length === 0 ? "No matches" : parts.join(" · ");
-  return t.exact || parts.length === 0 ? body : `${body} (more)`;
+  if (t) {
+    if (t.files > 0) parts.push(`${t.files} ${t.files === 1 ? "file" : "files"}`);
+    if (t.folders > 0) parts.push(`${t.folders} ${t.folders === 1 ? "folder" : "folders"}`);
+    if (t.notes > 0) parts.push(`${t.notes} ${t.notes === 1 ? "note" : "notes"}`);
+  }
+  if (contentCount > 0) {
+    parts.push(`${contentCount} in ${contentCount === 1 ? "document" : "documents"}`);
+  }
+  if (parts.length === 0) return "No matches";
+  const body = parts.join(" · ");
+  return t && !t.exact ? `${body} (more)` : body;
 }
 
 function CrumbButton({ label, onClick, sep }: { label: string; onClick: () => void; sep?: boolean }) {
