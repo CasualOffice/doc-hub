@@ -502,6 +502,38 @@ body {
   .lift:hover { transform: none; }
 }
 
+/* ── The Press — signature tactile interaction (spec §6). A button sinks
+   INTO its hard offset shadow on click: nudge down-right + flatten the
+   shadow. `.press-sink` carries a small (--shadow-sm) rest block; the
+   `--lg` peer carries the full (--shadow) block for primary CTAs / tiles.
+   Reduced-motion keeps the shadow states, drops the transform. ── */
+.press-sink {
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease),
+              background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+.press-sink:active:not(:disabled) {
+  transform: var(--lift-press);
+  box-shadow: none;
+}
+.press-sink-lg {
+  box-shadow: var(--shadow);
+  transition: transform var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease),
+              background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+.press-sink-lg:active:not(:disabled) {
+  transform: var(--lift-press);
+  box-shadow: var(--shadow-sm);
+}
+@media (prefers-reduced-motion: reduce) {
+  .press-sink:active,
+  .press-sink-lg:active { transform: none; }
+}
+
 /* Small all-caps eyebrow labels. */
 .caps-label {
   font-size: var(--text-2xs);
