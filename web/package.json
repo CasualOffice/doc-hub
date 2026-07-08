@@ -13,7 +13,7 @@
     "screenshots": "node tests/e2e/marketing-screenshots.mjs"
   },
   "dependencies": {
-    "@casualoffice/docs": "1.2.0",
+    "@casualoffice/docs": "1.3.0",
     "@casualoffice/sheets": "0.16.0",
     "@fontsource-variable/ibm-plex-sans": "^5.2.8",
     "@fontsource-variable/inter": "^5.2.8",

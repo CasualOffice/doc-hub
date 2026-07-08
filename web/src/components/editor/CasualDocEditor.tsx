@@ -35,13 +35,19 @@
  * populated it were all retired — nothing serves an embed runtime anymore.
  */
 
-import { useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { CasualEditor, type FeatureMap } from "@casualoffice/docs";
+import { CasualEditor, type CollabState, type FeatureMap } from "@casualoffice/docs";
 import "@casualoffice/docs/styles.css";
 
-import { type FileDto } from "../../api/client.ts";
+import { type CollabRoom, type FileDto } from "../../api/client.ts";
 import { DriveFileSource } from "../../file-source/DriveFileSource.ts";
+import {
+  DISABLED_SESSION,
+  presenceSession,
+  type CollabPeer,
+  type CollabSession,
+} from "../../lib/collab.ts";
 import { withSaveStatus, type OnSaveStatus } from "./save-status.ts";
 
 /** Editor mode: hide only the bottom status bar — Drive's fullscreen
@@ -75,8 +81,18 @@ export interface CasualDocEditorProps {
    *  so users never see the SDK's raw error UI. */
   onError?: (error: Error) => void;
   /** Drive's signed-in user — threaded to the editor for comment /
-   *  track-change authorship (and, in a later phase, collab presence). */
+   *  track-change authorship AND collab presence (`collab.user`). */
   user?: { name: string; color: string };
+  /** P3 — a live co-editing room grant (`{ ws_url, room, token }`) minted by
+   *  `GET /api/files/{id}/collab`. When present (and `mode="editor"`) the SDK
+   *  opens its own Yjs provider — real CRDT sync + cursors + presence. `null`
+   *  (collab disabled / declined) ⇒ single-user editing, unchanged. Preview
+   *  mode is always single-user / read-only, so the grant is ignored there. */
+  collab?: CollabRoom | null;
+  /** Fires with the SDK's live collab presence (peers + connection status),
+   *  mapped to a `CollabSession` for the shared `<CollabPresence>` header.
+   *  Called with `DISABLED_SESSION` when collab is off or on unmount. */
+  onPresence?: (session: CollabSession) => void;
 }
 
 export function CasualDocEditor({
@@ -85,6 +101,8 @@ export function CasualDocEditor({
   onSaveStatus,
   onError,
   user,
+  collab,
+  onPresence,
 }: CasualDocEditorProps) {
   // Latch the callback so the wrapped source isn't recreated on every
   // host render (the host can swap the function freely).
@@ -104,6 +122,48 @@ export function CasualDocEditor({
 
   const isEditor = mode === "editor";
 
+  // P3 — declarative collab config for the SDK. Only in the editable surface,
+  // and only when Drive brokered a room grant. `collab.room` is the file id
+  // (Drive's per-file room); `collab.token` is the HMAC JWT the collab server's
+  // onAuthenticate hook validates (wired in @casualoffice/docs 1.3.0). With
+  // this set the SDK runs Yjs sync itself and seeds content from the (server-
+  // seeded) room rather than the fileSource loader.
+  const collabConfig = useMemo(() => {
+    if (!isEditor || !collab) return undefined;
+    return {
+      server: collab.ws_url,
+      room: file.id,
+      token: collab.token,
+      user: user ? { name: user.name, color: user.color } : undefined,
+    };
+  }, [isEditor, collab, file.id, user]);
+
+  // Latch the presence sink so the mapped callback identity is stable.
+  const onPresenceRef = useRef(onPresence);
+  onPresenceRef.current = onPresence;
+
+  // Map the SDK's CollabState (peers + status) onto the header's CollabSession
+  // shape. No transport handles to hand back — the SDK owns the provider — so
+  // doc/provider/awareness are null; the header only reads status + peers.
+  const handleCollabState = useCallback((state: CollabState) => {
+    const peers: CollabPeer[] = state.peers.map((p) => ({
+      clientId: p.clientId,
+      userId: String(p.clientId),
+      name: p.name,
+      tint: p.color,
+      activity: "editing",
+      self: p.isLocal,
+    }));
+    onPresenceRef.current?.(presenceSession(state.status, peers));
+  }, []);
+
+  // Reset the header indicator when collab goes away / the editor unmounts.
+  useEffect(() => {
+    if (collabConfig) return;
+    onPresenceRef.current?.(DISABLED_SESSION);
+    return () => onPresenceRef.current?.(DISABLED_SESSION);
+  }, [collabConfig]);
+
   return (
     <div
       data-testid="casual-doc-editor"
@@ -121,10 +181,16 @@ export function CasualDocEditor({
         documentMode={isEditor ? "editing" : "viewing"}
         features={isEditor ? EDITOR_FEATURES : PREVIEW_FEATURES}
         // Persist edits through DriveFileSource on a tick — only in the
-        // editable surface; the preview mount stays read-only.
+        // editable surface; the preview mount stays read-only. Kept on under
+        // collab too: this is the client-push snapshot path (main CLAUDE.md
+        // M2), coordinated with Yjs by the SDK (externalContent).
         autosave={isEditor}
         author={user?.name}
         user={user}
+        // P3 — real CRDT co-editing. `collab` wins over the deprecated
+        // `user`/`backendUrl` pair for awareness; undefined ⇒ single-user.
+        collab={collabConfig}
+        onCollabState={collabConfig ? handleCollabState : undefined}
         onError={onError}
         docxEditorProps={{
           // Bare canvas for the read-only preview; the full shell for the

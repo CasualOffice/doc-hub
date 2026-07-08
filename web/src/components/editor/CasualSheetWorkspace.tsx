@@ -55,12 +55,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // Univer on first paint. The subpath keeps the whole graph behind React.lazy.
 import { CasualSheets, setMentionProvider, type CasualSheetsAPI } from "@casualoffice/sheets/sheets";
 import "@casualoffice/sheets/styles";
+// Type-only import (erased at build) — the concrete collab runtime lives on the
+// SDK's own chunk, pulled in by the `collab` prop, not by this host wrapper.
+import type { AttachCollabOptions, CollabConnectionStatus } from "@casualoffice/sheets/collab";
 import { LocaleType, type IWorkbookData } from "@univerjs/core";
 
-import { type FileDto } from "../../api/client.ts";
+import { type CollabRoom, type FileDto } from "../../api/client.ts";
 import { DriveFileSource } from "../../file-source/DriveFileSource.ts";
+import {
+  DISABLED_SESSION,
+  presenceSession,
+  type CollabSession,
+  type CollabStatus,
+} from "../../lib/collab.ts";
 import { withSaveStatus, type OnSaveStatus } from "./save-status.ts";
 import { SHEET_LOCALES } from "./sheet-locale.ts";
+
+/** Map the sheets SDK's connection status onto the shared header's vocabulary. */
+function mapSheetStatus(status: CollabConnectionStatus): CollabStatus {
+  return status === "live" ? "connected" : status === "connecting" ? "connecting" : "disconnected";
+}
 
 /** Error surfaced to the host so Drive can swap in a friendly fallback card
  *  instead of a raw editor error. Kept as `{ code, message }` — the shape the
@@ -89,6 +103,18 @@ export interface CasualSheetWorkspaceProps {
    *  `<CasualSheets>` has no author prop, so this is surfaced through the
    *  comment @-mention provider (self as a candidate) rather than a byline. */
   user?: { name: string; color: string };
+  /** P3 — a live co-editing room grant (`{ ws_url, room, token }`) minted by
+   *  `GET /api/files/{id}/collab`. When present (and `mode="editor"`) the SDK
+   *  attaches its Yjs/Hocuspocus bridge and the (server-seeded) room becomes
+   *  the source of truth — so we DON'T `importXlsx` over it. `null` (collab
+   *  disabled / declined) ⇒ single-user editing via `importXlsx`, unchanged. */
+  collab?: CollabRoom | null;
+  /** Fires with the SDK's live connection status, mapped to a `CollabSession`
+   *  for the shared `<CollabPresence>` header. The declarative `collab` prop
+   *  surfaces `onStatus` (connection state) but not the peer roster, so peers
+   *  stay empty here — the header shows Live/Connecting; per-cursor presence is
+   *  painted in-grid by the SDK. Called with `DISABLED_SESSION` on unmount. */
+  onPresence?: (session: CollabSession) => void;
 }
 
 /** A minimal single-sheet workbook used as the mount seed. Real content is
@@ -133,8 +159,14 @@ export function CasualSheetWorkspace({
   onSaveStatus,
   onError,
   user,
+  collab,
+  onPresence,
 }: CasualSheetWorkspaceProps) {
   const isEditor = mode === "editor";
+  // P3 — co-editing is live only in the editor surface when Drive brokered a
+  // room grant. When active, the server-seeded Yjs room is the source of truth,
+  // so `onReady` must NOT `importXlsx` on top of the bridge-synced content.
+  const collabActive = isEditor && !!collab;
 
   // Latch callbacks so the memoised file source / persist closure don't churn
   // when the host re-renders for an unrelated reason.
@@ -142,6 +174,8 @@ export function CasualSheetWorkspace({
   onSaveStatusRef.current = onSaveStatus;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const onPresenceRef = useRef(onPresence);
+  onPresenceRef.current = onPresence;
 
   const emitError = useCallback((err: unknown, code: SheetWorkspaceError["code"]) => {
     const message = err instanceof Error ? err.message : String(err);
@@ -243,7 +277,12 @@ export function CasualSheetWorkspace({
     async (api: CasualSheetsAPI) => {
       apiRef.current = api;
       try {
-        if (bytesRef.current && bytesRef.current.byteLength > 0) {
+        // Under collab the room (seeded server-side from the file via
+        // `GET /api/files/{id}/collab/seed`) is the source of truth: the SDK's
+        // attachCollab bridge streams that content into the workbook. Importing
+        // the file bytes on top would double-load and race the sync, so skip it.
+        // Single-user (no grant) keeps the full-fidelity importXlsx path.
+        if (!collabActive && bytesRef.current && bytesRef.current.byteLength > 0) {
           await api.importXlsx(bytesRef.current);
         }
       } catch (err) {
@@ -256,8 +295,34 @@ export function CasualSheetWorkspace({
       // Only after the initial content is in place do we allow autosave.
       readyToPersist.current = true;
     },
-    [emitError],
+    [emitError, collabActive],
   );
+
+  // P3 — declarative collab options for the SDK. `room` is the file id (Drive's
+  // per-file room); `token` is the HMAC JWT the collab server's onAuthenticate
+  // hook validates. `onStatus` drives the shared header indicator; `onSnapshot`
+  // swaps the workbook when a peer's compaction snapshot arrives.
+  const collabOpts = useMemo<AttachCollabOptions | undefined>(() => {
+    if (!collabActive || !collab) return undefined;
+    return {
+      server: collab.ws_url,
+      room: file.id,
+      token: collab.token,
+      onStatus: (status) => {
+        onPresenceRef.current?.(presenceSession(mapSheetStatus(status), []));
+      },
+      onSnapshot: (wb) => {
+        apiRef.current?.loadSnapshot(wb);
+      },
+    };
+  }, [collabActive, collab, file.id]);
+
+  // Reset the header indicator when collab is off / on unmount.
+  useEffect(() => {
+    if (collabOpts) return;
+    onPresenceRef.current?.(DISABLED_SESSION);
+    return () => onPresenceRef.current?.(DISABLED_SESSION);
+  }, [collabOpts]);
 
   // Persist the current workbook: export to .xlsx via the SDK's full-fidelity
   // exporter, then PUT through DriveFileSource. Guarded so import-time
@@ -321,6 +386,9 @@ export function CasualSheetWorkspace({
         documentMode={isEditor ? "editing" : "viewing"}
         chrome={isEditor ? "full" : "none"}
         appearance={appearance}
+        // P3 — real CRDT co-editing. The SDK attaches Yjs/Hocuspocus after
+        // onReady and detaches on unmount; undefined ⇒ single-user grid.
+        collab={collabOpts}
         onReady={onReady}
         // Persist on every settled edit (autosave) + on explicit Ctrl/Cmd+S,
         // editor mode only. Both funnel through the same guarded persist().
