@@ -771,6 +771,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "dochub-ai"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "dochub-auth"
 version = "0.0.1"
 dependencies = [
@@ -799,6 +812,7 @@ name = "dochub-core"
 version = "0.0.1"
 dependencies = [
  "base64 0.22.1",
+ "dochub-ai",
  "dochub-crypto",
  "infer",
  "serde",
@@ -855,6 +869,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bytes",
+ "dochub-ai",
  "dochub-auth",
  "dochub-core",
  "dochub-crypto",

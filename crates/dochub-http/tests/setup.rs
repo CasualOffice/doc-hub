@@ -52,6 +52,7 @@ async fn bare_fixture() -> (HttpState, Db) {
         document_origin: None,
         collab_url: None,
         master_kek: dochub_core::dev_master_kek(),
+        ai: dochub_core::AiConfig::disabled(),
         master_kek_next: None,
     };
     let auth = AuthState::new(db.clone(), false, time::Duration::hours(1));

@@ -4,6 +4,7 @@ members = [
     "crates/dochub-core",
     "crates/dochub-db",
     "crates/dochub-index",
+    "crates/dochub-ai",
     "crates/dochub-storage",
     "crates/dochub-wopi",
     "crates/dochub-auth",
@@ -51,6 +52,14 @@ ulid              = { version = "1", features = ["serde"] }
 # Myers/patience line differ. MIT OR Apache-2.0 — both already allow-listed in
 # deny.toml, so no license exception is needed.
 similar           = "2"
+
+# AI layer (Phase 3 §3, `dochub-ai`). `reqwest` is already in the tree
+# transitively via `openidconnect`; we pin the same 0.12 line and use the
+# rustls-tls backend (no OpenSSL) with the minimal feature set — `json` for the
+# Anthropic Messages API request/response, `rustls-tls` for HTTPS. `async-trait`
+# powers the object-safe async `AiProvider` trait.
+reqwest           = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+async-trait       = "0.1"
 
 # Errors / logging
 anyhow            = "1"

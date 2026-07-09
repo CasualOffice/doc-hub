@@ -29,6 +29,7 @@ mod search;
 mod share;
 mod spa;
 mod state;
+mod summary;
 mod versions;
 mod wopi_docs;
 mod workspace_storage;
@@ -146,6 +147,7 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(files_router)
         .merge(collab_router)
         .merge(versions_router)
+        .merge(summary::router(state.clone()))
         .merge(diff::router(state.clone()))
         .merge(share_router)
         .merge(workspaces_router)

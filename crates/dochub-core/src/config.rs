@@ -92,6 +92,11 @@ pub struct Config {
     /// server-side (the `/api/auth/sign-in` route returns 404). Default
     /// true so existing deployments keep working through the OIDC roll-out.
     pub allow_password_auth: bool,
+    /// Phase 3 §3 — the AI provider layer. Parsed from `DOCHUB_AI_*` env vars;
+    /// **off by default** (privacy). When `off`, the HTTP AI endpoints report
+    /// disabled. The API key it may carry is redacted from `Debug` (see
+    /// [`dochub_ai::AiConfig`]) so it never leaks through `{:?}` on `Config`.
+    pub ai: dochub_ai::AiConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -278,6 +283,7 @@ impl Config {
             master_kek_next,
             oidc: load_oidc_from_env()?,
             allow_password_auth: env_bool("DOCHUB_ALLOW_PASSWORD_AUTH").unwrap_or(true),
+            ai: dochub_ai::AiConfig::from_env(),
             sheet_origin,
             document_origin,
             collab_url,

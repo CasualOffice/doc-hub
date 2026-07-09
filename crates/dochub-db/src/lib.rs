@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod ai_summaries;
 mod audit;
 mod error;
 mod file_versions;
@@ -29,6 +30,7 @@ mod workspace_keys;
 mod workspace_storage;
 mod workspaces;
 
+pub use ai_summaries::{AiSummaryRepo, CachedSummary};
 pub use audit::{action, AuditChainStatus, AuditEvent, AuditRepo, NewAuditEvent};
 pub use error::DbError;
 pub use file_versions::{FileVersionsRepo, NewVersion, Version};

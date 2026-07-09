@@ -59,6 +59,7 @@ async fn fixture(with_editors: bool) -> HttpState {
         document_origin: with_editors.then(|| Url::parse("http://document.test").unwrap()),
         collab_url: None,
         master_kek: dochub_core::dev_master_kek(),
+        ai: dochub_core::AiConfig::disabled(),
         master_kek_next: None,
     };
     let auth = AuthState::new(db.clone(), false, time::Duration::hours(1));
