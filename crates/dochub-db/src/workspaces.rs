@@ -341,6 +341,20 @@ impl<'a> WorkspaceMemberRepo<'a> {
         Ok(())
     }
 
+    /// How many members hold the given raw role string in a workspace. Backs
+    /// the "can't demote the last owner" guard in the member-role endpoint
+    /// (F2). Counts the F1 role name literally (`owner`), not the collapsed
+    /// legacy enum.
+    pub async fn count_with_role(&self, workspace_id: &str, role: &str) -> Result<i64, DbError> {
+        Ok(sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ? AND role = ?",
+        )
+        .bind(workspace_id)
+        .bind(role)
+        .fetch_one(self.db.pool())
+        .await?)
+    }
+
     pub async fn list(&self, workspace_id: &str) -> Result<Vec<WorkspaceMembership>, DbError> {
         let rows = sqlx::query(
             "SELECT workspace_id, user_id, role, joined_at \

@@ -175,16 +175,16 @@ async fn create_invitation(
 ) -> Result<(StatusCode, Json<InvitationCreatedDto>), (StatusCode, Json<ErrBody<'static>>)> {
     require_member(&s, &workspace_id, &session.user_id).await?;
 
-    let role = match body.role.as_str() {
-        "member" => "member",
-        "admin" => {
-            // MU2 unlocks Admin invites. Until then, reject explicitly
-            // rather than silently downgrading — keeps the API honest
-            // about what's wired.
+    // F2: invitation roles are real end to end (docs/design §2). Accept the
+    // F1 role model (`viewer|editor|admin`), plus the legacy `member` alias.
+    // `owner` is never grantable via invite — ownership transfers explicitly.
+    let role = match body.role.trim() {
+        r @ ("viewer" | "editor" | "admin" | "member") => r.to_string(),
+        "owner" => {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrBody {
-                    error: "admin role invitations are not enabled yet (see MU2)",
+                    error: "owner role cannot be granted via invitation",
                 }),
             ));
         }
@@ -192,7 +192,7 @@ async fn create_invitation(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrBody {
-                    error: "role must be 'member'",
+                    error: "role must be one of: viewer, editor, admin",
                 }),
             ));
         }
@@ -229,7 +229,7 @@ async fn create_invitation(
         .insert(&NewWorkspaceInvitation {
             workspace_id: workspace_id.clone(),
             token: token.clone(),
-            role: role.into(),
+            role,
             created_by: session.user_id.clone(),
             expires_at,
             max_uses: body.max_uses,
@@ -497,12 +497,11 @@ async fn accept_invitation(
         ));
     }
 
-    let role = match inv.role.as_str() {
-        "admin" => WorkspaceRole::Owner, // future-proofing; admin maps to elevated for now
-        _ => WorkspaceRole::Member,
-    };
+    // Honor the invited role literally (F1 `viewer|editor|admin`, or the
+    // legacy `member` alias which authz resolves to Editor). `add` stores the
+    // raw string so `dochub_authz` grants the real effective permissions.
     members
-        .insert(&inv.workspace_id, &effective_user_id, role)
+        .add(&inv.workspace_id, &effective_user_id, &inv.role)
         .await
         .map_err(|_| {
             (

@@ -18,12 +18,15 @@ mod content_search;
 mod diff;
 mod direct_upload;
 mod files;
+mod grants;
 pub mod headers;
 mod host_dispatch;
 mod invitations;
+mod members;
 mod notes;
 mod oidc;
 pub mod presence;
+mod projects_http;
 mod rate_limit;
 mod raw;
 mod search;
@@ -132,6 +135,9 @@ fn app_origin_router(state: HttpState) -> Router {
     let compliance_router: Router = compliance::router(state.clone());
     let presence_router: Router = presence::router().with_state(state.clone());
     let invitations_router: Router = invitations::router(state.clone());
+    let grants_router: Router = grants::router(state.clone());
+    let members_router: Router = members::router(state.clone());
+    let projects_router: Router = projects_http::router(state.clone());
 
     Router::new()
         .route("/healthz", get(healthz))
@@ -158,6 +164,9 @@ fn app_origin_router(state: HttpState) -> Router {
         .merge(compliance_router)
         .merge(presence_router)
         .merge(invitations_router)
+        .merge(grants_router)
+        .merge(members_router)
+        .merge(projects_router)
         // SPA fallback — `/`, `/sign-in`, `/files/...`, hashed asset paths
         // — anything not matched above is served from the embedded `web/dist/`.
         .fallback(spa::serve)
