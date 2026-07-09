@@ -18,6 +18,9 @@ pub struct Folder {
     /// Workspace this folder lives in. Nullable on disk only because the
     /// 0006 ALTER TABLE migration backfills async; new rows always have one.
     pub workspace_id: Option<String>,
+    /// Project this folder lives under (F1 access container). Backfilled by
+    /// 0023 for legacy rows; stamped on insert for new ones.
+    pub project_id: Option<String>,
     pub trashed_at: Option<time::OffsetDateTime>,
     pub original_parent_id: Option<String>,
     pub created_at: time::OffsetDateTime,
@@ -30,6 +33,8 @@ pub struct NewFolder {
     pub name: String,
     pub owner_id: String,
     pub workspace_id: String,
+    /// Project the folder belongs to (F1). None = resolve the workspace default.
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,8 +54,8 @@ impl<'a> FolderRepo<'a> {
         let now = time::OffsetDateTime::now_utc();
         let now_s = ts(now);
         sqlx::query(
-            "INSERT INTO folders (id, parent_id, name, owner_id, created_at, modified_at, workspace_id) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO folders (id, parent_id, name, owner_id, created_at, modified_at, workspace_id, project_id) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&new.parent_id)
@@ -59,6 +64,7 @@ impl<'a> FolderRepo<'a> {
         .bind(&now_s)
         .bind(&now_s)
         .bind(&new.workspace_id)
+        .bind(&new.project_id)
         .execute(self.db.pool())
         .await?;
         Ok(Folder {
@@ -67,6 +73,7 @@ impl<'a> FolderRepo<'a> {
             name: new.name.clone(),
             owner_id: new.owner_id.clone(),
             workspace_id: Some(new.workspace_id.clone()),
+            project_id: new.project_id.clone(),
             trashed_at: None,
             original_parent_id: None,
             created_at: now,
@@ -76,7 +83,7 @@ impl<'a> FolderRepo<'a> {
 
     pub async fn find_by_id(&self, id: &str) -> Result<Folder, DbError> {
         let row = sqlx::query(
-            "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, original_parent_id, \
+            "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, original_parent_id, \
                     created_at, modified_at \
              FROM folders WHERE id = ?",
         )
@@ -96,7 +103,7 @@ impl<'a> FolderRepo<'a> {
     ) -> Result<Vec<Folder>, DbError> {
         let rows = match parent_id {
             Some(pid) => sqlx::query(
-                "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, original_parent_id, \
+                "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, original_parent_id, \
                             created_at, modified_at \
                      FROM folders \
                      WHERE parent_id = ? AND owner_id = ? AND trashed_at IS NULL \
@@ -105,7 +112,7 @@ impl<'a> FolderRepo<'a> {
             .bind(pid)
             .bind(owner_id),
             None => sqlx::query(
-                "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, original_parent_id, \
+                "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, original_parent_id, \
                         created_at, modified_at \
                  FROM folders \
                  WHERE parent_id IS NULL AND owner_id = ? AND trashed_at IS NULL \
@@ -127,7 +134,7 @@ impl<'a> FolderRepo<'a> {
     ) -> Result<Vec<Folder>, DbError> {
         let rows = match parent_id {
             Some(pid) => sqlx::query(
-                "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, original_parent_id, \
+                "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, original_parent_id, \
                         created_at, modified_at \
                  FROM folders \
                  WHERE parent_id = ? AND workspace_id = ? AND trashed_at IS NULL \
@@ -136,7 +143,7 @@ impl<'a> FolderRepo<'a> {
             .bind(pid)
             .bind(workspace_id),
             None => sqlx::query(
-                "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, original_parent_id, \
+                "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, original_parent_id, \
                         created_at, modified_at \
                  FROM folders \
                  WHERE parent_id IS NULL AND workspace_id = ? AND trashed_at IS NULL \
@@ -160,7 +167,7 @@ impl<'a> FolderRepo<'a> {
     ) -> Result<Vec<Folder>, DbError> {
         let pattern = format!("%{}%", query.to_lowercase());
         let rows = sqlx::query(
-            "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, original_parent_id, \
+            "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, original_parent_id, \
                     created_at, modified_at \
              FROM folders \
              WHERE workspace_id = ? AND trashed_at IS NULL AND LOWER(name) LIKE ? \
@@ -198,7 +205,7 @@ impl<'a> FolderRepo<'a> {
         }
 
         let mut sql = String::from(
-            "SELECT id, parent_id, name, owner_id, workspace_id, trashed_at, \
+            "SELECT id, parent_id, name, owner_id, workspace_id, project_id, trashed_at, \
                     original_parent_id, created_at, modified_at \
              FROM folders WHERE ",
         );
@@ -373,6 +380,10 @@ fn row_to_folder(row: &sqlx::any::AnyRow) -> Result<Folder, DbError> {
         owner_id: row.get("owner_id"),
         workspace_id: row
             .try_get::<Option<String>, _>("workspace_id")
+            .ok()
+            .flatten(),
+        project_id: row
+            .try_get::<Option<String>, _>("project_id")
             .ok()
             .flatten(),
         trashed_at: row

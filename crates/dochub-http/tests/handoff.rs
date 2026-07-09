@@ -134,6 +134,7 @@ async fn seed_file(state: &HttpState, name: &str, content_type: &str) -> String 
             etag: None,
             owner_id: owner,
             workspace_id: ws,
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,

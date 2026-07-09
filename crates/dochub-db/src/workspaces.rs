@@ -299,6 +299,48 @@ impl<'a> WorkspaceMemberRepo<'a> {
         Ok(row.map(|r| WorkspaceRole::parse(r.get::<String, _>("role").as_str())))
     }
 
+    /// The raw `role` string for a member, or `None` if not a member. Unlike
+    /// [`Self::role_of`] this does not collapse into the legacy `owner|member`
+    /// enum, so `dochub-authz` can read the full `viewer|editor|admin|owner`
+    /// model (F1). Spec: docs/design/foundation-access-rag-mcp.md §2.
+    pub async fn role_name(
+        &self,
+        workspace_id: &str,
+        user_id: &str,
+    ) -> Result<Option<String>, DbError> {
+        Ok(sqlx::query_scalar::<_, String>(
+            "SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?",
+        )
+        .bind(workspace_id)
+        .bind(user_id)
+        .fetch_optional(self.db.pool())
+        .await?)
+    }
+
+    /// Add a member carrying an explicit F1 role string (`viewer|editor|admin|
+    /// owner`). Portable upsert (delete-then-insert) so re-adding updates the
+    /// role. The enum-typed [`Self::insert`] stays for the legacy `owner|member`
+    /// callers.
+    pub async fn add(&self, workspace_id: &str, user_id: &str, role: &str) -> Result<(), DbError> {
+        let joined_at = ts(time::OffsetDateTime::now_utc());
+        sqlx::query("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?")
+            .bind(workspace_id)
+            .bind(user_id)
+            .execute(self.db.pool())
+            .await?;
+        sqlx::query(
+            "INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(workspace_id)
+        .bind(user_id)
+        .bind(role)
+        .bind(joined_at)
+        .execute(self.db.pool())
+        .await?;
+        Ok(())
+    }
+
     pub async fn list(&self, workspace_id: &str) -> Result<Vec<WorkspaceMembership>, DbError> {
         let rows = sqlx::query(
             "SELECT workspace_id, user_id, role, joined_at \

@@ -23,12 +23,14 @@ use axum::{
 };
 use base64::Engine as _;
 use dochub_auth::{hash_password, verify_password, AuthSession};
+use dochub_authz::{Permission, ResourceRef};
 use dochub_db::{
     AuditRepo, FileRepo, FolderRepo, NewAuditEvent, NewShareLink, ShareLink, ShareLinkRepo,
 };
 use dochub_storage::SignedUrl;
 use serde::{Deserialize, Serialize};
 
+use crate::authz::gate;
 use crate::{files::storage_key, HttpState};
 
 // ── Public DTOs ─────────────────────────────────────────────────────────
@@ -93,9 +95,13 @@ async fn create_share(
         .find_by_id(&file_id)
         .await
         .map_err(|_| ShareError::NotFound)?;
-    if file.owner_id != session.user_id {
-        return Err(ShareError::Forbidden);
-    }
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Share,
+    )
+    .await?;
 
     let password_hash = match body
         .password
@@ -171,9 +177,13 @@ async fn list_shares(
         .find_by_id(&file_id)
         .await
         .map_err(|_| ShareError::NotFound)?;
-    if file.owner_id != session.user_id {
-        return Err(ShareError::Forbidden);
-    }
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Share,
+    )
+    .await?;
 
     let links = ShareLinkRepo::new(&s.db)
         .list_for_file(&file.id)
@@ -259,9 +269,13 @@ async fn create_folder_share(
         .find_by_id(&folder_id)
         .await
         .map_err(|_| ShareError::NotFound)?;
-    if folder.owner_id != session.user_id {
-        return Err(ShareError::Forbidden);
-    }
+    gate(
+        &s,
+        &session,
+        ResourceRef::Folder(folder.id.clone()),
+        Permission::Share,
+    )
+    .await?;
     if folder.trashed_at.is_some() {
         return Err(ShareError::NotFound);
     }
@@ -335,9 +349,13 @@ async fn list_folder_shares(
         .find_by_id(&folder_id)
         .await
         .map_err(|_| ShareError::NotFound)?;
-    if folder.owner_id != session.user_id {
-        return Err(ShareError::Forbidden);
-    }
+    gate(
+        &s,
+        &session,
+        ResourceRef::Folder(folder.id.clone()),
+        Permission::Share,
+    )
+    .await?;
 
     let links = ShareLinkRepo::new(&s.db)
         .list_for_folder(&folder.id)
@@ -649,6 +667,15 @@ pub(crate) enum ShareError {
 #[derive(Serialize)]
 struct ErrBody<'a> {
     error: &'a str,
+}
+
+impl From<dochub_authz::AuthzError> for ShareError {
+    fn from(e: dochub_authz::AuthzError) -> Self {
+        match e {
+            dochub_authz::AuthzError::Forbidden => Self::Forbidden,
+            dochub_authz::AuthzError::Db(err) => Self::Internal(err.to_string()),
+        }
+    }
 }
 
 impl IntoResponse for ShareError {

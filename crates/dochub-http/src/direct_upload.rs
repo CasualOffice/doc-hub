@@ -235,6 +235,7 @@ pub(crate) async fn presign(
             content_type: body.content_type.clone(),
             etag: None,
             owner_id: session.user_id.clone(),
+            project_id: crate::files::resolve_project(&s, &workspace_id).await.ok(),
             workspace_id,
             storage_id,
             status: FileStatus::Uploading,

@@ -7,6 +7,7 @@ members = [
     "crates/dochub-storage",
     "crates/dochub-wopi",
     "crates/dochub-auth",
+    "crates/dochub-authz",
     "crates/dochub-http",
     "crates/dochub-bin",
     "crates/dochub-crypto",

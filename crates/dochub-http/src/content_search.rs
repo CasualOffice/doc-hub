@@ -237,14 +237,21 @@ pub(crate) async fn content_search(
 
     // Permission filter + enrich from the DB. The index is already
     // workspace-scoped; we re-check workspace + trashed as defense in depth and
-    // to pick up any row trashed since the last reindex.
+    // to pick up any row trashed since the last reindex. `readable_scope`
+    // ACL-filters so a hit the caller may not view never leaks.
+    let scope = dochub_authz::readable_scope(&s.db, &session.user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let files = FileRepo::new(&s.db);
     let mut out = Vec::with_capacity(hits.len());
     for h in hits {
         let Ok(file) = files.find_by_id(&h.file_id).await else {
             continue;
         };
-        if file.workspace_id.as_deref() != Some(workspace.as_str()) || file.trashed_at.is_some() {
+        if file.workspace_id.as_deref() != Some(workspace.as_str())
+            || file.trashed_at.is_some()
+            || !scope.can_view_file(&file)
+        {
             continue;
         }
         out.push(ContentHit {

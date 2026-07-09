@@ -29,8 +29,7 @@ use axum::{
 use dochub_auth::AuthSession;
 use dochub_db::{
     action, AuditRepo, Db, File, FileVersionsRepo, LegalHold, LegalHoldsRepo, NewAuditEvent,
-    NewLegalHold, NewRetentionPolicy, RetentionPolicy, RetentionRepo, WorkspaceMemberRepo,
-    WorkspaceRole,
+    NewLegalHold, NewRetentionPolicy, RetentionPolicy, RetentionRepo,
 };
 use serde::{Deserialize, Serialize};
 
@@ -145,24 +144,30 @@ impl IntoResponse for ComplianceError {
     }
 }
 
-/// Authorise a compliance mutation: a system admin, or an Owner of the target
-/// workspace. Anyone else → 403.
+/// Authorise a compliance mutation via `dochub_authz`: the caller needs the
+/// `manage_retention` permission on the target workspace (Admin/Owner roles, an
+/// ACL grant, or a system superadmin). Anyone else → 403 (audited `authz.deny`).
 async fn require_admin_or_owner(
     s: &HttpState,
     session: &AuthSession,
     workspace_id: &str,
 ) -> Result<(), ComplianceError> {
-    if session.is_admin {
-        return Ok(());
-    }
-    let role = WorkspaceMemberRepo::new(&s.db)
-        .role_of(workspace_id, &session.user_id)
-        .await
-        .map_err(|e| ComplianceError::Internal(e.to_string()))?;
-    if matches!(role, Some(WorkspaceRole::Owner)) {
-        Ok(())
-    } else {
-        Err(ComplianceError::Forbidden)
+    crate::authz::gate(
+        s,
+        session,
+        dochub_authz::ResourceRef::Workspace(workspace_id.to_string()),
+        dochub_authz::Permission::ManageRetention,
+    )
+    .await
+    .map_err(ComplianceError::from)
+}
+
+impl From<dochub_authz::AuthzError> for ComplianceError {
+    fn from(e: dochub_authz::AuthzError) -> Self {
+        match e {
+            dochub_authz::AuthzError::Forbidden => Self::Forbidden,
+            dochub_authz::AuthzError::Db(err) => Self::Internal(err.to_string()),
+        }
     }
 }
 

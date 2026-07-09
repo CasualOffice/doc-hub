@@ -26,9 +26,11 @@ use axum::{
 };
 use bytes::Bytes;
 use dochub_auth::AuthSession;
+use dochub_authz::{Permission, ResourceRef};
 use dochub_db::{AuditRepo, File, FileRepo, Folder, FolderRepo, NewAuditEvent, NewFile, NewFolder};
 use serde::{Deserialize, Serialize};
 
+use crate::authz::gate;
 use crate::HttpState;
 
 #[derive(Debug, thiserror::Error)]
@@ -274,15 +276,30 @@ pub(crate) fn sanitise_display_name(name: &str) -> Result<String, FilesError> {
     Ok(trimmed.to_string())
 }
 
-fn ensure_owner(folder_owner: &str, session: &AuthSession) -> Result<(), FilesError> {
-    if folder_owner != session.user_id {
-        return Err(FilesError::Forbidden);
+impl From<dochub_authz::AuthzError> for FilesError {
+    fn from(e: dochub_authz::AuthzError) -> Self {
+        match e {
+            dochub_authz::AuthzError::Forbidden => Self::Forbidden,
+            dochub_authz::AuthzError::Db(err) => Self::Internal(err.to_string()),
+        }
     }
-    Ok(())
 }
 
 pub(crate) fn storage_key(file_id: &str) -> String {
     format!("files/{file_id}")
+}
+
+/// The project a new file/folder in `workspace_id` should belong to — the
+/// workspace's default project, created on first use (F1). Keeps every document
+/// under a project so `dochub-authz` has an access container to resolve against.
+pub(crate) async fn resolve_project(
+    s: &HttpState,
+    workspace_id: &str,
+) -> Result<String, FilesError> {
+    dochub_db::ProjectRepo::new(&s.db)
+        .ensure_default(workspace_id)
+        .await
+        .map_err(|e| FilesError::Internal(e.to_string()))
 }
 
 /// Build the version registry (build spec §5) from request state. Cheap — the
@@ -387,7 +404,13 @@ async fn open_in_editor(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Edit,
+    )
+    .await?;
     if file.trashed_at.is_some() {
         return Err(FilesError::NotFound);
     }
@@ -544,9 +567,22 @@ async fn list_root(
         .list_children_in_workspace(None, &ws)
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
+    // ACL-filter to what the caller may view (readable_scope). Workspace
+    // members see everything; this is defense in depth + forward-compat.
+    let scope = dochub_authz::readable_scope(&s.db, &session.user_id)
+        .await
+        .map_err(FilesError::from)?;
     Ok(Json(ListResp {
-        folders: folders.into_iter().map(FolderDto::from).collect(),
-        files: files.into_iter().map(FileDto::from).collect(),
+        folders: folders
+            .into_iter()
+            .filter(|f| scope.can_view_folder(f))
+            .map(FolderDto::from)
+            .collect(),
+        files: files
+            .into_iter()
+            .filter(|f| scope.can_view_file(f))
+            .map(FileDto::from)
+            .collect(),
     }))
 }
 
@@ -565,19 +601,15 @@ async fn get_folder(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    // Auth: workspace member, falling back to owner check for pre-0006 rows
-    // whose workspace_id is still NULL.
-    if let Some(ws) = folder.workspace_id.as_deref() {
-        let role = dochub_db::WorkspaceMemberRepo::new(&s.db)
-            .role_of(ws, &session.user_id)
-            .await
-            .map_err(|e| FilesError::Internal(e.to_string()))?;
-        if role.is_none() {
-            return Err(FilesError::Forbidden);
-        }
-    } else {
-        ensure_owner(&folder.owner_id, &session)?;
-    }
+    // Authz: view permission on the folder (workspace/project membership or an
+    // ACL grant), replacing the old workspace-member-or-owner check.
+    gate(
+        &s,
+        &session,
+        ResourceRef::Folder(folder.id.clone()),
+        Permission::View,
+    )
+    .await?;
 
     let children_folders = if let Some(ws) = folder.workspace_id.as_deref() {
         FolderRepo::new(&s.db)
@@ -599,8 +631,19 @@ async fn get_folder(
             .await
     }
     .map_err(|e| FilesError::Internal(e.to_string()))?;
-    let folders = children_folders;
-    let files = children_files;
+    // ACL-filter children to what the caller can view (defense in depth + a
+    // non-member with only a per-file grant sees just that file).
+    let scope = dochub_authz::readable_scope(&s.db, &session.user_id)
+        .await
+        .map_err(FilesError::from)?;
+    let folders: Vec<Folder> = children_folders
+        .into_iter()
+        .filter(|f| scope.can_view_folder(f))
+        .collect();
+    let files: Vec<File> = children_files
+        .into_iter()
+        .filter(|f| scope.can_view_file(f))
+        .collect();
     Ok(Json(FolderDetail {
         folder: folder.into(),
         children: ListResp {
@@ -625,14 +668,6 @@ async fn create_folder(
 ) -> Result<Json<FolderDto>, FilesError> {
     let name = sanitise_display_name(&body.name)?;
 
-    if let Some(pid) = &body.parent_id {
-        let parent = FolderRepo::new(&s.db)
-            .find_by_id(pid)
-            .await
-            .map_err(|_| FilesError::NotFound)?;
-        ensure_owner(&parent.owner_id, &session)?;
-    }
-
     let workspace_id = crate::workspaces::resolve_active_workspace(
         &s.db,
         &session.user_id,
@@ -641,12 +676,39 @@ async fn create_folder(
     .await
     .map_err(|e| FilesError::Internal(format!("workspace: {e:?}")))?;
 
+    // Authz: create permission — on the parent folder when nested, else on the
+    // target workspace.
+    if let Some(pid) = &body.parent_id {
+        FolderRepo::new(&s.db)
+            .find_by_id(pid)
+            .await
+            .map_err(|_| FilesError::NotFound)?;
+        gate(
+            &s,
+            &session,
+            ResourceRef::Folder(pid.clone()),
+            Permission::Create,
+        )
+        .await?;
+    } else {
+        gate(
+            &s,
+            &session,
+            ResourceRef::Workspace(workspace_id.clone()),
+            Permission::Create,
+        )
+        .await?;
+    }
+
+    let project_id = resolve_project(&s, &workspace_id).await?;
+
     let f = FolderRepo::new(&s.db)
         .insert(&NewFolder {
             parent_id: body.parent_id,
             name,
             owner_id: session.user_id.clone(),
             workspace_id,
+            project_id: Some(project_id),
         })
         .await
         .map_err(|e| FilesError::Internal(e.to_string()))?;
@@ -749,11 +811,17 @@ async fn upload_file(
     let sniffed = sniff_and_check_content_type(&bytes)?;
 
     if let Some(pid) = &parent_id {
-        let parent = FolderRepo::new(&s.db)
+        FolderRepo::new(&s.db)
             .find_by_id(pid)
             .await
             .map_err(|_| FilesError::NotFound)?;
-        ensure_owner(&parent.owner_id, &session)?;
+        gate(
+            &s,
+            &session,
+            ResourceRef::Folder(pid.clone()),
+            Permission::Create,
+        )
+        .await?;
     }
 
     let size = bytes.len() as u64;
@@ -783,12 +851,24 @@ async fn upload_file(
     .await
     .map_err(|e| FilesError::Internal(format!("workspace: {e:?}")))?;
 
+    // Root uploads (no parent folder) need create on the workspace itself.
+    if parent_id.is_none() {
+        gate(
+            &s,
+            &session,
+            ResourceRef::Workspace(workspace_id.clone()),
+            Permission::Create,
+        )
+        .await?;
+    }
+
     // Pipeline §8.9 — validate the workspace's BYO storage binding (a row
     // whose secret won't decrypt is a hard failure). We keep the `storage_id`
     // pointer on the row, but the document bytes themselves are sealed into the
     // version chain below rather than written as a plaintext object.
     let (_storage, storage_id) =
         crate::workspace_storage::resolve_upload_storage(&s, &workspace_id).await?;
+    let project_id = resolve_project(&s, &workspace_id).await?;
 
     let id = ulid::Ulid::new().to_string();
 
@@ -805,6 +885,7 @@ async fn upload_file(
             etag: None,
             owner_id: session.user_id.clone(),
             workspace_id: workspace_id.clone(),
+            project_id: Some(project_id),
             storage_id,
             // Proxy multipart commits the row as ready in one shot.
             status: dochub_db::FileStatus::Ready,
@@ -881,7 +962,13 @@ async fn get_file_meta(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::View,
+    )
+    .await?;
     Ok(Json(FileDto::from(file)))
 }
 
@@ -896,7 +983,13 @@ async fn patch_file(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Edit,
+    )
+    .await?;
 
     let mut renamed = false;
     if let Some(name) = body.name {
@@ -909,11 +1002,17 @@ async fn patch_file(
     }
     if let Some(parent) = body.parent_id {
         if let Some(pid) = parent.as_deref() {
-            let folder = FolderRepo::new(&s.db)
+            FolderRepo::new(&s.db)
                 .find_by_id(pid)
                 .await
                 .map_err(|_| FilesError::NotFound)?;
-            ensure_owner(&folder.owner_id, &session)?;
+            gate(
+                &s,
+                &session,
+                ResourceRef::Folder(pid.to_string()),
+                Permission::Create,
+            )
+            .await?;
             files
                 .move_to(&id, Some(pid))
                 .await
@@ -969,7 +1068,13 @@ async fn patch_folder(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&folder.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::Folder(folder.id.clone()),
+        Permission::Edit,
+    )
+    .await?;
 
     let mut renamed_folder = false;
     if let Some(name) = body.name {
@@ -987,11 +1092,16 @@ async fn patch_folder(
                     "cannot move folder into itself".into(),
                 ));
             }
-            let new_parent = repo
-                .find_by_id(pid)
+            repo.find_by_id(pid)
                 .await
                 .map_err(|_| FilesError::NotFound)?;
-            ensure_owner(&new_parent.owner_id, &session)?;
+            gate(
+                &s,
+                &session,
+                ResourceRef::Folder(pid.to_string()),
+                Permission::Create,
+            )
+            .await?;
             repo.move_to(&id, Some(pid))
                 .await
                 .map_err(|e| FilesError::Internal(e.to_string()))?;
@@ -1044,7 +1154,13 @@ async fn trash_file(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Delete,
+    )
+    .await?;
     // Compliance guard (build spec §3): a file under an active legal hold —
     // directly, via its project, or via its workspace — cannot be tombstoned.
     if crate::compliance::is_under_hold(&s.db, &file)
@@ -1097,7 +1213,13 @@ async fn restore_file(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Delete,
+    )
+    .await?;
     files
         .restore(&id)
         .await
@@ -1136,7 +1258,13 @@ async fn purge_file(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Delete,
+    )
+    .await?;
 
     // Legal hold blocks purge from every path.
     if crate::compliance::is_under_hold(&s.db, &file)
@@ -1186,7 +1314,13 @@ async fn download_file(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Download,
+    )
+    .await?;
 
     AuditRepo::emit(
         &s.db,
@@ -1275,7 +1409,13 @@ async fn get_content(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::View,
+    )
+    .await?;
 
     // Source of truth: the encrypted version chain. A legacy file with no
     // history is backfilled to v1 from its plaintext blob on this first read.
@@ -1326,7 +1466,13 @@ async fn put_content(
         .find_by_id(&id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    ensure_owner(&file.owner_id, &session)?;
+    gate(
+        &s,
+        &session,
+        ResourceRef::File(file.id.clone()),
+        Permission::Edit,
+    )
+    .await?;
 
     // Registry write path: a save commits an immutable, hash-chained version
     // (build spec §5) — the *sole* write path for document bytes. No plaintext

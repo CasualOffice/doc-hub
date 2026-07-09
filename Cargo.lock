@@ -795,6 +795,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dochub-authz"
+version = "0.0.1"
+dependencies = [
+ "dochub-crypto",
+ "dochub-db",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "ulid",
+]
+
+[[package]]
 name = "dochub-core"
 version = "0.0.1"
 dependencies = [
@@ -856,6 +868,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "dochub-auth",
+ "dochub-authz",
  "dochub-core",
  "dochub-crypto",
  "dochub-db",
