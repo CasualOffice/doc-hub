@@ -33,6 +33,15 @@ struct ErrBody<'a> {
     error: &'a str,
 }
 
+impl From<dochub_authz::AuthzError> for WsError {
+    fn from(e: dochub_authz::AuthzError) -> Self {
+        match e {
+            dochub_authz::AuthzError::Forbidden => Self::Forbidden,
+            dochub_authz::AuthzError::Db(err) => Self::Internal(err.to_string()),
+        }
+    }
+}
+
 impl IntoResponse for WsError {
     fn into_response(self) -> Response {
         match self {
@@ -183,9 +192,15 @@ async fn rename_workspace(
     let name = sanitise_name(&body.name)?;
     let repo = WorkspaceRepo::new(&s.db);
     let w = repo.find_by_id(&id).await.map_err(|_| WsError::NotFound)?;
-    if w.owner_id != session.user_id {
-        return Err(WsError::Forbidden);
-    }
+    // Renaming a workspace is a settings op — gated by manage_settings
+    // (Admin/Owner, an ACL grant, or superadmin).
+    crate::authz::gate(
+        &s,
+        &session,
+        dochub_authz::ResourceRef::Workspace(id.clone()),
+        dochub_authz::Permission::ManageSettings,
+    )
+    .await?;
     if matches!(w.kind, WorkspaceKind::Personal) {
         return Err(WsError::Personal);
     }
@@ -316,12 +331,15 @@ async fn list_members(
     session: AuthSession,
     Path(id): Path<String>,
 ) -> Result<Json<MembersResp>, WsError> {
-    let role = WorkspaceMemberRepo::new(&s.db)
-        .role_of(&id, &session.user_id)
-        .await
-        .map_err(|e| WsError::Internal(e.to_string()))?
-        .ok_or(WsError::Forbidden)?;
-    let _ = role; // any member can list; future RBAC may restrict.
+    // Listing members needs view on the workspace (any member, an ACL grant,
+    // or superadmin).
+    crate::authz::gate(
+        &s,
+        &session,
+        dochub_authz::ResourceRef::Workspace(id.clone()),
+        dochub_authz::Permission::View,
+    )
+    .await?;
     let mems = WorkspaceMemberRepo::new(&s.db)
         .list(&id)
         .await

@@ -144,6 +144,7 @@ async fn make_file(state: &HttpState, ws: &str, owner: &str, name: &str, content
             etag: None,
             owner_id: owner.into(),
             workspace_id: ws.into(),
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,

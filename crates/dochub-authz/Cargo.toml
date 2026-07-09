@@ -1,0 +1,23 @@
+[package]
+name        = "dochub-authz"
+description = "RBAC roles, permission matrix, and per-resource ACL resolution for Doc-Hub"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+authors     = { workspace = true }
+repository  = { workspace = true }
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+dochub-db = { path = "../dochub-db" }
+
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+
+[dev-dependencies]
+tokio     = { workspace = true }
+ulid      = { workspace = true }
+dochub-crypto = { path = "../dochub-crypto" }

@@ -95,20 +95,26 @@ fn map_registry_err(e: RegistryError) -> FilesError {
     }
 }
 
-/// Look up the file and enforce the owner gate — the same check the sibling
-/// `/api/files/{id}/...` handlers apply.
-async fn owned_file(
+/// Look up the file and enforce `perm` on it via `dochub_authz` — the same
+/// central gate the sibling `/api/files/{id}/...` handlers apply. Reads use
+/// `View`, `restore` uses `Edit`.
+async fn gated_file(
     s: &HttpState,
     id: &str,
     session: &dochub_auth::AuthSession,
+    perm: dochub_authz::Permission,
 ) -> Result<dochub_db::File, FilesError> {
     let file = FileRepo::new(&s.db)
         .find_by_id(id)
         .await
         .map_err(|_| FilesError::NotFound)?;
-    if file.owner_id != session.user_id {
-        return Err(FilesError::Forbidden);
-    }
+    crate::authz::gate(
+        s,
+        session,
+        dochub_authz::ResourceRef::File(file.id.clone()),
+        perm,
+    )
+    .await?;
     Ok(file)
 }
 
@@ -119,7 +125,7 @@ async fn list_versions(
     session: dochub_auth::AuthSession,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<VersionDto>>, FilesError> {
-    owned_file(&s, &id, &session).await?;
+    gated_file(&s, &id, &session, dochub_authz::Permission::View).await?;
     let chain = FileVersionsRepo::new(&s.db)
         .list_chain(&id)
         .await
@@ -137,7 +143,7 @@ async fn version_content(
     session: dochub_auth::AuthSession,
     Path((id, seq)): Path<(String, i64)>,
 ) -> Result<Response, FilesError> {
-    let file = owned_file(&s, &id, &session).await?;
+    let file = gated_file(&s, &id, &session, dochub_authz::Permission::View).await?;
     let bytes = version_registry(&s)
         .read_version(&id, seq)
         .await
@@ -174,7 +180,7 @@ async fn restore_version(
     session: dochub_auth::AuthSession,
     Path((id, seq)): Path<(String, i64)>,
 ) -> Result<Json<VersionDto>, FilesError> {
-    let file = owned_file(&s, &id, &session).await?;
+    let file = gated_file(&s, &id, &session, dochub_authz::Permission::Edit).await?;
     let new_head = version_registry(&s)
         .restore_version(&id, seq, &session.user_id)
         .await
@@ -207,7 +213,7 @@ async fn verify(
     session: dochub_auth::AuthSession,
     Path(id): Path<String>,
 ) -> Result<Json<VerifyResp>, FilesError> {
-    owned_file(&s, &id, &session).await?;
+    gated_file(&s, &id, &session, dochub_authz::Permission::View).await?;
     let status = version_registry(&s)
         .verify_chain(&id)
         .await
@@ -234,7 +240,7 @@ async fn provenance(
     session: dochub_auth::AuthSession,
     Path(id): Path<String>,
 ) -> Result<Json<SignedProvenance>, FilesError> {
-    let file = owned_file(&s, &id, &session).await?;
+    let file = gated_file(&s, &id, &session, dochub_authz::Permission::View).await?;
     let workspace = file_workspace(&s, &file, &session).await?;
 
     let chain = FileVersionsRepo::new(&s.db)

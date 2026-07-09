@@ -56,6 +56,7 @@ async fn fixture() -> (Registry, String, String, String, Db, Storage) {
             etag: None,
             owner_id: owner.clone(),
             workspace_id: ws.clone(),
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,

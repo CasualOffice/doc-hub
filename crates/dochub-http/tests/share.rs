@@ -125,6 +125,7 @@ async fn seed_file(state: &HttpState, owner_id: &str) -> String {
             etag: Some("etag".into()),
             owner_id: owner_id.into(),
             workspace_id: ws,
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,

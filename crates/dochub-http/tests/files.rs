@@ -949,6 +949,7 @@ async fn legacy_file_is_backfilled_once_on_read() {
             etag: None,
             owner_id: admin.id.clone(),
             workspace_id: ws,
+            project_id: None,
             storage_id: None,
             status: FileStatus::Ready,
             expected_size: None,

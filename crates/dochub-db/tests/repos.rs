@@ -136,6 +136,7 @@ async fn folders_create_list_rename_move_trash_restore() {
             name: "Reports".into(),
             owner_id: owner.clone(),
             workspace_id: ws.clone(),
+            project_id: None,
         })
         .await
         .unwrap();
@@ -145,6 +146,7 @@ async fn folders_create_list_rename_move_trash_restore() {
             name: "Q2".into(),
             owner_id: owner.clone(),
             workspace_id: ws.clone(),
+            project_id: None,
         })
         .await
         .unwrap();
@@ -186,6 +188,7 @@ async fn files_insert_list_rename_overwrite_trash_restore() {
             name: "Home".into(),
             owner_id: owner.clone(),
             workspace_id: ws.clone(),
+            project_id: None,
         })
         .await
         .unwrap();
@@ -203,6 +206,7 @@ async fn files_insert_list_rename_overwrite_trash_restore() {
             etag: None,
             owner_id: owner.clone(),
             workspace_id: ws.clone(),
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,
@@ -304,6 +308,7 @@ async fn files_and_folders_are_workspace_scoped() {
             name: "Personal-only".into(),
             owner_id: owner.clone(),
             workspace_id: personal.clone(),
+            project_id: None,
         })
         .await
         .unwrap();
@@ -313,6 +318,7 @@ async fn files_and_folders_are_workspace_scoped() {
             name: "Team-only".into(),
             owner_id: owner.clone(),
             workspace_id: team.clone(),
+            project_id: None,
         })
         .await
         .unwrap();
@@ -327,6 +333,7 @@ async fn files_and_folders_are_workspace_scoped() {
             etag: None,
             owner_id: owner.clone(),
             workspace_id: personal.clone(),
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,
@@ -343,6 +350,7 @@ async fn files_and_folders_are_workspace_scoped() {
             etag: None,
             owner_id: owner.clone(),
             workspace_id: team.clone(),
+            project_id: None,
             storage_id: None,
             status: dochub_db::FileStatus::Ready,
             expected_size: None,

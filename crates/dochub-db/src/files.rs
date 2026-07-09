@@ -24,6 +24,10 @@ pub struct File {
     /// that predate the migration whose owner is also missing a Personal
     /// workspace; otherwise always set.
     pub workspace_id: Option<String>,
+    /// Project this file lives under (F1 access container). Nullable during
+    /// the transition; the 0023 backfill points legacy rows at their
+    /// workspace's default project and new rows are stamped on insert.
+    pub project_id: Option<String>,
     /// Bring-your-own storage pointer (pipeline §8.9). NULL = server
     /// default; otherwise → `workspace_storage.id`. Permanent on the row
     /// so flipping a workspace's storage later doesn't orphan files.
@@ -77,6 +81,8 @@ pub struct NewFile {
     pub etag: Option<String>,
     pub owner_id: String,
     pub workspace_id: String,
+    /// Project the file belongs to (F1). None = resolve the workspace default.
+    pub project_id: Option<String>,
     /// Optional pointer to a `workspace_storage` row. None = server default.
     pub storage_id: Option<String>,
     /// Lifecycle (pipeline §13.6). Defaults to `Ready` for proxy uploads.
@@ -96,6 +102,7 @@ impl Default for NewFile {
             etag: None,
             owner_id: String::new(),
             workspace_id: String::new(),
+            project_id: None,
             storage_id: None,
             status: FileStatus::Ready,
             expected_size: None,
@@ -124,8 +131,8 @@ impl<'a> FileRepo<'a> {
             .expected_size
             .map(|e| i64::try_from(e).unwrap_or(i64::MAX));
         sqlx::query(
-            "INSERT INTO files (id, parent_id, name, size, content_type, etag, owner_id, created_at, modified_at, workspace_id, storage_id, status, expected_size) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO files (id, parent_id, name, size, content_type, etag, owner_id, created_at, modified_at, workspace_id, project_id, storage_id, status, expected_size) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&new.id)
         .bind(&new.parent_id)
@@ -137,6 +144,7 @@ impl<'a> FileRepo<'a> {
         .bind(&now_s)
         .bind(&now_s)
         .bind(&new.workspace_id)
+        .bind(&new.project_id)
         .bind(&new.storage_id)
         .bind(new.status.as_str())
         .bind(expected_i)
@@ -152,6 +160,7 @@ impl<'a> FileRepo<'a> {
             version: 1,
             owner_id: new.owner_id.clone(),
             workspace_id: Some(new.workspace_id.clone()),
+            project_id: new.project_id.clone(),
             storage_id: new.storage_id.clone(),
             trashed_at: None,
             original_parent_id: None,
@@ -165,7 +174,7 @@ impl<'a> FileRepo<'a> {
     pub async fn find_by_id(&self, id: &str) -> Result<File, DbError> {
         let row = sqlx::query(
             "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                    workspace_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
+                    workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
              FROM files WHERE id = ?",
         )
         .bind(id)
@@ -183,7 +192,7 @@ impl<'a> FileRepo<'a> {
         let rows = match parent_id {
             Some(pid) => sqlx::query(
                 "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                        workspace_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
+                        workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
                  FROM files \
                  WHERE parent_id = ? AND owner_id = ? AND trashed_at IS NULL \
                  ORDER BY name ASC",
@@ -192,7 +201,7 @@ impl<'a> FileRepo<'a> {
             .bind(owner_id),
             None => sqlx::query(
                 "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                        workspace_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
+                        workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
                  FROM files \
                  WHERE parent_id IS NULL AND owner_id = ? AND trashed_at IS NULL \
                  ORDER BY name ASC",
@@ -215,7 +224,7 @@ impl<'a> FileRepo<'a> {
         let rows = match parent_id {
             Some(pid) => sqlx::query(
                 "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                        workspace_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
+                        workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
                  FROM files \
                  WHERE parent_id = ? AND workspace_id = ? AND trashed_at IS NULL \
                  ORDER BY name ASC",
@@ -224,7 +233,7 @@ impl<'a> FileRepo<'a> {
             .bind(workspace_id),
             None => sqlx::query(
                 "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                        workspace_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
+                        workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
                  FROM files \
                  WHERE parent_id IS NULL AND workspace_id = ? AND trashed_at IS NULL \
                  ORDER BY name ASC",
@@ -314,7 +323,7 @@ impl<'a> FileRepo<'a> {
         let pattern = format!("%{}%", query.to_lowercase());
         let rows = sqlx::query(
             "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                    workspace_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
+                    workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, modified_at, status, expected_size \
              FROM files \
              WHERE workspace_id = ? AND trashed_at IS NULL AND LOWER(name) LIKE ? \
              ORDER BY name ASC LIMIT ?",
@@ -354,7 +363,7 @@ impl<'a> FileRepo<'a> {
         // collected in parallel so the order matches the `?` placeholders.
         let mut sql = String::from(
             "SELECT id, parent_id, name, size, content_type, etag, version, owner_id, \
-                    workspace_id, storage_id, trashed_at, original_parent_id, created_at, \
+                    workspace_id, project_id, storage_id, trashed_at, original_parent_id, created_at, \
                     modified_at, status, expected_size \
              FROM files WHERE ",
         );
@@ -618,7 +627,7 @@ impl<'a> FileRepo<'a> {
     ) -> Result<Vec<File>, DbError> {
         let rows = sqlx::query(
             "SELECT f.id, f.parent_id, f.name, f.size, f.content_type, f.etag, f.version, \
-                    f.owner_id, f.workspace_id, f.storage_id, f.trashed_at, f.original_parent_id, \
+                    f.owner_id, f.workspace_id, f.project_id, f.storage_id, f.trashed_at, f.original_parent_id, \
                     f.created_at, f.modified_at, f.status, f.expected_size \
              FROM files f \
              LEFT JOIN file_versions v ON v.file_id = f.id AND v.seq = f.version \
@@ -705,6 +714,10 @@ fn row_to_file(row: &sqlx::any::AnyRow) -> Result<File, DbError> {
         owner_id: row.get("owner_id"),
         workspace_id: row
             .try_get::<Option<String>, _>("workspace_id")
+            .ok()
+            .flatten(),
+        project_id: row
+            .try_get::<Option<String>, _>("project_id")
             .ok()
             .flatten(),
         storage_id: row

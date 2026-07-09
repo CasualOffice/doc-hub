@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod acl;
 mod audit;
 mod error;
 mod file_versions;
@@ -18,6 +19,7 @@ mod legal_holds;
 mod notes;
 mod oidc;
 mod pool;
+mod projects;
 mod provenance_keys;
 mod registry;
 mod retention;
@@ -29,6 +31,7 @@ mod workspace_keys;
 mod workspace_storage;
 mod workspaces;
 
+pub use acl::{resource_kind, subject_kind, AclGrant, AclRepo, NewAclGrant};
 pub use audit::{action, AuditChainStatus, AuditEvent, AuditRepo, NewAuditEvent};
 pub use error::DbError;
 pub use file_versions::{FileVersionsRepo, NewVersion, Version};
@@ -43,6 +46,7 @@ pub use notes::{
 };
 pub use oidc::{NewOidcFlowState, OidcFlowState, OidcFlowStateRepo};
 pub use pool::{Db, DbBackend};
+pub use projects::{NewProject, Project, ProjectMemberRepo, ProjectMembership, ProjectRepo};
 pub use provenance_keys::{ProvenanceKeyError, ProvenanceKeypair, ProvenanceKeysRepo};
 pub use registry::{Registry, RegistryError};
 pub use retention::{NewRetentionPolicy, RetentionPolicy, RetentionRepo};

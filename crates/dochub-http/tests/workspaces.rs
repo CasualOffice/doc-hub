@@ -78,6 +78,10 @@ async fn fixture() -> HttpState {
 }
 
 async fn sign_in(app: &axum::Router) -> String {
+    sign_in_as(app, "admin", "hunter2hunter2").await
+}
+
+async fn sign_in_as(app: &axum::Router, username: &str, password: &str) -> String {
     let r = app
         .clone()
         .oneshot(
@@ -86,9 +90,9 @@ async fn sign_in(app: &axum::Router) -> String {
                 .uri("/api/auth/sign-in")
                 .header("host", APP)
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"hunter2hunter2"}"#,
-                ))
+                .body(Body::from(format!(
+                    r#"{{"username":"{username}","password":"{password}"}}"#
+                )))
                 .unwrap(),
         )
         .await
@@ -383,12 +387,9 @@ async fn list_members_returns_username_and_admin_flag() {
 
 #[tokio::test]
 async fn list_members_returns_403_for_non_member() {
+    // A non-admin, non-member is forbidden. (A system superadmin bypasses per
+    // foundation §3 — so the requester here is a plain user, not `admin`.)
     let state = fixture().await;
-    let admin_id = UserRepo::new(&state.db)
-        .find_by_username("admin")
-        .await
-        .unwrap()
-        .id;
     UserRepo::new(&state.db)
         .insert(&NewUser {
             username: "carol".into(),
@@ -402,16 +403,24 @@ async fn list_members_returns_403_for_non_member() {
         .await
         .unwrap()
         .id;
-    // Carol owns a workspace admin isn't a member of.
+    // Dave: a non-admin who is not a member of Carol's workspace.
+    UserRepo::new(&state.db)
+        .insert(&NewUser {
+            username: "dave".into(),
+            password_hash: hash_password("hunter2hunter2").unwrap(),
+            is_admin: false,
+        })
+        .await
+        .unwrap();
+    // Carol owns a workspace Dave isn't a member of.
     let carol_team = WorkspaceRepo::new(&state.db)
         .insert("Design", dochub_db::WorkspaceKind::Team, &carol_id)
         .await
         .unwrap()
         .id;
-    let _ = admin_id;
 
     let app = router(state);
-    let cookie = sign_in(&app).await;
+    let cookie = sign_in_as(&app, "dave", "hunter2hunter2").await;
     let r = app
         .clone()
         .oneshot(

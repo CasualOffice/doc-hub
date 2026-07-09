@@ -11,6 +11,7 @@ mod about;
 mod access_log;
 mod activity;
 mod admin;
+mod authz;
 mod collab;
 mod compliance;
 mod content_search;
