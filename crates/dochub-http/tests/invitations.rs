@@ -532,7 +532,60 @@ async fn anonymous_accept_mints_user_session_and_membership() {
 }
 
 #[tokio::test]
-async fn admin_role_invitations_are_rejected_until_mu2() {
+async fn admin_role_invitation_accepted_and_honored() {
+    // F2: invitation roles are real end to end. An `admin` invite is now
+    // accepted, stored, and grants Admin effective permissions on accept.
+    let state = fixture().await;
+    let db = state.db.clone();
+    let app = router(state);
+    let cookie = sign_in(&app, "alice").await;
+    let ws = create_team_workspace(&app, &cookie).await;
+
+    let invite = create_invite(&app, &cookie, &ws, r#"{"role":"admin"}"#).await;
+    assert_eq!(invite["role"], "admin");
+    let token = invite["token"].as_str().unwrap();
+
+    let bob_cookie = sign_in(&app, "bob").await;
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/invitations/{token}/accept"))
+                .header("host", APP)
+                .header("cookie", &bob_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+
+    // The stored membership role is the invited role, and authz resolves it to
+    // Admin — i.e. Bob can now manage members in the workspace.
+    let bob_id = dochub_db::UserRepo::new(&db)
+        .find_by_username("bob")
+        .await
+        .unwrap()
+        .id;
+    let role = dochub_db::WorkspaceMemberRepo::new(&db)
+        .role_name(&ws, &bob_id)
+        .await
+        .unwrap();
+    assert_eq!(role.as_deref(), Some("admin"));
+    assert!(
+        dochub_authz::can(
+            &db,
+            &bob_id,
+            &dochub_authz::ResourceRef::Workspace(ws.clone()),
+            dochub_authz::Permission::ManageMembers,
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn owner_role_invitations_are_rejected() {
     let state = fixture().await;
     let app = router(state);
     let cookie = sign_in(&app, "alice").await;
@@ -547,7 +600,7 @@ async fn admin_role_invitations_are_rejected_until_mu2() {
                 .header("host", APP)
                 .header("cookie", &cookie)
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"role":"admin"}"#))
+                .body(Body::from(r#"{"role":"owner"}"#))
                 .unwrap(),
         )
         .await
