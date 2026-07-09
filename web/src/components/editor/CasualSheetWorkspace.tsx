@@ -382,6 +382,10 @@ export function CasualSheetWorkspace({
         locales={SHEET_LOCALES}
         documentMode={isEditor ? "editing" : "viewing"}
         chrome={isEditor ? "full" : "none"}
+        // Native-feel (doc 39, Phase 0): Drive owns files — hide the SDK's
+        // File menu (Properties/About branding). Cmd+S already saves to Drive.
+        // (Killing Help▸"View on GitHub" needs the SDK feature:'help' gate — Phase 2.)
+        features={isEditor ? { file: false } : undefined}
         appearance={appearance}
         // P3 — real CRDT co-editing. The SDK attaches Yjs/Hocuspocus after
         // onReady and detaches on unmount; undefined ⇒ single-user grid.
