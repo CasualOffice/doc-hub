@@ -61,12 +61,11 @@ const ogUrl = ogImage.startsWith("http") ? ogImage : `${siteUrl}${ogImage}`;
             async
             src="https://www.googletagmanager.com/gtag/js?id=G-2JHHR7MKW6"
           />
-          <script is:inline>
-            {`window.dataLayer = window.dataLayer || [];
+          <script is:inline set:html={`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-2JHHR7MKW6');`}
-          </script>
+          />
         </Fragment>
       )
     }
