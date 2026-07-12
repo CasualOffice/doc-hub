@@ -164,6 +164,10 @@ pub struct SearchFilters {
     /// `None` = exclude trashed (default); `Some(true)` = only trashed;
     /// `Some(false)` = only non-trashed (explicit).
     pub in_trash: Option<bool>,
+    /// Tag facet — a file matches only if it carries EVERY listed tag id
+    /// (AND semantics). Empty = no tag constraint. Folders/notes never carry
+    /// tags, so any tag filter excludes them.
+    pub tag_ids: Vec<String>,
 }
 
 /// Pagination control for one repo call. The handler computes a single

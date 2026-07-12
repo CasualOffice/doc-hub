@@ -63,6 +63,9 @@ pub(crate) struct SearchQuery {
     pub size_max: Option<u64>,
     pub has_share_link: Option<bool>,
     pub include_trashed: Option<bool>,
+    /// CSV of tag ids — a file matches only if it carries every listed tag.
+    #[serde(rename = "tag")]
+    pub tags_csv: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -189,8 +192,10 @@ pub(crate) async fn search(
     // No query AND no filters ⇒ behaviour unchanged — empty result so
     // the SPA renders the current folder.
     let owner_ids = split_csv(q.owners_csv.as_deref());
+    let tag_ids = split_csv(q.tags_csv.as_deref());
     let any_filter_set = !types.is_empty()
         || !owner_ids.is_empty()
+        || !tag_ids.is_empty()
         || q.modified_after.is_some()
         || q.modified_before.is_some()
         || q.created_after.is_some()
@@ -229,6 +234,7 @@ pub(crate) async fn search(
         size_max: q.size_max,
         has_share_link: q.has_share_link,
         in_trash,
+        tag_ids: tag_ids.clone(),
     };
 
     // ── Sort + paging ────────────────────────────────────────────────
@@ -539,6 +545,10 @@ fn compute_filter_hash(f: &SearchFilters) -> String {
     h.update(format!("{:?}", f.has_share_link).as_bytes());
     h.update(b"\0");
     h.update(format!("{:?}", f.in_trash).as_bytes());
+    h.update(b"\0");
+    let mut tags = f.tag_ids.clone();
+    tags.sort();
+    h.update(tags.join(",").as_bytes());
 
     let digest = h.finalize();
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest[..12])
