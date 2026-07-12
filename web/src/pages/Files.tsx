@@ -51,6 +51,7 @@ import { EntryContextMenu, EntryKebab, type Entry as MenuEntry, type EntryMenuHa
 import { inferKind, type FileKind } from "../components/FileThumb.tsx";
 import { FileViewingDot } from "../components/FileViewingDot.tsx";
 import { NoResultsRecovery } from "../components/NoResultsRecovery.tsx";
+import { AskPanel } from "../components/AskPanel.tsx";
 import { SearchSnippet } from "../components/SearchSnippet.tsx";
 import { PreviewModal } from "../components/PreviewModal.tsx";
 import { RenameDialog } from "../components/RenameDialog.tsx";
@@ -1163,6 +1164,18 @@ export function Files({
       />
 
       <Stage key={current.id ?? "root"}>
+        {/* RAG answer (Phase 5) — shown above results when the query reads
+            like a question. Renders nothing otherwise. */}
+        {inSearchMode && (
+          <AskPanel
+            query={query.trim()}
+            onOpenFile={(id) => {
+              window.dispatchEvent(
+                new CustomEvent<string>("cd:open-file", { detail: id }),
+              );
+            }}
+          />
+        )}
         {state.kind === "loading" && <GridSkeleton view={view} />}
         {state.kind === "ready" && total === 0 && contentHits.length === 0 && semanticHits.length === 0 && uploading.length === 0 && (
           <div style={{ marginTop: 24 }}>
