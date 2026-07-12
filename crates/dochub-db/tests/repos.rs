@@ -2,8 +2,8 @@
 //! comes online when CI gains a Postgres service.
 
 use dochub_db::{
-    Db, DbError, FileRepo, FolderRepo, NewFile, NewFolder, NewSession, NewTag, NewUser,
-    ProvenanceKeysRepo, SessionRepo, TagRepo, UserRepo, WorkspaceDeks, WorkspaceKeysRepo,
+    Db, DbError, FileRepo, FolderRepo, JobsRepo, NewFile, NewFolder, NewJob, NewSession, NewTag,
+    NewUser, ProvenanceKeysRepo, SessionRepo, TagRepo, UserRepo, WorkspaceDeks, WorkspaceKeysRepo,
     WorkspaceKind, WorkspaceRepo,
 };
 
@@ -749,4 +749,86 @@ async fn tags_create_assign_query_unassign_delete() {
     tags.delete(&q2.id).await.unwrap();
     assert!(tags.tags_for_file(&file_id).await.unwrap().is_empty());
     assert_eq!(tags.list_for_workspace(&ws).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn jobs_enqueue_claim_complete() {
+    let db = fresh_db().await;
+    let jobs = JobsRepo::new(&db);
+
+    let j = jobs
+        .enqueue(&NewJob {
+            kind: "index_file".into(),
+            payload: r#"{"file_id":"f1"}"#.into(),
+            max_attempts: None,
+            run_after: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(j.state, "queued");
+    assert_eq!(j.attempts, 0);
+    // Claim time is "now" — after the job's enqueue-stamped run_after.
+    let now = time::OffsetDateTime::now_utc();
+
+    // Claim it: goes running, attempts bumps to 1.
+    let claimed = jobs.claim_next(now).await.unwrap().expect("a runnable job");
+    assert_eq!(claimed.id, j.id);
+    assert_eq!(claimed.state, "running");
+    assert_eq!(claimed.attempts, 1);
+
+    // Nothing else runnable while it's in flight.
+    assert!(jobs.claim_next(now).await.unwrap().is_none());
+
+    jobs.mark_done(&claimed.id).await.unwrap();
+    assert_eq!(jobs.find_by_id(&j.id).await.unwrap().unwrap().state, "done");
+    assert_eq!(jobs.count_in_state("done").await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn jobs_retry_with_backoff_then_fail() {
+    let db = fresh_db().await;
+    let jobs = JobsRepo::new(&db);
+
+    let j = jobs
+        .enqueue(&NewJob {
+            kind: "flaky".into(),
+            payload: "{}".into(),
+            max_attempts: Some(2),
+            run_after: None,
+        })
+        .await
+        .unwrap();
+    let now = time::OffsetDateTime::now_utc();
+
+    // First attempt fails → requeued with a future run_after.
+    let c1 = jobs.claim_next(now).await.unwrap().unwrap();
+    assert_eq!(c1.attempts, 1);
+    let after1 = jobs
+        .mark_failed(&c1.id, "boom", time::Duration::seconds(30))
+        .await
+        .unwrap();
+    assert_eq!(after1.state, "queued");
+
+    // Backoff not elapsed → not claimable now.
+    assert!(jobs.claim_next(now).await.unwrap().is_none());
+
+    // After the backoff window it is runnable again.
+    let later = now + time::Duration::seconds(60);
+    let c2 = jobs.claim_next(later).await.unwrap().unwrap();
+    assert_eq!(c2.attempts, 2);
+
+    // Second failure hits max_attempts → parked in failed, never runnable again.
+    let after2 = jobs
+        .mark_failed(&c2.id, "boom again", time::Duration::seconds(30))
+        .await
+        .unwrap();
+    assert_eq!(after2.state, "failed");
+    assert_eq!(after2.last_error.as_deref(), Some("boom again"));
+    assert!(jobs
+        .claim_next(now + time::Duration::hours(1))
+        .await
+        .unwrap()
+        .is_none());
+    assert_eq!(jobs.count_in_state("failed").await.unwrap(), 1);
+    assert_eq!(j.state, "queued");
 }
