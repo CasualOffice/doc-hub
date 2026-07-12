@@ -1,0 +1,20 @@
+[package]
+name        = "dochub-ai"
+description = "RAG primitives for Doc-Hub: text chunking, pluggable embeddings, and cosine retrieval"
+version     = { workspace = true }
+edition     = { workspace = true }
+license     = { workspace = true }
+authors     = { workspace = true }
+repository  = { workspace = true }
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = "0.1"
+serde       = { workspace = true }
+thiserror   = { workspace = true }
+
+[dev-dependencies]
+tokio       = { workspace = true }

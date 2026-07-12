@@ -12,6 +12,7 @@ members = [
     "crates/dochub-bin",
     "crates/dochub-crypto",
     "crates/dochub-worker",
+    "crates/dochub-ai",
 ]
 # Spike crates are intentionally OUT of the production workspace.
 # They are PoCs documented under docs/spikes/ and live under spikes/ as
