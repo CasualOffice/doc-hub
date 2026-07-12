@@ -14,6 +14,7 @@ mod file_versions;
 mod files;
 mod folders;
 mod invitations;
+mod jobs;
 mod key_rotation;
 mod legal_holds;
 mod notes;
@@ -39,6 +40,7 @@ pub use file_versions::{FileVersionsRepo, NewVersion, Version};
 pub use files::{File, FileRepo, FileStatus, NewFile};
 pub use folders::{Folder, FolderRepo, NewFolder};
 pub use invitations::{NewWorkspaceInvitation, WorkspaceInvitation, WorkspaceInvitationRepo};
+pub use jobs::{state as job_state, Job, JobsRepo, NewJob};
 pub use key_rotation::RotationReport;
 pub use legal_holds::{target_kind, LegalHold, LegalHoldsRepo, NewLegalHold};
 pub use notes::{
