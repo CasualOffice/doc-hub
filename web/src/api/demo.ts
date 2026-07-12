@@ -18,6 +18,7 @@ import type {
   FolderDetail,
   ListResp,
   Me,
+  SemanticHit,
   VersionsResp,
 } from "./client.ts";
 
@@ -686,6 +687,55 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
         kind: demoKind(file),
         snippet: demoSnippet(text, idx, q.length),
         score: count,
+        modified_at: file.modified_at,
+      });
+    }
+    hits.sort((a, b) => b.score - a.score);
+    return hits.slice(0, limit) as unknown as T;
+  }
+  // Semantic search (Phase 5, RAG) — the real backend embeds the query and
+  // ranks chunk vectors by cosine similarity. The demo has no embeddings, so
+  // we approximate "meaning" with query↔document word-set overlap (a
+  // bag-of-words proxy that surfaces related docs even without an exact
+  // substring). Good enough to demonstrate the surface.
+  if (p === "/api/search/semantic" && method === "GET") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    const q = (url.searchParams.get("q") ?? "").trim();
+    const limit = Math.max(
+      1,
+      Math.min(25, Number.parseInt(url.searchParams.get("limit") ?? "10", 10) || 10),
+    );
+    if (!q) return [] as unknown as T;
+    const terms = new Set(
+      q
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 2),
+    );
+    if (terms.size === 0) return [] as unknown as T;
+    const corpus = demoDocText();
+    const hits: SemanticHit[] = [];
+    for (const file of state.files) {
+      const raw = corpus[file.id];
+      if (!raw) continue;
+      const text = raw.replace(/\s+/g, " ").trim();
+      const words = text.toLowerCase().split(/[^a-z0-9]+/);
+      const wordSet = new Set(words);
+      let overlap = 0;
+      for (const t of terms) if (wordSet.has(t)) overlap += 1;
+      if (overlap === 0) continue;
+      // Normalize so score lands in (0, 1], like a cosine similarity.
+      const score = overlap / terms.size;
+      // Snippet: a window around the first matching term.
+      const firstTerm = [...terms].find((t) => wordSet.has(t)) ?? "";
+      const idx = Math.max(0, text.toLowerCase().indexOf(firstTerm));
+      hits.push({
+        file_id: file.id,
+        title: file.name,
+        kind: demoKind(file),
+        snippet: demoSnippet(text, idx, firstTerm.length, 90),
+        chunk_index: 0,
+        score,
         modified_at: file.modified_at,
       });
     }
