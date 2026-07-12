@@ -365,13 +365,14 @@ async fn workspace_isolation() {
 /// carries `paragraphs` as `<w:t>` runs — enough for `dochub_core::extract` to
 /// pull the body text.
 fn docx_bytes(paragraphs: &[&str]) -> Vec<u8> {
+    use std::fmt::Write as _;
     use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
 
-    let body: String = paragraphs
-        .iter()
-        .map(|p| format!("<w:p><w:r><w:t>{p}</w:t></w:r></w:p>"))
-        .collect();
+    let mut body = String::new();
+    for p in paragraphs {
+        write!(body, "<w:p><w:r><w:t>{p}</w:t></w:r></w:p>").unwrap();
+    }
     let doc = format!(
         r#"<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>"#
     );
