@@ -289,3 +289,49 @@ async fn create_tag_forbidden_for_non_member() {
     .await;
     assert_eq!(st, StatusCode::FORBIDDEN, "non-member cannot create tags");
 }
+
+#[tokio::test]
+async fn search_filters_by_tag() {
+    let state = fixture().await;
+    let db = state.db.clone();
+    let app = router(state);
+
+    let owner = mk_user(&db, "owner").await;
+    // Two files in the same personal workspace; only one gets the tag.
+    let (ws, tagged) = seed_file(&db, &owner, "Tagged.pdf").await;
+    let (_ws_same, _untagged) = seed_file(&db, &owner, "Untagged.pdf").await;
+    let cookie = sign_in(&app, "owner").await;
+
+    let (_, tag) = send(
+        &app,
+        "POST",
+        &format!("/api/workspaces/{ws}/tags"),
+        &cookie,
+        r#"{"name":"legal"}"#,
+    )
+    .await;
+    let tag_id = tag["id"].as_str().unwrap().to_string();
+
+    send(
+        &app,
+        "PUT",
+        &format!("/api/files/{tagged}/tags/{tag_id}"),
+        &cookie,
+        "",
+    )
+    .await;
+
+    // The tag facet narrows results to just the tagged file.
+    let (st, body) = send(
+        &app,
+        "GET",
+        &format!("/api/search?tag={tag_id}"),
+        &cookie,
+        "",
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let files = body["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1, "only the tagged file matches");
+    assert_eq!(files[0]["id"], tagged);
+}

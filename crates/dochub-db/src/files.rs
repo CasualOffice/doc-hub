@@ -477,6 +477,16 @@ impl<'a> FileRepo<'a> {
             and(&mut sql, frag);
         }
 
+        // Tag facet — AND semantics: the file must carry every selected tag.
+        for tag_id in &filters.tag_ids {
+            and(
+                &mut sql,
+                "EXISTS (SELECT 1 FROM file_tags \
+                 WHERE file_tags.file_id = files.id AND file_tags.tag_id = ?)",
+            );
+            binds.push(BindValue::Str(tag_id.clone()));
+        }
+
         // Cursor: skip past the previously-seen page.
         // Predicate is `(sort_col, id) <after>` where the comparator is
         // > or < depending on sort direction. Tie-broken by id ASC so
