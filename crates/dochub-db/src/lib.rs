@@ -26,6 +26,7 @@ mod retention;
 mod search;
 mod sessions;
 mod share_links;
+mod tags;
 mod users;
 mod workspace_keys;
 mod workspace_storage;
@@ -53,6 +54,7 @@ pub use retention::{NewRetentionPolicy, RetentionPolicy, RetentionRepo};
 pub use search::{SearchFilters, SearchPaging, SortBy, SortDir, TypeBucket};
 pub use sessions::{NewSession, Session, SessionRepo};
 pub use share_links::{NewShareLink, ShareLink, ShareLinkRepo};
+pub use tags::{NewTag, Tag, TagRepo};
 pub use users::{NewUser, User, UserRepo};
 pub use workspace_keys::{DekError, WorkspaceDeks, WorkspaceKeysRepo};
 pub use workspace_storage::{

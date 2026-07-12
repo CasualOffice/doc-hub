@@ -2,8 +2,9 @@
 //! comes online when CI gains a Postgres service.
 
 use dochub_db::{
-    Db, DbError, FileRepo, FolderRepo, NewFile, NewFolder, NewSession, NewUser, ProvenanceKeysRepo,
-    SessionRepo, UserRepo, WorkspaceDeks, WorkspaceKeysRepo, WorkspaceKind, WorkspaceRepo,
+    Db, DbError, FileRepo, FolderRepo, NewFile, NewFolder, NewSession, NewTag, NewUser,
+    ProvenanceKeysRepo, SessionRepo, TagRepo, UserRepo, WorkspaceDeks, WorkspaceKeysRepo,
+    WorkspaceKind, WorkspaceRepo,
 };
 
 async fn fresh_db() -> Db {
@@ -648,4 +649,104 @@ async fn rewrap_all_reports_unwrappable_as_failed() {
         "failed rotation leaves the old row in place"
     );
     assert!(kek_a.unwrap(&row).is_ok());
+}
+
+#[tokio::test]
+async fn tags_create_assign_query_unassign_delete() {
+    let db = fresh_db().await;
+    let owner = seed_admin(&db).await;
+    let ws = personal_ws(&db, &owner).await;
+    let folders = FolderRepo::new(&db);
+    let files = FileRepo::new(&db);
+    let tags = TagRepo::new(&db);
+
+    let root = folders
+        .insert(&NewFolder {
+            parent_id: None,
+            name: "Home".into(),
+            owner_id: owner.clone(),
+            workspace_id: ws.clone(),
+            project_id: None,
+        })
+        .await
+        .unwrap();
+    let file_id = ulid::Ulid::new().to_string();
+    files
+        .insert(&NewFile {
+            id: file_id.clone(),
+            parent_id: Some(root.id.clone()),
+            name: "Contract.pdf".into(),
+            size: 1,
+            content_type: Some("application/pdf".into()),
+            etag: None,
+            owner_id: owner.clone(),
+            workspace_id: ws.clone(),
+            project_id: None,
+            storage_id: None,
+            status: dochub_db::FileStatus::Ready,
+            expected_size: None,
+        })
+        .await
+        .unwrap();
+
+    // get_or_create is idempotent by (workspace, name) — same name → same row.
+    let legal = tags
+        .get_or_create(&NewTag {
+            workspace_id: ws.clone(),
+            name: "legal".into(),
+            color: Some("#8B5CF6".into()),
+            created_by: owner.clone(),
+        })
+        .await
+        .unwrap();
+    let legal_again = tags
+        .get_or_create(&NewTag {
+            workspace_id: ws.clone(),
+            name: "legal".into(),
+            color: None,
+            created_by: owner.clone(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(legal.id, legal_again.id, "same name returns the same tag");
+    assert_eq!(
+        legal_again.color.as_deref(),
+        Some("#8B5CF6"),
+        "get_or_create keeps the original color"
+    );
+
+    let q2 = tags
+        .get_or_create(&NewTag {
+            workspace_id: ws.clone(),
+            name: "q2".into(),
+            color: None,
+            created_by: owner.clone(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(tags.list_for_workspace(&ws).await.unwrap().len(), 2);
+
+    // assign is idempotent.
+    tags.assign(&file_id, &legal.id, &owner).await.unwrap();
+    tags.assign(&file_id, &legal.id, &owner).await.unwrap();
+    tags.assign(&file_id, &q2.id, &owner).await.unwrap();
+
+    let for_file = tags.tags_for_file(&file_id).await.unwrap();
+    assert_eq!(for_file.len(), 2, "two distinct tags on the file");
+
+    // search-by-tag read side.
+    assert_eq!(
+        tags.file_ids_for_tag(&legal.id).await.unwrap(),
+        vec![file_id.clone()]
+    );
+
+    tags.unassign(&file_id, &legal.id).await.unwrap();
+    let after = tags.tags_for_file(&file_id).await.unwrap();
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].id, q2.id);
+
+    // delete detaches the tag from the file and removes it from the workspace.
+    tags.delete(&q2.id).await.unwrap();
+    assert!(tags.tags_for_file(&file_id).await.unwrap().is_empty());
+    assert_eq!(tags.list_for_workspace(&ws).await.unwrap().len(), 1);
 }
