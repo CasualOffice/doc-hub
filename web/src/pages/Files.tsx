@@ -29,7 +29,9 @@ import {
   hasActiveFilters,
   searchAdvanced,
   searchContent,
+  searchSemantic,
   type ContentHit,
+  type SemanticHit,
   type FileDto,
   type FolderDto,
   type NoteSearchHit,
@@ -259,6 +261,10 @@ export function Files({
   // dedicated "In documents" section beneath the name/metadata grid. Fetched
   // in parallel with the metadata search and de-duped against its files.
   const [contentHits, setContentHits] = useState<ContentHit[]>([]);
+  // Phase 5 (RAG) — semantic matches (passages related by MEANING), shown in a
+  // "Related by meaning" section beneath the content matches. Fetched in
+  // parallel and de-duped against both the name matches and the content hits.
+  const [semanticHits, setSemanticHits] = useState<SemanticHit[]>([]);
 
   // SR6 — keep the URL in sync with the current search state. Writes
   // via `history.replaceState` so back/forward isn't polluted with a
@@ -458,6 +464,7 @@ export function Files({
         setSearched(false);
         setSearchMeta(null);
         setContentHits([]);
+        setSemanticHits([]);
         void refresh();
       }
       return;
@@ -471,6 +478,11 @@ export function Files({
       const contentP = q
         ? searchContent(q, { limit: 20, signal: controller.signal }).catch(() => [])
         : Promise.resolve<ContentHit[]>([]);
+      // Semantic (meaning-based) retrieval runs alongside content search;
+      // like it, it never blocks or fails the primary results.
+      const semanticP = q
+        ? searchSemantic(q, { limit: 10, signal: controller.signal }).catch(() => [])
+        : Promise.resolve<SemanticHit[]>([]);
       try {
         const filters: SearchFilters = { ...searchFilters, q };
         const data: SearchResp = await searchAdvanced(
@@ -484,12 +496,19 @@ export function Files({
           files: data.files,
           notes: data.notes,
         });
-        // De-dupe content hits against the name/metadata file matches so a
-        // document that matched by name isn't repeated in "In documents".
+        // De-dupe layered results so a file appears in at most one section:
+        // name/metadata grid → "In documents" (content) → "Related by meaning"
+        // (semantic). Each section excludes files already shown above it.
         const nameIds = new Set(data.files.map((f) => f.id));
-        void contentP.then((hits) => {
+        void Promise.all([contentP, semanticP]).then(([cHits, sHits]) => {
           if (controller.signal.aborted) return;
-          setContentHits(hits.filter((h) => !nameIds.has(h.file_id)));
+          const contentFiltered = cHits.filter((h) => !nameIds.has(h.file_id));
+          setContentHits(contentFiltered);
+          const shownIds = new Set([
+            ...nameIds,
+            ...contentFiltered.map((h) => h.file_id),
+          ]);
+          setSemanticHits(sHits.filter((h) => !shownIds.has(h.file_id)));
         });
         setSearched(true);
         setSearchMeta({
@@ -1145,7 +1164,7 @@ export function Files({
 
       <Stage key={current.id ?? "root"}>
         {state.kind === "loading" && <GridSkeleton view={view} />}
-        {state.kind === "ready" && total === 0 && contentHits.length === 0 && uploading.length === 0 && (
+        {state.kind === "ready" && total === 0 && contentHits.length === 0 && semanticHits.length === 0 && uploading.length === 0 && (
           <div style={{ marginTop: 24 }}>
             {/* SR12 — when the search came back empty AND there's
                 at least one filter to relax, surface the recovery
@@ -1325,6 +1344,21 @@ export function Files({
             }}
           />
         )}
+        {/* Semantic matches — passages related by MEANING (Phase 5, RAG).
+            Shown last: name matches lead, then exact-text, then meaning. */}
+        {state.kind === "ready" && inSearchMode && semanticHits.length > 0 && (
+          <ContentResultsSection
+            hits={semanticHits}
+            query={query.trim()}
+            label="Related by meaning"
+            testId="semantic-results"
+            onOpen={(id) => {
+              window.dispatchEvent(
+                new CustomEvent<string>("cd:open-file", { detail: id }),
+              );
+            }}
+          />
+        )}
         {state.kind === "error" && (
           <div style={{ marginTop: 40 }}>
             <EmptyState title="Couldn't load files." subtitle={state.message} />
@@ -1481,15 +1515,20 @@ function ContentResultsSection({
   hits,
   query,
   onOpen,
+  label = "In documents",
+  testId = "content-results",
 }: {
-  hits: ContentHit[];
+  /** Minimal shape shared by ContentHit + SemanticHit. */
+  hits: Array<{ file_id: string; title: string; snippet: string }>;
   query: string;
   onOpen: (fileId: string) => void;
+  label?: string;
+  testId?: string;
 }) {
   return (
     <section
-      aria-label="Content matches"
-      data-testid="content-results"
+      aria-label={label}
+      data-testid={testId}
       style={{ marginTop: 18, marginBottom: 18 }}
     >
       <h2
@@ -1502,7 +1541,7 @@ function ContentResultsSection({
           fontWeight: 600,
         }}
       >
-        In documents
+        {label}
       </h2>
       <ul
         style={{

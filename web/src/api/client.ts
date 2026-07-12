@@ -1030,6 +1030,41 @@ export async function searchContent(
   });
 }
 
+// ─── Semantic search (Phase 5, RAG) ───────────────────────────────────
+// Meaning-based retrieval over document chunk embeddings, distinct from
+// `/api/search/content` (lexical). The query is embedded and ranked against
+// the workspace's stored chunk vectors by cosine similarity; each hit carries
+// the matched chunk text as its `snippet`. Complements content search: it can
+// surface a passage that never contains the query's exact words.
+
+export interface SemanticHit {
+  file_id: string;
+  title: string;
+  /** Coarse content-type bucket, e.g. "markdown" | "document" | "pdf". */
+  kind: string;
+  /** The matched chunk's text (RAG context / snippet). No `<mark>` spans. */
+  snippet: string;
+  /** 0-based chunk position within the file. */
+  chunk_index: number;
+  /** Cosine similarity (higher = closer); used only for ordering. */
+  score: number;
+  modified_at: string;
+}
+
+/** `GET /api/search/semantic?q=&limit=` — meaning-based retrieval over
+ *  document embeddings. Cancelable via `signal`; debounce at the call site.
+ *  Returns hits ranked by similarity (closest first), one per file. */
+export async function searchSemantic(
+  query: string,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<SemanticHit[]> {
+  const params = new URLSearchParams({ q: query });
+  params.set("limit", String(opts.limit ?? 10));
+  return request<SemanticHit[]>(`/api/search/semantic?${params.toString()}`, {
+    signal: opts.signal,
+  });
+}
+
 // ─── Global search ────────────────────────────────────────────────────
 
 /** Lightweight shape used by the Cmd-K palette + back-compat callers. */
