@@ -13,9 +13,9 @@
 //! degraded answer.
 
 use axum::{extract::State, http::StatusCode, Json};
-use dochub_ai::{Agent, AnswerContext, Retriever};
+use dochub_ai::{Agent, AnswerContext, DocumentReader, Retriever};
 use dochub_auth::AuthSession;
-use dochub_db::FileRepo;
+use dochub_db::{EmbeddingRepo, FileRepo};
 use serde::{Deserialize, Serialize};
 
 use crate::ai::AiHttpError;
@@ -106,6 +106,62 @@ impl Retriever for ChunkRetriever {
     }
 }
 
+/// A [`DocumentReader`] that reconstructs a document's text from its stored
+/// chunks — re-checking the caller's permission on the file first, so the agent
+/// can never read a document its user can't view. Shared by the endpoint and the
+/// MCP `research` tool.
+pub(crate) struct ChunkDocumentReader {
+    state: HttpState,
+    user_id: String,
+    workspace: String,
+}
+
+impl ChunkDocumentReader {
+    pub(crate) fn new(state: HttpState, user_id: String, workspace: String) -> Self {
+        Self {
+            state,
+            user_id,
+            workspace,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DocumentReader for ChunkDocumentReader {
+    async fn read(&self, source_id: &str) -> Result<Option<String>, dochub_ai::AiError> {
+        // Re-check permission (workspace + trash + ACL), mirroring retrieve_chunks
+        // — defense in depth even though pooled ids already passed at search time.
+        let Ok(file) = FileRepo::new(&self.state.db).find_by_id(source_id).await else {
+            return Ok(None);
+        };
+        let scope = dochub_authz::readable_scope(&self.state.db, &self.user_id)
+            .await
+            .map_err(|e| dochub_ai::AiError::Provider(format!("scope: {e:?}")))?;
+        if file.workspace_id.as_deref() != Some(self.workspace.as_str())
+            || file.trashed_at.is_some()
+            || !scope.can_view_file(&file)
+        {
+            return Ok(None);
+        }
+
+        let chunks = EmbeddingRepo::new(&self.state.db)
+            .list_for_file(source_id)
+            .await
+            .map_err(|e| dochub_ai::AiError::Provider(format!("read: {e:?}")))?;
+        if chunks.is_empty() {
+            return Ok(None);
+        }
+        // Chunks are in document order; join their text to reconstruct the body
+        // (minor overlap at boundaries is harmless as reading context).
+        let text = chunks
+            .iter()
+            .map(|c| c.chunk_text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Ok(Some(text))
+    }
+}
+
 /// `POST /api/agent/ask` — session-authed, workspace-scoped agentic research.
 pub(crate) async fn agent_ask(
     State(s): State<HttpState>,
@@ -134,10 +190,12 @@ pub(crate) async fn agent_ask(
     let retriever = ChunkRetriever {
         state: s.clone(),
         user_id: session.user_id.clone(),
-        workspace,
+        workspace: workspace.clone(),
     };
+    let reader = ChunkDocumentReader::new(s.clone(), session.user_id.clone(), workspace);
 
     let outcome = Agent::new(chat.as_ref(), &retriever)
+        .with_reader(&reader)
         .run(&query)
         .await
         .map_err(|e| {

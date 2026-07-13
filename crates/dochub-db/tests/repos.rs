@@ -1067,3 +1067,36 @@ async fn api_token_expiry_and_revocation_deactivate() {
     // List shows all three (including revoked/expired), newest first.
     assert_eq!(repo.list_for_user(&user).await.unwrap().len(), 3);
 }
+
+#[tokio::test]
+async fn embeddings_list_for_file_returns_chunks_in_order() {
+    let db = fresh_db().await;
+    let repo = EmbeddingRepo::new(&db);
+    let chunks = vec![
+        NewEmbedding {
+            chunk_index: 0,
+            vector: vec![0.1, 0.2],
+            chunk_text: "first".into(),
+            char_start: 0,
+            char_end: 5,
+        },
+        NewEmbedding {
+            chunk_index: 1,
+            vector: vec![0.3, 0.4],
+            chunk_text: "second".into(),
+            char_start: 5,
+            char_end: 11,
+        },
+    ];
+    repo.replace_for_file("doc-x", "ws-x", "h", 2, &chunks)
+        .await
+        .unwrap();
+
+    let got = repo.list_for_file("doc-x").await.unwrap();
+    assert_eq!(got.len(), 2);
+    assert_eq!(got[0].chunk_index, 0);
+    assert_eq!(got[0].chunk_text, "first");
+    assert_eq!(got[1].chunk_text, "second");
+    // A file with no chunks is empty, not an error.
+    assert!(repo.list_for_file("nope").await.unwrap().is_empty());
+}
