@@ -96,6 +96,16 @@ One `<Editor>` component hosts each format via its sibling SDK. Team documents c
 - **MCP:** `POST /api/mcp` (JSON-RPC 2.0) exposes `semantic_search` / `ask` / `research` as tools, authed by session **or** a bearer PAT. Read-only; every tool call is permission-filtered and rate-limited.
 - **Provider:** pluggable via `DOCHUB_AI_PROVIDER` — Claude (Anthropic Messages API), ChatGPT, or a local OpenAI-compatible server for air-gapped installs. AI never mutates documents or history.
 
+## API error envelope
+
+JSON API endpoints return errors in one stable shape, so a client always gets a parseable body instead of an empty one:
+
+```json
+{ "error": { "code": "not_found", "message": "no such token", "retry_after_seconds": 5 } }
+```
+
+`code` is a stable machine-readable slug (branch on it); `message` is human detail (don't parse); `retry_after_seconds` appears on `429` only, mirroring the `Retry-After` header. `500`s carry a generic message — the real cause is logged, never leaked. Implemented by `dochub_http::error::ApiError`; adoption is gradual via `From<StatusCode>`. MCP (`/api/mcp`) keeps its JSON-RPC 2.0 error object, as the protocol dictates.
+
 ## Data model (portable)
 
 TEXT ULID ids, ISO-8601 UTC timestamps, INTEGER 0/1 bools; no JSONB/enum/native-UUID. Core tables: `users`, `sessions`, `workspaces` (+`workspace_members`, `workspace_invitations`, `workspace_storage`), `folders`, `files` (+`file_versions`), `audit_log`, `share_links`, `retention_policies`, `legal_holds`, `oidc_*`. See `crates/dochub-db/migrations/`.

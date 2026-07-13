@@ -21,7 +21,7 @@ use dochub_db::{action, ApiTokenRepo, AuditRepo, NewApiToken, NewAuditEvent};
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 
-use crate::HttpState;
+use crate::{error::ApiError, HttpState};
 
 /// Upper bound on a token's requested lifetime (~10 years) and label length.
 const MAX_EXPIRES_DAYS: u32 = 3650;
@@ -77,13 +77,13 @@ pub(crate) async fn create_token(
     State(s): State<HttpState>,
     session: AuthSession,
     Json(body): Json<CreateTokenBody>,
-) -> Result<(StatusCode, Json<CreatedToken>), StatusCode> {
+) -> Result<(StatusCode, Json<CreatedToken>), ApiError> {
     let name = body.name.trim();
     if name.is_empty() || name.chars().count() > MAX_NAME_LEN {
-        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        return Err(ApiError::unprocessable("name must be 1-100 characters"));
     }
     let expires_at = match body.expires_in_days {
-        Some(0) => return Err(StatusCode::UNPROCESSABLE_ENTITY),
+        Some(0) => return Err(ApiError::unprocessable("expires_in_days must be positive")),
         Some(days) => {
             let days = days.min(MAX_EXPIRES_DAYS);
             Some(time::OffsetDateTime::now_utc() + time::Duration::days(i64::from(days)))
@@ -102,7 +102,7 @@ pub(crate) async fn create_token(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "create token failed");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::internal()
         })?;
 
     // Credential issued — record it on the append-only audit chain.
@@ -136,14 +136,14 @@ pub(crate) async fn create_token(
 pub(crate) async fn list_tokens(
     State(s): State<HttpState>,
     session: AuthSession,
-) -> Result<Json<Vec<TokenInfo>>, StatusCode> {
+) -> Result<Json<Vec<TokenInfo>>, ApiError> {
     let now = time::OffsetDateTime::now_utc();
     let tokens = ApiTokenRepo::new(&s.db)
         .list_for_user(&session.user_id)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "list tokens failed");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::internal()
         })?;
     Ok(Json(
         tokens
@@ -167,13 +167,13 @@ pub(crate) async fn revoke_token(
     State(s): State<HttpState>,
     session: AuthSession,
     Path(token_id): Path<String>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, ApiError> {
     let revoked = ApiTokenRepo::new(&s.db)
         .revoke(&token_id, &session.user_id)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "revoke token failed");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::internal()
         })?;
     if revoked {
         // Credential revoked — record it on the append-only audit chain.
@@ -192,6 +192,6 @@ pub(crate) async fn revoke_token(
         );
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(StatusCode::NOT_FOUND)
+        Err(ApiError::not_found("no such token"))
     }
 }

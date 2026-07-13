@@ -301,7 +301,9 @@ async fn ai_endpoint_throttles_a_burst_with_retry_after() {
     let body = r.into_body().collect().await.unwrap().to_bytes();
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert!(retry_after.is_some(), "429 should carry Retry-After");
-    assert!(json["retry_after_seconds"].as_u64().unwrap() >= 1);
+    // Consistent error envelope: { "error": { "code", "message", "retry_after_seconds" } }.
+    assert_eq!(json["error"]["code"], "rate_limited");
+    assert!(json["error"]["retry_after_seconds"].as_u64().unwrap() >= 1);
 }
 
 #[tokio::test]

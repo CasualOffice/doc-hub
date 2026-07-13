@@ -16,13 +16,8 @@
 
 use std::sync::{Arc, OnceLock};
 
-use axum::{
-    http::{header::RETRY_AFTER, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
-    Json,
-};
+use axum::response::{IntoResponse, Response};
 use dochub_ai::{Answerer, ChatModel, ExtractiveAnswerer, RemoteAnswerer};
-use serde_json::json;
 
 use crate::rate_limit::{RateLimitConfig, RateLimiter};
 
@@ -89,39 +84,10 @@ pub(crate) fn ai_limiter() -> &'static RateLimiter {
     })
 }
 
-/// Error type for the AI HTTP endpoints. `Status` carries an ordinary code
-/// (via `?` from `StatusCode`), `RateLimited` renders a `429` + `Retry-After`.
-#[derive(Debug)]
-pub(crate) enum AiHttpError {
-    Status(StatusCode),
-    RateLimited(u64),
-}
-
-impl From<StatusCode> for AiHttpError {
-    fn from(s: StatusCode) -> Self {
-        Self::Status(s)
-    }
-}
-
-impl IntoResponse for AiHttpError {
-    fn into_response(self) -> Response {
-        match self {
-            Self::Status(s) => s.into_response(),
-            Self::RateLimited(secs) => rate_limited_response(secs),
-        }
-    }
-}
-
 /// A `429 Too Many Requests` with a `Retry-After` header + JSON body — shared by
-/// the AI HTTP endpoints and the MCP tool-call path.
+/// the AI HTTP endpoints and the MCP tool-call path. Renders the standard
+/// [`crate::error::ApiError`] envelope so throttling looks like every other
+/// API error to a client.
 pub(crate) fn rate_limited_response(retry_after_secs: u64) -> Response {
-    let mut resp = (
-        StatusCode::TOO_MANY_REQUESTS,
-        Json(json!({ "error": "rate limited", "retry_after_seconds": retry_after_secs })),
-    )
-        .into_response();
-    if let Ok(v) = HeaderValue::from_str(&retry_after_secs.to_string()) {
-        resp.headers_mut().insert(RETRY_AFTER, v);
-    }
-    resp
+    crate::error::ApiError::rate_limited(retry_after_secs).into_response()
 }

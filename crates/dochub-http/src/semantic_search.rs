@@ -26,6 +26,7 @@ use std::collections::HashSet;
 use time::format_description::well_known::Rfc3339;
 
 use crate::content_search::{kind_of, ws_status};
+use crate::error::ApiError;
 use crate::workspaces::resolve_active_workspace;
 use crate::HttpState;
 
@@ -63,7 +64,7 @@ pub(crate) async fn semantic_search(
     State(s): State<HttpState>,
     session: AuthSession,
     Query(q): Query<SemanticQuery>,
-) -> Result<Json<Vec<SemanticHit>>, StatusCode> {
+) -> Result<Json<Vec<SemanticHit>>, ApiError> {
     let query = q.q.as_deref().map_or("", str::trim).to_string();
     let limit = q.limit.unwrap_or(10).clamp(1, 25);
 

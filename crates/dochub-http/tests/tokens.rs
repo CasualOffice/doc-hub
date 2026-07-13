@@ -332,6 +332,9 @@ async fn token_lifecycle_is_audited() {
 async fn blank_name_is_rejected() {
     let app = router(fixture().await);
     let cookie = sign_in(&app).await;
-    let (st, _) = create_token(&app, &cookie, json!({"name":"   "})).await;
+    let (st, body) = create_token(&app, &cookie, json!({"name":"   "})).await;
     assert_eq!(st, StatusCode::UNPROCESSABLE_ENTITY);
+    // Consistent error envelope — a client gets a parseable body, not empty.
+    assert_eq!(body["error"]["code"], "unprocessable");
+    assert!(body["error"]["message"].is_string());
 }
