@@ -18,6 +18,7 @@ use dochub_auth::AuthSession;
 use dochub_db::FileRepo;
 use serde::{Deserialize, Serialize};
 
+use crate::ai::AiHttpError;
 use crate::content_search::{kind_of, ws_status};
 use crate::semantic_search::retrieve_chunks;
 use crate::workspaces::resolve_active_workspace;
@@ -110,7 +111,7 @@ pub(crate) async fn agent_ask(
     State(s): State<HttpState>,
     session: AuthSession,
     Json(body): Json<AgentAskBody>,
-) -> Result<Json<AgentAskResponse>, StatusCode> {
+) -> Result<Json<AgentAskResponse>, AiHttpError> {
     let query = body.q.trim().to_string();
 
     let workspace = resolve_active_workspace(&s.db, &session.user_id, body.workspace.as_deref())
@@ -124,6 +125,11 @@ pub(crate) async fn agent_ask(
     if query.is_empty() {
         return Ok(Json(AgentAskResponse::empty(true)));
     }
+
+    // Throttle before the multi-step agent loop (the heaviest AI surface).
+    crate::ai::ai_limiter()
+        .check(&session.user_id)
+        .map_err(AiHttpError::RateLimited)?;
 
     let retriever = ChunkRetriever {
         state: s.clone(),

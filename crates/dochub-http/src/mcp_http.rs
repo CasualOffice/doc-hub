@@ -50,6 +50,15 @@ pub(crate) async fn mcp_endpoint(
     identity: AuthIdentity,
     Json(req): Json<JsonRpcRequest>,
 ) -> Response {
+    // Throttle only the tool-call path — it fans out to retrieval / an LLM.
+    // `initialize`, `tools/list`, and notifications stay unthrottled so the
+    // handshake never trips the limiter.
+    if req.method == "tools/call" {
+        if let Err(secs) = crate::ai::ai_limiter().check(&identity.user_id) {
+            return crate::ai::rate_limited_response(secs);
+        }
+    }
+
     let server = McpServer::new(ServerInfo {
         name: "casual-dochub".into(),
         version: env!("CARGO_PKG_VERSION").into(),

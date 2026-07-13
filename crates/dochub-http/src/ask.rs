@@ -15,6 +15,7 @@ use dochub_ai::AnswerContext;
 use dochub_auth::AuthSession;
 use serde::{Deserialize, Serialize};
 
+use crate::ai::AiHttpError;
 use crate::content_search::{kind_of, ws_status};
 use crate::semantic_search::retrieve_chunks;
 use crate::workspaces::resolve_active_workspace;
@@ -59,7 +60,7 @@ pub(crate) async fn ask(
     State(s): State<HttpState>,
     session: AuthSession,
     Json(body): Json<AskBody>,
-) -> Result<Json<AskResponse>, StatusCode> {
+) -> Result<Json<AskResponse>, AiHttpError> {
     let query = body.q.trim().to_string();
 
     let workspace = resolve_active_workspace(&s.db, &session.user_id, body.workspace.as_deref())
@@ -75,6 +76,11 @@ pub(crate) async fn ask(
     if query.is_empty() {
         return empty();
     }
+
+    // Throttle before the retrieval + LLM work (shared AI budget per user).
+    crate::ai::ai_limiter()
+        .check(&session.user_id)
+        .map_err(AiHttpError::RateLimited)?;
 
     // Retrieve the most relevant permission-filtered chunks as context.
     let chunks = retrieve_chunks(&s, &session.user_id, &workspace, &query, MAX_CONTEXTS).await?;
