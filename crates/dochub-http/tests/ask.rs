@@ -263,6 +263,48 @@ async fn answers_from_document_with_citation() {
 }
 
 #[tokio::test]
+async fn ai_endpoint_throttles_a_burst_with_retry_after() {
+    let state = fixture().await;
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+
+    // Hammer past the shared per-user AI budget (capacity 20). A fresh fixture
+    // mints a unique user id, so this bucket is isolated from other tests.
+    let mut throttled = None;
+    for _ in 0..25 {
+        let r = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/search/ask")
+                    .header("host", APP)
+                    .header("cookie", &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"q":"what is the plan?"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        if r.status() == StatusCode::TOO_MANY_REQUESTS {
+            throttled = Some(r);
+            break;
+        }
+    }
+    let r = throttled.expect("a burst should eventually be throttled");
+    // The 429 carries a Retry-After header and a retry hint in the body.
+    let retry_after = r
+        .headers()
+        .get(axum::http::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let body = r.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(retry_after.is_some(), "429 should carry Retry-After");
+    assert!(json["retry_after_seconds"].as_u64().unwrap() >= 1);
+}
+
+#[tokio::test]
 async fn empty_question_returns_empty_answer() {
     let state = fixture().await;
     let app = router(state);

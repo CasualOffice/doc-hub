@@ -16,7 +16,15 @@
 
 use std::sync::{Arc, OnceLock};
 
+use axum::{
+    http::{header::RETRY_AFTER, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use dochub_ai::{Answerer, ChatModel, ExtractiveAnswerer, RemoteAnswerer};
+use serde_json::json;
+
+use crate::rate_limit::{RateLimitConfig, RateLimiter};
 
 /// The hosted LLM client, resolved once from the environment. `None` on an
 /// offline install (no `DOCHUB_AI_PROVIDER`). Shared by both capabilities below
@@ -64,4 +72,56 @@ pub(crate) fn chat_model() -> Option<Arc<dyn ChatModel>> {
         let m: Arc<dyn ChatModel> = a;
         m
     })
+}
+
+/// Per-user throttle shared across every AI surface (`ask`, the agent, and MCP
+/// tool calls). Each fans out to retrieval + an LLM on every call — the agent
+/// several times — so they draw on **one** budget per user: 20 burst, refilling
+/// ~1 every 5s (~12/min sustained). Keyed by the caller's id, in-memory (single
+/// instance; a Redis backend is the cluster follow-up, like the upload limiter).
+pub(crate) fn ai_limiter() -> &'static RateLimiter {
+    static LIMITER: OnceLock<RateLimiter> = OnceLock::new();
+    LIMITER.get_or_init(|| {
+        RateLimiter::new(RateLimitConfig {
+            capacity: 20.0,
+            refill_per_sec: 0.2,
+        })
+    })
+}
+
+/// Error type for the AI HTTP endpoints. `Status` carries an ordinary code
+/// (via `?` from `StatusCode`), `RateLimited` renders a `429` + `Retry-After`.
+#[derive(Debug)]
+pub(crate) enum AiHttpError {
+    Status(StatusCode),
+    RateLimited(u64),
+}
+
+impl From<StatusCode> for AiHttpError {
+    fn from(s: StatusCode) -> Self {
+        Self::Status(s)
+    }
+}
+
+impl IntoResponse for AiHttpError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Status(s) => s.into_response(),
+            Self::RateLimited(secs) => rate_limited_response(secs),
+        }
+    }
+}
+
+/// A `429 Too Many Requests` with a `Retry-After` header + JSON body — shared by
+/// the AI HTTP endpoints and the MCP tool-call path.
+pub(crate) fn rate_limited_response(retry_after_secs: u64) -> Response {
+    let mut resp = (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({ "error": "rate limited", "retry_after_seconds": retry_after_secs })),
+    )
+        .into_response();
+    if let Ok(v) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+        resp.headers_mut().insert(RETRY_AFTER, v);
+    }
+    resp
 }
