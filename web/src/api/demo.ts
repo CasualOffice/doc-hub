@@ -907,6 +907,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       revoked_at: null,
     };
     (state.apiTokens ??= []).push(row);
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "token.created",
+      target_kind: "api_token",
+      target_id: row.id,
+      target_name: row.name,
+      ip_address: null,
+      metadata: `{"expires":${expires_at !== null}}`,
+    });
     persist();
     return {
       id: row.id,
@@ -923,6 +933,16 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
     const row = (state.apiTokens ?? []).find((t) => t.id === id && t.revoked_at === null);
     if (!row) throw makeError(404, "not found");
     row.revoked_at = nowIso();
+    emitDemo({
+      actor_id: "demo-user",
+      actor_username: state.username ?? "demo",
+      action: "token.revoked",
+      target_kind: "api_token",
+      target_id: row.id,
+      target_name: null,
+      ip_address: null,
+      metadata: null,
+    });
     persist();
     return undefined as unknown as T;
   }
