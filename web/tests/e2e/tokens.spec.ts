@@ -35,6 +35,19 @@ test("create a token, see it once, then revoke it", async ({ page }) => {
   await expect(row.getByTestId("revoke-token")).toHaveCount(0);
 });
 
+test("creating a token is recorded on the Activity feed", async ({ page }) => {
+  await page.getByLabel("Name").fill("audit me");
+  await page.getByRole("button", { name: /Create token/i }).click();
+  await expect(page.getByTestId("fresh-token")).toBeVisible({ timeout: 5_000 });
+
+  // The append-only Activity feed shows the credential event with a real
+  // sentence (not the raw action string).
+  await page.getByRole("button", { name: "Activity" }).click();
+  await expect(
+    page.getByText("created API token audit me", { exact: false }),
+  ).toBeVisible({ timeout: 5_000 });
+});
+
 test("a blank name can't create a token", async ({ page }) => {
   // The create button stays disabled until a name is entered.
   const create = page.getByRole("button", { name: /Create token/i });

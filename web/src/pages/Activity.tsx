@@ -442,6 +442,8 @@ function categoryFor(action: string): Category {
   if (action === "share.access") return { Icon: Link2, tone: "ink" };
   if (action.startsWith("holds.")) return { Icon: Gavel, tone: "attention" };
   if (action.startsWith("provenance.")) return { Icon: ShieldCheck, tone: "ink" };
+  if (action.startsWith("token."))
+    return { Icon: KeyRound, tone: action.endsWith("revoked") ? "attention" : "ink" };
   return { Icon: FilePlus, tone: "ink" };
 }
 
@@ -487,6 +489,10 @@ function sentenceFor(e: ActivityEvent): string {
       return `${actor} released the legal hold on ${target}`;
     case "provenance.verify":
       return `${actor} verified ${target}`;
+    case "token.created":
+      return `${actor} created API token ${target}`;
+    case "token.revoked":
+      return `${actor} revoked an API token`;
     default:
       return `${actor}: ${e.action}${target !== "(unknown)" ? ` — ${target}` : ""}`;
   }
