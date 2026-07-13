@@ -394,7 +394,7 @@ Cross-cutting invariants every flow honours:
 **Happy path.**
 
 1. **Activity** shows a day-grouped, newest-first timeline. Each row: `[hh:mm] [action-pill] [sentence] [metadata]`. The feed is the `audit_log`, which is **append-only and hash-chained** — every row carries `prev_hash`; the header shows a **chain-verified** badge.
-2. **Export report** → downloads a signed JSONL (or PDF summary) of the selected range. The export includes each event's hash and the chain head so it **verifies offline** against the chain.
+2. **Export report** → an admin downloads the full chain as JSON via `GET /api/admin/audit/export` (every row, both hash-chain columns, and the server's verdict). It **verifies offline** with `dochub verify-audit <file>` — recomputing each `entry_hash` and re-walking the linkage with no database, so any field tamper or reordering is caught. The export is itself audited (`audit.export`).
 3. **Retention** — an admin sets retention policies (Settings → Retention); tombstoned documents obey the policy and are only purged when their retention window elapses and no hold applies.
 4. **Legal hold** — placing a hold on a document (or project) blocks tombstone and purge on every path. Held rows show a `lock` glyph and **"On legal hold"**.
 

@@ -37,7 +37,10 @@ mod workspaces;
 
 pub use acl::{resource_kind, subject_kind, AclGrant, AclRepo, NewAclGrant};
 pub use api_tokens::{ApiToken, ApiTokenRepo, NewApiToken};
-pub use audit::{action, AuditChainStatus, AuditEvent, AuditRepo, NewAuditEvent};
+pub use audit::{
+    action, chain_status_str, verify_exported_chain, AuditChainStatus, AuditEvent, AuditExport,
+    AuditRepo, ExportedAuditRow, NewAuditEvent,
+};
 pub use embeddings::{EmbeddingRepo, NewEmbedding, StoredEmbedding};
 pub use error::DbError;
 pub use file_versions::{FileVersionsRepo, NewVersion, Version};
