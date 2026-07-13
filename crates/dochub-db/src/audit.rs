@@ -77,6 +77,8 @@ pub mod action {
     pub const PII_SCAN: &str = "pii.scan";
     /// A document summary was generated (read-only AI suggestion).
     pub const AI_SUMMARY: &str = "ai.summary";
+    /// An admin exported the audit log (the export is itself audited).
+    pub const AUDIT_EXPORT: &str = "audit.export";
 }
 
 /// Outcome of [`AuditRepo::verify_audit_chain`].
@@ -108,6 +110,104 @@ pub struct AuditEvent {
     pub ip_address: Option<String>,
     /// Verbatim JSON payload from `NewAuditEvent::metadata`, if any.
     pub metadata: Option<String>,
+}
+
+/// One row of an audit export — every stored field **including the raw
+/// `created_at` string and both hash-chain columns**, so a recipient can
+/// recompute `entry_hash` and re-walk the linkage entirely offline (see
+/// [`verify_exported_chain`]). Distinct from [`AuditEvent`], whose `created_at`
+/// is a parsed timestamp: the export must carry the byte-exact stored string the
+/// hash was computed over.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportedAuditRow {
+    pub id: String,
+    /// The stored RFC-3339 UTC string, verbatim (the hash preimage byte-for-byte).
+    pub created_at: String,
+    pub actor_id: Option<String>,
+    pub actor_username: Option<String>,
+    pub action: String,
+    pub target_kind: Option<String>,
+    pub target_id: Option<String>,
+    pub target_name: Option<String>,
+    pub ip_address: Option<String>,
+    pub metadata: Option<String>,
+    /// Previous chained row's `entry_hash` (lowercase hex); `None` at the head.
+    pub prev_hash: Option<String>,
+    /// This row's `entry_hash` (lowercase hex).
+    pub entry_hash: String,
+}
+
+/// A complete, self-verifiable audit export: the full chain in append order plus
+/// the server's own verification verdict at export time. Serialized as the body
+/// of `GET /api/admin/audit/export` and consumed by `dochub verify-audit`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditExport {
+    /// RFC-3339 UTC stamp of when the export was produced (set by the caller).
+    pub generated_at: String,
+    /// Number of chained rows in `events`.
+    pub count: usize,
+    /// The server's verdict when it produced the export: `"intact"` or
+    /// `"broken_at_<index>"`. A recipient re-derives the same from `events`.
+    pub chain_status: String,
+    /// The full chain, seq/append order (`created_at ASC, id ASC`).
+    pub events: Vec<ExportedAuditRow>,
+}
+
+/// Render an [`AuditChainStatus`] as the stable `chain_status` string.
+#[must_use]
+pub fn chain_status_str(status: &AuditChainStatus) -> String {
+    match status {
+        AuditChainStatus::Intact => "intact".to_string(),
+        AuditChainStatus::Broken { at_index } => format!("broken_at_{at_index}"),
+    }
+}
+
+/// Re-verify an exported chain **offline** — no database. Recomputes each row's
+/// `entry_hash` from its own fields + stored `prev_hash` (catching field tamper)
+/// and checks each `prev_hash` links to the previous row's `entry_hash`
+/// (catching reordering / splicing), exactly as [`AuditRepo::verify_audit_chain`]
+/// does against live rows. A malformed stored hash counts as a break at that
+/// row. This is the check `dochub verify-audit` runs on an export file.
+#[must_use]
+pub fn verify_exported_chain(events: &[ExportedAuditRow]) -> AuditChainStatus {
+    let mut prev: Option<Sha256Hex> = None;
+    for (i, row) in events.iter().enumerate() {
+        let stored_prev: Option<Sha256Hex> = match &row.prev_hash {
+            Some(h) => match h.parse() {
+                Ok(v) => Some(v),
+                Err(_) => return AuditChainStatus::Broken { at_index: i },
+            },
+            None => None,
+        };
+        let Ok(stored_entry) = row.entry_hash.parse::<Sha256Hex>() else {
+            return AuditChainStatus::Broken { at_index: i };
+        };
+
+        let link_ok = match (&prev, &stored_prev) {
+            (None, None) => true,
+            (Some(expected), Some(claimed)) => expected == claimed,
+            _ => false,
+        };
+        if !link_ok {
+            return AuditChainStatus::Broken { at_index: i };
+        }
+
+        let canonical = canonical(&CanonicalFields {
+            id: &row.id,
+            created_at: &row.created_at,
+            actor_id: row.actor_id.as_deref(),
+            action: &row.action,
+            target_kind: row.target_kind.as_deref(),
+            target_id: row.target_id.as_deref(),
+            ip_address: row.ip_address.as_deref(),
+            metadata: row.metadata.as_deref(),
+        });
+        if entry_hash(stored_prev.as_ref(), &canonical) != stored_entry {
+            return AuditChainStatus::Broken { at_index: i };
+        }
+        prev = Some(stored_entry);
+    }
+    AuditChainStatus::Intact
 }
 
 #[derive(Debug, Clone)]
@@ -356,6 +456,38 @@ impl<'a> AuditRepo<'a> {
         };
         rows.iter().map(row_to_event).collect()
     }
+
+    /// The complete chained audit log in append order (`created_at ASC, id ASC`),
+    /// every field including both hash-chain columns — the payload of an audit
+    /// export. Pre-migration rows with a NULL `entry_hash` sit outside the chain
+    /// and are excluded, so [`verify_exported_chain`] can walk the result whole.
+    pub async fn export_chain(&self) -> Result<Vec<ExportedAuditRow>, DbError> {
+        let rows = sqlx::query(&self.db.sql(
+            "SELECT id, created_at, actor_id, actor_username, action, target_kind, \
+             target_id, target_name, ip_address, metadata, prev_hash, entry_hash \
+             FROM audit_log WHERE entry_hash IS NOT NULL \
+             ORDER BY created_at ASC, id ASC",
+        ))
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|row| ExportedAuditRow {
+                id: row.get("id"),
+                created_at: row.get("created_at"),
+                actor_id: row.get("actor_id"),
+                actor_username: row.get("actor_username"),
+                action: row.get("action"),
+                target_kind: row.get("target_kind"),
+                target_id: row.get("target_id"),
+                target_name: row.get("target_name"),
+                ip_address: row.get("ip_address"),
+                metadata: row.get("metadata"),
+                prev_hash: row.get("prev_hash"),
+                entry_hash: row.get("entry_hash"),
+            })
+            .collect())
+    }
 }
 
 /// Deterministic byte serialization of an audit event's **stable** fields — the
@@ -472,6 +604,40 @@ mod tests {
             repo.verify_audit_chain().await.expect("verify"),
             AuditChainStatus::Intact
         );
+    }
+
+    #[tokio::test]
+    async fn export_round_trips_and_verifies_offline() {
+        let db = fresh_db().await;
+        let repo = AuditRepo::new(&db);
+        for a in [
+            action::VERSION_COMMIT,
+            action::FILE_TOMBSTONE,
+            action::PII_SCAN,
+        ] {
+            repo.insert(event(a)).await.expect("insert");
+        }
+        let export = repo.export_chain().await.expect("export");
+        assert_eq!(export.len(), 3);
+        // Exported in append order, fully linked — verifies with no database.
+        assert_eq!(verify_exported_chain(&export), AuditChainStatus::Intact);
+
+        // Tamper a field on the middle row → its recomputed entry_hash no longer
+        // matches, so offline verification breaks exactly there.
+        let mut tampered = export.clone();
+        tampered[1].action = "version.forged".into();
+        assert_eq!(
+            verify_exported_chain(&tampered),
+            AuditChainStatus::Broken { at_index: 1 }
+        );
+
+        // Reordering (splicing) breaks linkage at the first out-of-place row.
+        let mut reordered = export.clone();
+        reordered.swap(0, 1);
+        assert!(matches!(
+            verify_exported_chain(&reordered),
+            AuditChainStatus::Broken { .. }
+        ));
     }
 
     #[tokio::test]

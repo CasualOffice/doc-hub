@@ -9,7 +9,9 @@ use axum::{
     Json, Router,
 };
 use dochub_auth::{hash_password, AuthSession};
-use dochub_db::{AuditRepo, NewAuditEvent, NewUser, SessionRepo, UserRepo};
+use dochub_db::{
+    action, chain_status_str, AuditExport, AuditRepo, NewAuditEvent, NewUser, SessionRepo, UserRepo,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::HttpState;
@@ -96,6 +98,70 @@ pub(crate) async fn system(
         healthy: true,
         recent_sign_ins,
     }))
+}
+
+/// `GET /api/admin/audit/export` — download the complete, hash-chained audit
+/// log as a self-verifiable JSON file (admin-only). Every chained row is
+/// included in append order with both hash-chain columns, plus the server's
+/// verification verdict at export time; a recipient re-checks it offline with
+/// `dochub verify-audit`. The export is itself recorded on the chain.
+pub(crate) async fn export_audit(
+    State(s): State<HttpState>,
+    session: AuthSession,
+) -> Result<axum::response::Response, AdminError> {
+    if !session.is_admin {
+        return Err(AdminError::Forbidden);
+    }
+    let repo = AuditRepo::new(&s.db);
+    let events = repo
+        .export_chain()
+        .await
+        .map_err(|e| AdminError::Internal(e.to_string()))?;
+    let status = repo
+        .verify_audit_chain()
+        .await
+        .map_err(|e| AdminError::Internal(e.to_string()))?;
+    let export = AuditExport {
+        generated_at: time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        count: events.len(),
+        chain_status: chain_status_str(&status),
+        events,
+    };
+
+    // The export is a compliance-relevant read — record it on the chain (after
+    // snapshotting, so it appends without altering the exported view).
+    AuditRepo::emit(
+        &s.db,
+        NewAuditEvent {
+            actor_id: Some(session.user_id.clone()),
+            actor_username: Some(session.username.clone()),
+            action: action::AUDIT_EXPORT.into(),
+            target_kind: Some("audit_log".into()),
+            target_id: None,
+            target_name: None,
+            ip_address: None,
+            metadata: Some(format!(r#"{{"count":{}}}"#, export.count)),
+        },
+    );
+
+    let body =
+        serde_json::to_vec_pretty(&export).map_err(|e| AdminError::Internal(e.to_string()))?;
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("application/json"),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                axum::http::HeaderValue::from_static("attachment; filename=\"audit-export.json\""),
+            ),
+        ],
+        body,
+    )
+        .into_response())
 }
 
 #[derive(Debug)]
@@ -366,6 +432,7 @@ pub(crate) fn admin_router(state: HttpState) -> Router {
     Router::new()
         .route("/api/admin/users", get(list_users).post(create_user))
         .route("/api/admin/users/{id}/quota", patch(set_user_quota))
+        .route("/api/admin/audit/export", get(export_audit))
         .route("/api/me/quota/request", post(request_quota_upgrade))
         .with_state(state)
 }

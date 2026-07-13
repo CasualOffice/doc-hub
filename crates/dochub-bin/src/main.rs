@@ -26,6 +26,14 @@ async fn main() -> anyhow::Result<()> {
         return run_verify_provenance(&path);
     }
 
+    // Offline audit-export verification — same rationale: no config/DB/network.
+    if std::env::args().nth(1).as_deref() == Some("verify-audit") {
+        let path = std::env::args().nth(2).ok_or_else(|| {
+            anyhow::anyhow!("usage: dochub verify-audit <path-to-audit-export.json>")
+        })?;
+        return run_verify_audit(&path);
+    }
+
     let cfg = Config::from_env()?;
 
     // Admin subcommands run to completion and exit — they never start the HTTP
@@ -35,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         return match cmd.as_str() {
             "rotate-kek" => run_rotate_kek(&cfg).await,
             other => Err(anyhow::anyhow!(
-                "unknown subcommand: {other} (known: rotate-kek, verify-provenance)"
+                "unknown subcommand: {other} (known: rotate-kek, verify-provenance, verify-audit)"
             )),
         };
     }
@@ -227,6 +235,35 @@ fn run_verify_provenance(path: &str) -> anyhow::Result<()> {
         }
         Err(e) => {
             eprintln!("FAIL: provenance verification failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `verify-audit <path>` — offline verification of an audit export (Phase 4).
+/// Reads the JSON file `GET /api/admin/audit/export` produced, re-walks the
+/// hash chain entirely offline: each row's `entry_hash` is recomputed from its
+/// own fields + stored `prev_hash`, and every `prev_hash` must link to the
+/// previous row's `entry_hash`. Needs no config, DB, or network. Prints
+/// `OK`/`FAIL` and exits non-zero on any break so automation can gate on it.
+fn run_verify_audit(path: &str) -> anyhow::Result<()> {
+    let bytes =
+        std::fs::read(path).map_err(|e| anyhow::anyhow!("cannot read audit export {path}: {e}"))?;
+    let export: dochub_db::AuditExport = serde_json::from_slice(&bytes)
+        .map_err(|e| anyhow::anyhow!("{path} is not a valid audit export: {e}"))?;
+
+    match dochub_db::verify_exported_chain(&export.events) {
+        dochub_db::AuditChainStatus::Intact => {
+            println!(
+                "OK: audit export verified — {} event(s), hash chain intact (server verdict: {}, generated {})",
+                export.events.len(),
+                export.chain_status,
+                export.generated_at,
+            );
+            Ok(())
+        }
+        dochub_db::AuditChainStatus::Broken { at_index } => {
+            eprintln!("FAIL: audit chain broken at event index {at_index}");
             std::process::exit(1);
         }
     }

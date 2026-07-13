@@ -50,7 +50,7 @@ file_versions(file_id, seq, storage_key, size, content_hash, prev_hash, author_i
 - **Write-once.** Version blobs are content-addressed and never overwritten. "Delete" writes a tombstone and obeys retention + legal hold; bytes under hold are never removed.
 - **Verification.** `verify_chain(file_id)` recomputes hashes and links end-to-end. A mismatch is a tamper alarm — surfaced to admins and audited, never silently repaired.
 - **Restore** version *k* appends a new version *N+1* whose bytes equal *k*. The old chain is preserved; restore is additive.
-- **Audit chain.** The append-only `audit_log` is hash-chained the same way; committed rows are never updated or deleted. Optional: periodic Ed25519-signed anchoring of chain heads for third-party-verifiable provenance (transparency-log-lite).
+- **Audit chain.** The append-only `audit_log` is hash-chained the same way; committed rows are never updated or deleted. Admins download the whole chain as a self-verifiable report via `GET /api/admin/audit/export` (every row + both hash columns + the server's verdict); a recipient re-checks it **offline** with `dochub verify-audit <file>` — recomputing each `entry_hash` and re-walking the linkage with no database. The export is itself audited (`audit.export`). Optional: periodic Ed25519-signed anchoring of chain heads for third-party-verifiable provenance (transparency-log-lite).
 
 ## Two-origin security model
 
