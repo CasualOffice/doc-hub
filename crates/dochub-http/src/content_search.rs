@@ -39,7 +39,7 @@ use dochub_index::{Index, IndexDoc};
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 
-use crate::{workspaces::resolve_active_workspace, HttpState};
+use crate::{error::ApiError, workspaces::resolve_active_workspace, HttpState};
 
 /// Author recorded on any legacy-blob backfill the reindex triggers. Not a real
 /// user — the backfill just seals pre-version bytes into the chain so they can
@@ -332,7 +332,7 @@ pub(crate) async fn content_search(
     State(s): State<HttpState>,
     session: AuthSession,
     Query(q): Query<ContentSearchQuery>,
-) -> Result<Json<Vec<ContentHit>>, StatusCode> {
+) -> Result<Json<Vec<ContentHit>>, ApiError> {
     let query = q.q.as_deref().map_or("", str::trim).to_string();
     let limit = q.limit.unwrap_or(20).clamp(1, 50);
 

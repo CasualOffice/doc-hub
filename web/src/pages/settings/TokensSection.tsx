@@ -112,8 +112,8 @@ function CreateTokenCard({ onCreated }: { onCreated: (t: CreatedToken) => void }
       onCreated(created);
     } catch (err) {
       const e = err as ApiError;
-      const body = e.body as { error?: string } | null;
-      setServerError(body?.error ?? e.message ?? "Could not create the token.");
+      const body = e.body as { error?: { message?: string } } | null;
+      setServerError(body?.error?.message ?? e.message ?? "Could not create the token.");
     }
   }
 

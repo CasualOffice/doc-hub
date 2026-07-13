@@ -21,6 +21,7 @@ mod content_search;
 mod diff;
 mod direct_upload;
 mod embedding;
+mod error;
 mod files;
 mod grants;
 pub mod headers;

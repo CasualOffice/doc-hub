@@ -12,14 +12,14 @@
 //! offline install the endpoint responds with `available: false` rather than a
 //! degraded answer.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, Json};
 use dochub_ai::{Agent, AnswerContext, DocumentReader, Retriever};
 use dochub_auth::AuthSession;
 use dochub_db::{EmbeddingRepo, FileRepo};
 use serde::{Deserialize, Serialize};
 
-use crate::ai::AiHttpError;
 use crate::content_search::{kind_of, ws_status};
+use crate::error::ApiError;
 use crate::semantic_search::retrieve_chunks;
 use crate::workspaces::resolve_active_workspace;
 use crate::HttpState;
@@ -167,7 +167,7 @@ pub(crate) async fn agent_ask(
     State(s): State<HttpState>,
     session: AuthSession,
     Json(body): Json<AgentAskBody>,
-) -> Result<Json<AgentAskResponse>, AiHttpError> {
+) -> Result<Json<AgentAskResponse>, ApiError> {
     let query = body.q.trim().to_string();
 
     let workspace = resolve_active_workspace(&s.db, &session.user_id, body.workspace.as_deref())
@@ -185,7 +185,7 @@ pub(crate) async fn agent_ask(
     // Throttle before the multi-step agent loop (the heaviest AI surface).
     crate::ai::ai_limiter()
         .check(&session.user_id)
-        .map_err(AiHttpError::RateLimited)?;
+        .map_err(ApiError::rate_limited)?;
 
     let retriever = ChunkRetriever {
         state: s.clone(),
@@ -200,7 +200,7 @@ pub(crate) async fn agent_ask(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "agent: research loop failed");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::internal()
         })?;
 
     // Resolve each citation's pool context to a displayable source. `kind`

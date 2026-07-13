@@ -10,13 +10,13 @@
 //! so the whole RAG loop is self-hostable and testable. A hosted abstractive
 //! model (e.g. Claude) slots in behind the same trait.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, Json};
 use dochub_ai::AnswerContext;
 use dochub_auth::AuthSession;
 use serde::{Deserialize, Serialize};
 
-use crate::ai::AiHttpError;
 use crate::content_search::{kind_of, ws_status};
+use crate::error::ApiError;
 use crate::semantic_search::retrieve_chunks;
 use crate::workspaces::resolve_active_workspace;
 use crate::HttpState;
@@ -60,7 +60,7 @@ pub(crate) async fn ask(
     State(s): State<HttpState>,
     session: AuthSession,
     Json(body): Json<AskBody>,
-) -> Result<Json<AskResponse>, AiHttpError> {
+) -> Result<Json<AskResponse>, ApiError> {
     let query = body.q.trim().to_string();
 
     let workspace = resolve_active_workspace(&s.db, &session.user_id, body.workspace.as_deref())
@@ -80,7 +80,7 @@ pub(crate) async fn ask(
     // Throttle before the retrieval + LLM work (shared AI budget per user).
     crate::ai::ai_limiter()
         .check(&session.user_id)
-        .map_err(AiHttpError::RateLimited)?;
+        .map_err(ApiError::rate_limited)?;
 
     // Retrieve the most relevant permission-filtered chunks as context.
     let chunks = retrieve_chunks(&s, &session.user_id, &workspace, &query, MAX_CONTEXTS).await?;
@@ -104,7 +104,7 @@ pub(crate) async fn ask(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "ask: answer composition failed");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::internal()
         })?;
 
     let citations: Vec<AskCitation> = answer
