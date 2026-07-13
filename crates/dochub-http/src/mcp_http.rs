@@ -273,9 +273,15 @@ impl ToolHandler for ResearchTool {
         let retriever = crate::agent_http::ChunkRetriever::new(
             self.state.clone(),
             self.user_id.clone(),
+            workspace.clone(),
+        );
+        let reader = crate::agent_http::ChunkDocumentReader::new(
+            self.state.clone(),
+            self.user_id.clone(),
             workspace,
         );
         let outcome = dochub_ai::Agent::new(chat.as_ref(), &retriever)
+            .with_reader(&reader)
             .run(q)
             .await
             .map_err(|e| ToolError::Execution(format!("agent failed: {e}")))?;

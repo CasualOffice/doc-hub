@@ -135,6 +135,23 @@ impl<'a> EmbeddingRepo<'a> {
         rows.iter().map(row_to_embedding).collect()
     }
 
+    /// All of a file's chunks in document order (`chunk_index ASC`). Lets a
+    /// caller reconstruct the file's extracted text without re-decrypting or
+    /// re-extracting — the agent's `read` tool uses this to pull a whole
+    /// document behind a retrieved passage.
+    pub async fn list_for_file(&self, file_id: &str) -> Result<Vec<StoredEmbedding>, DbError> {
+        let rows = sqlx::query(&self.db.sql(
+            "SELECT id, file_id, workspace_id, chunk_index, content_hash, dims, \
+             vector, chunk_text, char_start, char_end \
+             FROM embeddings WHERE file_id = ? \
+             ORDER BY chunk_index ASC",
+        ))
+        .bind(file_id)
+        .fetch_all(self.db.pool())
+        .await?;
+        rows.iter().map(row_to_embedding).collect()
+    }
+
     /// The `content_hash` the file's embeddings were built from, if any. Lets
     /// the embed job skip a file whose head is already embedded at the current
     /// hash. Returns `None` when the file has no embeddings yet.

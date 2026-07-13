@@ -11,6 +11,8 @@
 //! ## Protocol
 //! The model must reply with exactly one JSON object per turn:
 //! - `{"action":"search","query":"…"}` — retrieve more passages.
+//! - `{"action":"read","passage":n}` — pull the full document behind passage
+//!   `n` (only when a [`DocumentReader`] is wired; otherwise unadvertised).
 //! - `{"action":"answer","text":"… [n] …","citations":[n,…]}` — final answer.
 //!
 //! Retrieved passages accumulate into a numbered pool across turns; the model
@@ -37,6 +39,16 @@ pub trait Retriever: Send + Sync {
     async fn retrieve(&self, query: &str, k: usize) -> Result<Vec<AnswerContext>, AiError>;
 }
 
+/// Reads a whole document's extracted text by its `source_id`. Lets the agent
+/// pull the full document behind a retrieved snippet when a passage isn't
+/// enough. Like [`Retriever`], an implementation must enforce the caller's
+/// permissions before returning anything (`None` = not found / not permitted).
+#[async_trait]
+pub trait DocumentReader: Send + Sync {
+    /// Return the document's extracted text, or `None` if it can't be read.
+    async fn read(&self, source_id: &str) -> Result<Option<String>, AiError>;
+}
+
 /// Tuning for the loop. Defaults are conservative — a few steps, a handful of
 /// passages per search, a bounded pool — enough for real questions without
 /// letting a model run away.
@@ -50,6 +62,9 @@ pub struct AgentConfig {
     pub max_pool: usize,
     /// Max characters of a passage shown to the model (bounds prompt growth).
     pub passage_chars: usize,
+    /// Max characters of a whole document surfaced by a `read` (bounds prompt
+    /// growth — a full document is far larger than a passage).
+    pub read_chars: usize,
 }
 
 impl Default for AgentConfig {
@@ -59,6 +74,7 @@ impl Default for AgentConfig {
             per_search: 6,
             max_pool: 24,
             passage_chars: 600,
+            read_chars: 4000,
         }
     }
 }
@@ -76,23 +92,49 @@ pub struct AgentOutcome {
     pub searches: Vec<String>,
 }
 
-const AGENT_SYSTEM_PROMPT: &str = "You are a research agent for a company's private \
-document hub. You answer questions strictly from the user's documents — you have no \
-outside knowledge and must not invent facts.\n\n\
-Reply with EXACTLY ONE JSON object and nothing else (no prose, no markdown fences), \
-in one of these two forms:\n\
-- To search the documents: {\"action\":\"search\",\"query\":\"<search terms>\"}\n\
-- To give your final answer: {\"action\":\"answer\",\"text\":\"<answer with inline [n] citations>\",\"citations\":[<passage numbers used>]}\n\n\
-Rules:\n\
-- You start with no passages; always search before answering.\n\
-- Passages are numbered as you retrieve them. Cite them inline as [n] and list the numbers in \"citations\".\n\
-- If, after searching, the documents do not contain the answer, reply with an answer whose text says you could not find it and whose citations are empty.\n\
-- Refine your query and search again if the first results are insufficient.";
+/// Build the system prompt. The `read` action is only advertised when a
+/// [`DocumentReader`] is wired, so the model never asks for a tool it lacks.
+fn system_prompt(has_reader: bool) -> String {
+    let mut p = String::from(
+        "You are a research agent for a company's private document hub. You answer questions \
+         strictly from the user's documents — you have no outside knowledge and must not invent \
+         facts.\n\n\
+         Reply with EXACTLY ONE JSON object and nothing else (no prose, no markdown fences), in \
+         one of these forms:\n\
+         - To search the documents: {\"action\":\"search\",\"query\":\"<search terms>\"}\n",
+    );
+    if has_reader {
+        p.push_str(
+            "- To read a whole document behind a passage: {\"action\":\"read\",\"passage\":<number>}\n",
+        );
+    }
+    p.push_str(
+        "- To give your final answer: {\"action\":\"answer\",\"text\":\"<answer with inline [n] \
+         citations>\",\"citations\":[<passage numbers used>]}\n\n\
+         Rules:\n\
+         - You start with no passages; always search before answering.\n\
+         - Passages are numbered as you retrieve them. Cite them inline as [n] and list the \
+         numbers in \"citations\".\n",
+    );
+    if has_reader {
+        p.push_str(
+            "- If a passage is promising but partial, read its full document before answering.\n",
+        );
+    }
+    p.push_str(
+        "- If, after searching, the documents do not contain the answer, reply with an answer \
+         whose text says you could not find it and whose citations are empty.\n\
+         - Refine your query and search again if the first results are insufficient.",
+    );
+    p
+}
 
-/// The agentic research loop, bound to a chat model and a retriever.
+/// The agentic research loop, bound to a chat model, a retriever, and
+/// (optionally) a document reader.
 pub struct Agent<'a> {
     chat: &'a dyn ChatModel,
     retriever: &'a dyn Retriever,
+    reader: Option<&'a dyn DocumentReader>,
     cfg: AgentConfig,
 }
 
@@ -109,6 +151,7 @@ impl<'a> Agent<'a> {
         Self {
             chat,
             retriever,
+            reader: None,
             cfg: AgentConfig::default(),
         }
     }
@@ -119,13 +162,21 @@ impl<'a> Agent<'a> {
         self
     }
 
+    /// Enable the `read` action, letting the agent pull a full document behind a
+    /// retrieved passage.
+    #[must_use]
+    pub fn with_reader(mut self, reader: &'a dyn DocumentReader) -> Self {
+        self.reader = Some(reader);
+        self
+    }
+
     /// Run the loop for `question`. Always terminates: it returns as soon as the
     /// model emits an `answer` action, or with an empty answer once
     /// [`AgentConfig::max_steps`] turns are spent.
     pub async fn run(&self, question: &str) -> Result<AgentOutcome, AiError> {
         let question = question.trim();
         let mut messages = vec![
-            ChatMessage::system(AGENT_SYSTEM_PROMPT),
+            ChatMessage::system(system_prompt(self.reader.is_some())),
             ChatMessage::user(format!("Question: {question}")),
         ];
         let mut pool: Vec<AnswerContext> = Vec::new();
@@ -178,6 +229,10 @@ impl<'a> Agent<'a> {
                         let hits = self.retriever.retrieve(&query, self.cfg.per_search).await?;
                         self.absorb(&mut pool, hits)
                     };
+                    messages.push(ChatMessage::user(observation));
+                }
+                Some("read") if self.reader.is_some() => {
+                    let observation = self.read_action(&action, &mut pool).await?;
                     messages.push(ChatMessage::user(observation));
                 }
                 Some("answer") => {
@@ -247,6 +302,71 @@ impl<'a> Agent<'a> {
             "\nSearch again to gather more, or give your final answer citing passages by number.",
         );
         s
+    }
+
+    /// Handle a `read` action: resolve the referenced passage to its document,
+    /// pull the full text, add it to the pool as a new numbered passage, and
+    /// render the observation. Only called when a reader is wired.
+    async fn read_action(
+        &self,
+        action: &Value,
+        pool: &mut Vec<AnswerContext>,
+    ) -> Result<String, AiError> {
+        let reader = self.reader.expect("read_action called without a reader");
+        let Some(n) = action.get("passage").and_then(Value::as_u64) else {
+            return Ok(
+                "The `read` action needs a \"passage\" number to read. Provide one, or \
+                       give your final answer."
+                    .to_string(),
+            );
+        };
+        let idx = n as usize;
+        if idx < 1 || idx > pool.len() {
+            return Ok(format!(
+                "There is no passage [{idx}] to read. Reference a passage number you have \
+                 retrieved, or give your final answer."
+            ));
+        }
+        if pool.len() >= self.cfg.max_pool {
+            return Ok(
+                "You have gathered enough material. Give your final answer now.".to_string(),
+            );
+        }
+        let source = &pool[idx - 1];
+        let source_id = source.source_id.clone();
+        let title = source.title.clone();
+
+        let Some(full) = reader.read(&source_id).await? else {
+            return Ok(format!(
+                "Passage [{idx}]'s document could not be read. Rely on the passages you have, or \
+                 search again."
+            ));
+        };
+        let text = truncate(&full, self.cfg.read_chars);
+        let full_title = format!("{title} (full document)");
+
+        // Guard against re-reading the same document in a loop.
+        if pool
+            .iter()
+            .any(|p| p.source_id == source_id && p.text == text)
+        {
+            return Ok(format!(
+                "You have already read the document behind passage [{idx}]. Use it, search for \
+                 something else, or give your final answer."
+            ));
+        }
+        pool.push(AnswerContext {
+            source_id,
+            title: full_title.clone(),
+            text: text.clone(),
+        });
+        Ok(format!(
+            "Read the full document behind passage [{idx}]:\n[{}] {}: {}\n\nCite it by its number, \
+             search for more, or give your final answer.",
+            pool.len(),
+            full_title,
+            text
+        ))
     }
 }
 
@@ -385,6 +505,102 @@ mod tests {
             }
             Ok(Vec::new())
         }
+    }
+
+    /// A reader returning canned full text keyed by source id.
+    struct CannedReader {
+        docs: Vec<(&'static str, &'static str)>,
+    }
+    #[async_trait]
+    impl DocumentReader for CannedReader {
+        async fn read(&self, source_id: &str) -> Result<Option<String>, AiError> {
+            Ok(self
+                .docs
+                .iter()
+                .find(|(id, _)| *id == source_id)
+                .map(|(_, text)| (*text).to_string()))
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_full_document_then_answers() {
+        // Search surfaces a partial snippet; the agent reads the whole document
+        // (passage [1]) and cites the full-document passage [2] it produced.
+        let chat = ScriptedChat::new([
+            r#"{"action":"search","query":"refund"}"#,
+            r#"{"action":"read","passage":1}"#,
+            r#"{"action":"answer","text":"Refunds within 30 days, minus a 5% fee [2].","citations":[2]}"#,
+        ]);
+        let retriever = CannedRetriever {
+            table: vec![(
+                "refund",
+                vec![ctx("f1", "Policy", "Refunds are available.")],
+            )],
+        };
+        let reader = CannedReader {
+            docs: vec![(
+                "f1",
+                "Refunds are available within 30 days of purchase, minus a 5% restocking fee.",
+            )],
+        };
+        let out = Agent::new(&chat, &retriever)
+            .with_reader(&reader)
+            .run("what is the refund fee?")
+            .await
+            .unwrap();
+        // Pool: [1] snippet, [2] full document.
+        assert_eq!(out.contexts.len(), 2);
+        assert!(out.contexts[1].title.contains("full document"));
+        assert!(out.contexts[1].text.contains("restocking fee"));
+        assert_eq!(out.citations.len(), 1);
+        assert_eq!(out.citations[0].context_index, 1);
+        assert_eq!(out.citations[0].source_id, "f1");
+        assert!(out.answer.contains("30 days"));
+    }
+
+    #[tokio::test]
+    async fn read_of_unknown_passage_is_handled() {
+        // Reading a passage that doesn't exist doesn't crash — the loop keeps
+        // going and can still answer.
+        let chat = ScriptedChat::new([
+            r#"{"action":"read","passage":5}"#,
+            r#"{"action":"search","query":"refund"}"#,
+            r#"{"action":"answer","text":"Refunds are available [1].","citations":[1]}"#,
+        ]);
+        let retriever = CannedRetriever {
+            table: vec![(
+                "refund",
+                vec![ctx("f1", "Policy", "Refunds are available.")],
+            )],
+        };
+        let reader = CannedReader { docs: vec![] };
+        let out = Agent::new(&chat, &retriever)
+            .with_reader(&reader)
+            .run("refunds?")
+            .await
+            .unwrap();
+        assert_eq!(out.citations.len(), 1);
+        assert_eq!(out.contexts.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn read_action_ignored_without_a_reader() {
+        // With no reader, `read` is an unknown action; the agent is nudged and
+        // proceeds. (The prompt won't advertise `read`, but a model might still
+        // try it.)
+        let chat = ScriptedChat::new([
+            r#"{"action":"read","passage":1}"#,
+            r#"{"action":"search","query":"refund"}"#,
+            r#"{"action":"answer","text":"Refunds are available [1].","citations":[1]}"#,
+        ]);
+        let retriever = CannedRetriever {
+            table: vec![(
+                "refund",
+                vec![ctx("f1", "Policy", "Refunds are available.")],
+            )],
+        };
+        let out = Agent::new(&chat, &retriever).run("refunds?").await.unwrap();
+        assert_eq!(out.citations.len(), 1);
     }
 
     #[tokio::test]

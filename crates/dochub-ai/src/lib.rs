@@ -29,7 +29,7 @@ pub mod embed;
 pub mod remote;
 pub mod retrieve;
 
-pub use agent::{Agent, AgentConfig, AgentOutcome, Retriever};
+pub use agent::{Agent, AgentConfig, AgentOutcome, DocumentReader, Retriever};
 pub use answer::{Answer, AnswerContext, Answerer, Citation, ExtractiveAnswerer};
 pub use chunk::{chunk_text, Chunk, ChunkConfig};
 pub use embed::{AiError, Embedder, Embedding, LocalEmbedder};
