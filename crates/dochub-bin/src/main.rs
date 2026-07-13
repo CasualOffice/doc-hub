@@ -117,8 +117,42 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(addr = %bind, "listening");
-    axum::serve(listener, app).await?;
+    // Graceful shutdown: on SIGTERM (rolling deploy / `docker stop`) or SIGINT
+    // (Ctrl-C), stop accepting new connections and let in-flight requests finish
+    // instead of cutting them mid-flight.
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    tracing::info!("shutdown complete");
     Ok(())
+}
+
+/// Resolves when the process is asked to terminate — SIGINT (Ctrl-C) or, on
+/// Unix, SIGTERM (the signal orchestrators and `docker stop` send).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "could not install SIGTERM handler");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => tracing::info!("SIGINT received; draining in-flight requests"),
+        () = terminate => tracing::info!("SIGTERM received; draining in-flight requests"),
+    }
 }
 
 /// `rotate-kek` — lossless master-KEK rotation (P1.1). Re-wraps every
@@ -254,5 +288,36 @@ fn init_tracing() {
             .init();
     } else {
         registry.with(fmt::layer()).init();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use axum::{routing::get, Router};
+    use tokio::sync::oneshot;
+
+    /// The serve loop must return promptly once its shutdown future resolves —
+    /// this guards the `with_graceful_shutdown` wiring against regressions (e.g.
+    /// awaiting a future that never completes). OS-signal delivery itself is a
+    /// runtime concern and isn't exercised here.
+    #[tokio::test]
+    async fn graceful_shutdown_returns_when_signalled() {
+        let app = Router::new().route("/healthz", get(|| async { "ok" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let (tx, rx) = oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await
+        });
+
+        tx.send(()).unwrap();
+        let joined = tokio::time::timeout(Duration::from_secs(5), server).await;
+        assert!(joined.is_ok(), "serve did not shut down within 5s");
+        assert!(joined.unwrap().unwrap().is_ok(), "serve returned an error");
     }
 }
