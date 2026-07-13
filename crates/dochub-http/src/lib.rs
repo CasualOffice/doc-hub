@@ -32,6 +32,7 @@ mod members;
 mod metrics;
 mod notes;
 mod oidc;
+mod pii_http;
 pub mod presence;
 mod projects_http;
 mod rate_limit;
@@ -217,6 +218,7 @@ fn app_origin_router(state: HttpState) -> Router {
         )
         .route("/api/search/ask", post(ask::ask))
         .route("/api/agent/ask", post(agent_http::agent_ask))
+        .route("/api/files/{id}/pii", post(pii_http::scan_file_pii))
         .route("/api/mcp", post(mcp_http::mcp_endpoint))
         .with_state(state.clone())
         .merge(wopi_router)

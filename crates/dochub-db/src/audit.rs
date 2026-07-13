@@ -73,6 +73,8 @@ pub mod action {
     pub const TOKEN_CREATED: &str = "token.created";
     /// A personal access token was revoked.
     pub const TOKEN_REVOKED: &str = "token.revoked";
+    /// A document was scanned for PII (read-only; records what was flagged).
+    pub const PII_SCAN: &str = "pii.scan";
 }
 
 /// Outcome of [`AuditRepo::verify_audit_chain`].
