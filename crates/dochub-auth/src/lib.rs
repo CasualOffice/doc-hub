@@ -19,6 +19,7 @@ pub mod oidc;
 mod password;
 mod router;
 mod state;
+mod throttle;
 mod token;
 
 pub use error::AuthError;

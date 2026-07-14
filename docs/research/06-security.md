@@ -130,7 +130,9 @@ Each H2 carries **Rule / Why / How / Phase**. The threat model, OWASP walkthroug
 
 **Why.** OWASP A07 (Identification and Authentication Failures) + Password Storage Cheat Sheet — `argon2id` first-choice, min `m=19 MiB, t=2, p=1` ([OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)). `SameSite=Lax` blocks most CSRF while still allowing the optional WOPI interop redirect path.
 
-**How.** `argon2` crate, `Argon2id`, `m=19456, t=2, p=1`, 16-byte salt from `OsRng`. Cookies `__Host-...; HttpOnly; Secure; SameSite=Lax; Path=/`; session ID 256-bit CSPRNG, server-side store. `subtle::ConstantTimeEq` for tokens/hashes/HMAC tags. CSRF: double-submit cookie + `Origin`/`Referer` check on cookie-auth state-changing requests. Rate-limit `/login` 10/min/IP; per-account exponential backoff after 5 failures.
+**How.** `argon2` crate, `Argon2id`, `m=19456, t=2, p=1`, 16-byte salt from `OsRng`. Cookies `__Host-...; HttpOnly; Secure; SameSite=Lax; Path=/`; session ID 256-bit CSPRNG, server-side store. `subtle::ConstantTimeEq` for tokens/hashes/HMAC tags. CSRF: double-submit cookie + `Origin`/`Referer` check on cookie-auth state-changing requests. Rate-limit `/login` 10/min/IP; per-account backoff after 5 failures.
+
+> **Status.** Per-account throttle **shipped** (`dochub-auth::throttle`): a per-username token bucket — 5 rapid failures, then `429` until it refills (~1/min), checked *before* the Argon2 verify so a throttled guess costs no hashing (CPU-DoS defense) and a correct password clears the bucket. It self-heals rather than hard-locking. Per-IP limiting (`tower_governor`, at the proxy or a Redis-backed limiter) is the remaining half — it catches one-guess-spread-across-many-usernames, which per-username can't.
 
 **Phase.** v0 must-have.
 
