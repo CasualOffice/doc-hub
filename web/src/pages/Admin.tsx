@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import {
   Activity as ActivityIcon,
+  Download,
   FileCheck2,
   Gavel,
   HardDrive,
@@ -25,7 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { ApiError, getAdminSystem, type AdminSystem } from "../api/client.ts";
+import { ApiError, getAdminSystem, getAuditExport, type AdminSystem } from "../api/client.ts";
 import { StatusChip } from "../components/ds/StatusChip.tsx";
 import { Button, STROKE } from "./settings/controls.tsx";
 import { UsersCard } from "./admin/UsersCard.tsx";
@@ -202,6 +203,39 @@ function AuditExportCard({
   system: AdminSystem;
   onNavigate: (target: "activity") => void;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function exportReport() {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const report = await getAuditExport();
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "audit-export.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setNote(
+        `Exported ${report.count} event${report.count === 1 ? "" : "s"} (chain ${report.chain_status}). Verify offline with dochub verify-audit.`,
+      );
+    } catch (err) {
+      const e = err as ApiError;
+      const body = e.body as { error?: { message?: string } | string } | null;
+      const msg =
+        typeof body?.error === "string" ? body.error : body?.error?.message;
+      setError(msg ?? e.message ?? "Could not export the audit log.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card
       title="Audit log"
@@ -214,10 +248,37 @@ function AuditExportCard({
       }
       subtitle="Append-only and hash-chained; committed rows are never updated or deleted."
     >
-      <TileBody
-        note="A signed, offline-verifiable report (date range + JSONL / CSV / PDF, chain head + Ed25519 signature over the range) lands with the export endpoint."
-        actions={["Export signed report"]}
-      />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={exportReport}
+          disabled={busy}
+          data-testid="audit-export-button"
+        >
+          <Download size={14} strokeWidth={STROKE} />
+          {busy ? "Preparing…" : "Export report"}
+        </Button>
+      </div>
+      <div
+        data-testid="audit-export-note"
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "var(--space-2)",
+          marginTop: "var(--space-3)",
+          fontSize: "var(--text-xs)",
+          color: error ? "var(--status-danger-700, #b42318)" : "var(--fg-muted)",
+          lineHeight: "var(--leading-sm)",
+        }}
+      >
+        <LinkIcon size={12} strokeWidth={STROKE} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+        <span>
+          {error ??
+            note ??
+            "Downloads the complete hash-chained log as a self-verifiable JSON report; re-check it offline with dochub verify-audit."}
+        </span>
+      </div>
       <RecentSignIns system={system} />
     </Card>
   );

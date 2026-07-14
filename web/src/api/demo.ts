@@ -1117,6 +1117,41 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       recent_sign_ins: recent,
     } as unknown as T;
   }
+  // Admin audit-log export — mirrors `GET /api/admin/audit/export`. Maps the
+  // demo activity log into append-order rows with placeholder hash-chain
+  // columns (the demo computes no real SHA-256 chain), shaped like the real
+  // self-verifiable report so the download reads correctly.
+  if (p === "/api/admin/audit/export" && method === "GET") {
+    if (!state.signedIn) throw makeError(401, "not signed in");
+    const ascending = state.events.slice().reverse(); // append order (oldest first)
+    let prev: string | null = null;
+    const events = ascending.map((e) => {
+      const entry_hash = fakeHash(`audit:${e.id}`);
+      const row = {
+        id: e.id,
+        created_at: e.created_at,
+        actor_id: e.actor_id,
+        actor_username: e.actor_username,
+        action: e.action,
+        target_kind: e.target_kind,
+        target_id: e.target_id,
+        target_name: e.target_name,
+        ip_address: null,
+        metadata: e.metadata ?? null,
+        prev_hash: prev,
+        entry_hash,
+      };
+      prev = entry_hash;
+      return row;
+    });
+    return {
+      generated_at: nowIso(),
+      count: events.length,
+      chain_status: "intact",
+      events,
+    } as unknown as T;
+  }
+
   if (p === "/api/activity" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
     const before = url.searchParams.get("before");
