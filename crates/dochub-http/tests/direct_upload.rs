@@ -181,7 +181,7 @@ async fn presign_on_memory_backend_is_409() {
         &cookie,
         "POST",
         "/api/files/upload-url",
-        json!({"name": "big.mp4", "size": 100_000_000, "content_type": "video/mp4"}),
+        json!({"name": "big.pdf", "size": 100_000_000, "content_type": "application/pdf"}),
     )
     .await;
     assert_eq!(st, StatusCode::CONFLICT);
@@ -204,25 +204,27 @@ async fn presign_validation_400() {
     .await;
     assert_eq!(st, StatusCode::BAD_REQUEST);
 
-    // size = 0.
+    // size = 0 (allowlisted extension, so the size check is what fires).
     let (st, _) = json_send(
         &app,
         &cookie,
         "POST",
         "/api/files/upload-url",
-        json!({"name": "ok.mp4", "size": 0}),
+        json!({"name": "ok.pdf", "size": 0}),
     )
     .await;
     assert_eq!(st, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
-async fn presign_blocked_extension_400() {
+async fn presign_off_allowlist_extension_415() {
+    // The documents-only allowlist rejects a non-document extension at presign
+    // time (before any bytes exist) with 415 — the SPA never even gets a URL.
     let state = fixture().await;
     let app = router(state);
     let cookie = sign_in(&app, "admin").await;
 
-    let (st, _) = json_send(
+    let (st, body) = json_send(
         &app,
         &cookie,
         "POST",
@@ -230,7 +232,8 @@ async fn presign_blocked_extension_400() {
         json!({"name": "evil.exe", "size": 1024, "content_type": "application/octet-stream"}),
     )
     .await;
-    assert_eq!(st, StatusCode::BAD_REQUEST);
+    assert_eq!(st, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(body["kind"], "exe");
 }
 
 #[tokio::test]
@@ -250,9 +253,9 @@ async fn complete_flips_uploading_to_ready() {
         .insert(&NewFile {
             id: id.clone(),
             parent_id: None,
-            name: "big.mp4".into(),
+            name: "big.txt".into(),
             size: 0,
-            content_type: Some("video/mp4".into()),
+            content_type: Some("text/plain".into()),
             etag: None,
             owner_id: user.id.clone(),
             workspace_id: ws,
@@ -264,13 +267,14 @@ async fn complete_flips_uploading_to_ready() {
         .await
         .unwrap();
 
-    // Stuff bytes directly into storage via the shared registry handle.
+    // Stuff bytes directly into storage via the shared registry handle. All
+    // 'x' — valid UTF-8, so it passes the .txt magic sniff at finalize.
     let storage = state.registry.default_storage();
     storage
         .put(
             &format!("files/{id}"),
             bytes::Bytes::from_static(b"x".repeat(1024).leak()),
-            Some("video/mp4"),
+            Some("text/plain"),
         )
         .await
         .unwrap();
@@ -496,7 +500,7 @@ async fn quota_counts_uploading_rows() {
         &cookie,
         "POST",
         "/api/files/upload-url",
-        json!({"name": "second.mp4", "size": 2_000, "content_type": "video/mp4"}),
+        json!({"name": "second.pdf", "size": 2_000, "content_type": "application/pdf"}),
     )
     .await;
     assert_eq!(st, StatusCode::PAYLOAD_TOO_LARGE);
@@ -563,7 +567,9 @@ async fn complete_rejects_executable_via_post_finalize_sniff() {
     )
     .await;
     assert_eq!(st, StatusCode::UNSUPPORTED_MEDIA_TYPE);
-    assert_eq!(body["kind"], "elf");
+    // ELF bytes under a .pdf name: the extension is allowlisted but the content
+    // fails the %PDF magic sniff → content mismatch.
+    assert_eq!(body["kind"], "content_mismatch");
 
     // Rollback is `tokio::spawn`'d; give it a beat to land.
     tokio::time::sleep(std::time::Duration::from_millis(80)).await;
@@ -574,10 +580,11 @@ async fn complete_rejects_executable_via_post_finalize_sniff() {
 }
 
 #[tokio::test]
-async fn complete_uses_sniffed_content_type_over_client_claim() {
-    // PUT real PNG bytes into storage with the client-claimed mime as
-    // 'application/pdf' (lie). After /complete the row's stored
-    // content_type should be image/png, sniffed authoritatively.
+async fn complete_uses_authoritative_content_type_over_client_claim() {
+    // Client claimed 'application/octet-stream' at presign for a real .docx
+    // (valid OOXML ZIP). After /complete the stored content_type is the
+    // canonical, sniffed document mime — the one signal the uploader can't
+    // forge — not the client's claim.
     let state = fixture().await;
     let ws = personal_ws(&state, "admin").await;
     let user = UserRepo::new(&state.db)
@@ -590,28 +597,31 @@ async fn complete_uses_sniffed_content_type_over_client_claim() {
         .insert(&NewFile {
             id: id.clone(),
             parent_id: None,
-            name: "definitely-not-an-image.pdf".into(),
+            name: "report.docx".into(),
             size: 0,
-            content_type: Some("application/pdf".into()),
+            content_type: Some("application/octet-stream".into()),
             etag: None,
             owner_id: user.id.clone(),
             workspace_id: ws,
             project_id: None,
             storage_id: None,
             status: FileStatus::Uploading,
-            expected_size: Some(8),
+            expected_size: Some(22),
         })
         .await
         .unwrap();
 
-    // PNG magic: 89 50 4E 47 0D 0A 1A 0A
-    let png = vec![0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    // Minimal valid ZIP (empty archive End-Of-Central-Directory record) —
+    // enough to satisfy the OOXML `PK` magic sniff.
+    let zip = vec![
+        0x50u8, 0x4B, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
     let storage = state.registry.default_storage();
     storage
         .put(
             &format!("files/{id}"),
-            bytes::Bytes::from(png),
-            Some("application/pdf"),
+            bytes::Bytes::from(zip),
+            Some("application/octet-stream"),
         )
         .await
         .unwrap();
@@ -628,5 +638,8 @@ async fn complete_uses_sniffed_content_type_over_client_claim() {
     .await;
     assert_eq!(st, StatusCode::OK);
     assert_eq!(body["status"], "ready");
-    assert_eq!(body["content_type"], "image/png");
+    assert_eq!(
+        body["content_type"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
 }

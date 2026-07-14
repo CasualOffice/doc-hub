@@ -397,13 +397,50 @@ async fn upload_rejects_forbidden_extension() {
     }
 }
 
+/// A minimal but valid ZIP (empty archive: an End-Of-Central-Directory record).
+/// Enough to satisfy the `PK` magic sniff that all OOXML kinds share.
+const EMPTY_ZIP: &[u8] = &[
+    0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
+
 #[tokio::test]
-async fn upload_still_accepts_macro_enabled_office_files() {
-    // .docm / .xlsm / .pptm are intentionally allowed per CLAUDE.md —
-    // accepted as opaque blobs, never auto-opened in the editor.
+async fn upload_accepts_xlsm_but_rejects_off_allowlist_macro_formats() {
+    // The authoritative documents-only allowlist (CLAUDE.md) includes `xlsm`
+    // (opaque, never auto-opened) but NOT `docm` / `pptm`. `xlsm` still has to
+    // pass the OOXML magic sniff — a real ZIP container, not arbitrary bytes.
     let app = router(fixture().await);
     let cookie = sign_in(&app).await;
-    for name in ["doc.docm", "sheet.xlsm", "deck.pptm"] {
+
+    // xlsm with a valid ZIP body → accepted, stored with the macro-Excel mime.
+    let boundary = "----testboundary-xlsm";
+    let body = build_multipart(
+        boundary,
+        &[MultipartField::File(
+            "file",
+            "sheet.xlsm",
+            "application/octet-stream",
+            EMPTY_ZIP,
+        )],
+    );
+    let r = app
+        .clone()
+        .oneshot(auth_req(
+            "POST",
+            "/api/files",
+            &cookie,
+            Some(&format!("multipart/form-data; boundary={boundary}")),
+            Body::from(body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK, "xlsm should upload OK");
+    assert_eq!(
+        json_body(r).await["content_type"],
+        "application/vnd.ms-excel.sheet.macroEnabled.12"
+    );
+
+    // docm / pptm are not on the allowlist → 415 regardless of content.
+    for name in ["doc.docm", "deck.pptm"] {
         let boundary = "----testboundary-macro";
         let body = build_multipart(
             boundary,
@@ -411,7 +448,7 @@ async fn upload_still_accepts_macro_enabled_office_files() {
                 "file",
                 name,
                 "application/octet-stream",
-                b"blob",
+                EMPTY_ZIP,
             )],
         );
         let r = app
@@ -425,7 +462,12 @@ async fn upload_still_accepts_macro_enabled_office_files() {
             ))
             .await
             .unwrap();
-        assert_eq!(r.status(), StatusCode::OK, "{name} should upload OK");
+        assert_eq!(
+            r.status(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "{name} should be rejected as off-allowlist"
+        );
+        assert_eq!(json_body(r).await["error"], "file type not allowed");
     }
 }
 
@@ -514,9 +556,9 @@ async fn upload_throttles_burst_with_429_and_retry_after() {
 
 #[tokio::test]
 async fn upload_rejects_executable_disguised_as_text() {
-    // First 4 bytes of a Windows PE file: "MZ\x90\x00". The .txt
-    // extension would otherwise pass the extension blocklist; magic-byte
-    // sniffing catches the lie.
+    // A .txt name carrying Windows PE bytes ("MZ\x90..."). The extension is
+    // allowlisted, but text formats must be valid UTF-8 — the 0x90 byte isn't,
+    // so the magic-byte sniff catches the lie as a content mismatch.
     let app = router(fixture().await);
     let cookie = sign_in(&app).await;
     let mut payload = Vec::with_capacity(128);
@@ -545,17 +587,17 @@ async fn upload_rejects_executable_disguised_as_text() {
         .await
         .unwrap();
     assert_eq!(r.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
-    let body = json_body(r).await;
-    assert_eq!(body["error"], "file type not allowed");
-    // Sniffer reports the real extension regardless of the filename.
-    assert_eq!(body["extension"], "exe");
+    assert_eq!(
+        json_body(r).await["error"],
+        "file content does not match its extension"
+    );
 }
 
 #[tokio::test]
-async fn upload_sniffs_real_content_type_and_stores_it() {
-    // 8-byte PNG magic header + minimal IHDR-ish bytes so infer picks
-    // it up. The client lies and says "application/octet-stream";
-    // server should override with the sniffed "image/png".
+async fn upload_rejects_off_allowlist_extension_even_with_known_magic() {
+    // A .bin carrying real PNG magic. `bin` isn't a document type, so the
+    // allowlist rejects it at the extension gate regardless of content — this
+    // is a document registry, not general file storage.
     let app = router(fixture().await);
     let cookie = sign_in(&app).await;
     let mut payload = Vec::with_capacity(64);
@@ -583,9 +625,46 @@ async fn upload_sniffs_real_content_type_and_stores_it() {
         ))
         .await
         .unwrap();
+    assert_eq!(r.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    let body = json_body(r).await;
+    assert_eq!(body["error"], "file type not allowed");
+    assert_eq!(body["extension"], "bin");
+}
+
+#[tokio::test]
+async fn upload_stores_authoritative_content_type_over_client_claim() {
+    // The client lies with "application/octet-stream" for a real .docx (valid
+    // OOXML ZIP). The server stores the canonical, sniffed document mime — the
+    // one signal the uploader can't forge — not the client header.
+    let app = router(fixture().await);
+    let cookie = sign_in(&app).await;
+
+    let boundary = "----testboundary-docx";
+    let body = build_multipart(
+        boundary,
+        &[MultipartField::File(
+            "file",
+            "report.docx",
+            "application/octet-stream",
+            EMPTY_ZIP,
+        )],
+    );
+    let r = app
+        .clone()
+        .oneshot(auth_req(
+            "POST",
+            "/api/files",
+            &cookie,
+            Some(&format!("multipart/form-data; boundary={boundary}")),
+            Body::from(body),
+        ))
+        .await
+        .unwrap();
     assert_eq!(r.status(), StatusCode::OK);
-    let dto = json_body(r).await;
-    assert_eq!(dto["content_type"], "image/png");
+    assert_eq!(
+        json_body(r).await["content_type"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
 }
 
 #[tokio::test]

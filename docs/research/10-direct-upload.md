@@ -194,7 +194,7 @@ function shouldDirectUpload(file) {
 |---|---|
 | `files.upload_url_minted` | `size`, `content_type`, `workspace_id` |
 | `files.upload_completed` | `size`, `etag`, `content_hash`, `sniffed_type`, `direct=true` |
-| `files.upload_rejected` | `reason` (`disallowed_type` / `sniff_mismatch`) |
+| `files.upload_rejected` | `reason=forbidden_content`, `kind` (the offending extension, or `content_mismatch` / `no_extension` / `empty`), `direct=true` |
 | `files.upload_aborted` | `reason` (best-effort string from the SPA) |
 | `files.upload_stale_swept` | (background janitor) |
 

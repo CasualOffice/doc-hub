@@ -916,7 +916,6 @@ dependencies = [
  "hmac",
  "http-body-util",
  "hyper",
- "infer",
  "jsonwebtoken",
  "mime_guess",
  "rust-embed",
