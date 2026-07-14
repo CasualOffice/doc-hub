@@ -509,6 +509,126 @@ async fn quota_counts_uploading_rows() {
 }
 
 #[tokio::test]
+async fn complete_rechecks_quota_against_real_size() {
+    // The client presigned a tiny 100-byte upload (which passed the quota
+    // gate) but PUT 2 KB of real bytes to the signed URL. `complete` must
+    // re-check against the REAL size, reject with 413, and roll back the
+    // object + row so the workspace isn't billed for bytes it can't keep.
+    let state = fixture().await;
+    let ws = personal_ws(&state, "admin").await;
+    let users = UserRepo::new(&state.db);
+    let user = users.find_by_username("admin").await.unwrap();
+    users.set_quota(&user.id, Some(1_000)).await.unwrap();
+
+    let id = ulid::Ulid::new().to_string();
+    FileRepo::new(&state.db)
+        .insert(&NewFile {
+            id: id.clone(),
+            parent_id: None,
+            name: "sneaky.txt".into(),
+            size: 0,
+            content_type: Some("text/plain".into()),
+            etag: None,
+            owner_id: user.id.clone(),
+            workspace_id: ws,
+            project_id: None,
+            storage_id: None,
+            status: FileStatus::Uploading,
+            // Declared 100 bytes at presign — well under the 1 000-byte quota.
+            expected_size: Some(100),
+        })
+        .await
+        .unwrap();
+
+    // But the bucket actually holds 2 KB.
+    let storage = state.registry.default_storage();
+    storage
+        .put(
+            &format!("files/{id}"),
+            bytes::Bytes::from_static(b"x".repeat(2_000).leak()),
+            Some("text/plain"),
+        )
+        .await
+        .unwrap();
+
+    let app = router(state.clone());
+    let cookie = sign_in(&app, "admin").await;
+    let (st, body) = json_send(
+        &app,
+        &cookie,
+        "POST",
+        &format!("/api/files/{id}/complete"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(body["quota_bytes"], 1_000);
+
+    // Rollback is `tokio::spawn`'d; give it a beat to land.
+    tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+    assert!(
+        FileRepo::new(&state.db).find_by_id(&id).await.is_err(),
+        "over-quota upload row should be rolled back"
+    );
+}
+
+#[tokio::test]
+async fn complete_within_quota_still_succeeds() {
+    // Guard against a false-positive quota gate: a legitimate upload whose
+    // real size fits the quota must still finalize. This also proves the
+    // self-row subtraction — `used` counts this row's expected_size, which we
+    // remove before comparing so the row isn't double-billed.
+    let state = fixture().await;
+    let ws = personal_ws(&state, "admin").await;
+    let users = UserRepo::new(&state.db);
+    let user = users.find_by_username("admin").await.unwrap();
+    users.set_quota(&user.id, Some(10_000)).await.unwrap();
+
+    let id = ulid::Ulid::new().to_string();
+    FileRepo::new(&state.db)
+        .insert(&NewFile {
+            id: id.clone(),
+            parent_id: None,
+            name: "fits.txt".into(),
+            size: 0,
+            content_type: Some("text/plain".into()),
+            etag: None,
+            owner_id: user.id.clone(),
+            workspace_id: ws,
+            project_id: None,
+            storage_id: None,
+            status: FileStatus::Uploading,
+            expected_size: Some(1_024),
+        })
+        .await
+        .unwrap();
+
+    let storage = state.registry.default_storage();
+    storage
+        .put(
+            &format!("files/{id}"),
+            bytes::Bytes::from_static(b"x".repeat(1_024).leak()),
+            Some("text/plain"),
+        )
+        .await
+        .unwrap();
+
+    let app = router(state);
+    let cookie = sign_in(&app, "admin").await;
+    let (st, body) = json_send(
+        &app,
+        &cookie,
+        "POST",
+        &format!("/api/files/{id}/complete"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(body["status"], "ready");
+    assert_eq!(body["size"], 1_024);
+}
+
+#[tokio::test]
 async fn complete_rejects_executable_via_post_finalize_sniff() {
     // §13.6a — drop an uploading row, PUT real ELF magic bytes into
     // storage, hit /complete, expect 415 + the row gone + the object
