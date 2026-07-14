@@ -42,6 +42,29 @@ pub(crate) async fn sign_in(
     if !state.allow_password_auth {
         return Err(AuthError::PasswordAuthDisabled);
     }
+
+    // Brute-force throttle, keyed by username. Checked BEFORE the Argon2 verify
+    // so a throttled guess costs no hashing work (CPU-DoS defense too). The
+    // bucket self-heals and a correct password clears it, so normal use is
+    // unaffected.
+    let throttle_key = crate::throttle::throttle_key(&body.username);
+    if !crate::throttle::login_throttle().allow(&throttle_key) {
+        AuditRepo::emit(
+            &state.db,
+            NewAuditEvent {
+                actor_id: None,
+                actor_username: None,
+                action: "auth.sign_in_throttled".into(),
+                target_kind: Some("user".into()),
+                target_id: None,
+                target_name: Some(body.username.clone()),
+                ip_address: None,
+                metadata: None,
+            },
+        );
+        return Err(AuthError::RateLimited);
+    }
+
     // Constant-time-ish: do the hash compare regardless of whether the user
     // exists, so timing doesn't disclose existence. We do this by always
     // verifying against a known-bad hash if the user lookup fails.
@@ -71,9 +94,13 @@ pub(crate) async fn sign_in(
                     metadata: None,
                 },
             );
+            crate::throttle::login_throttle().record_failure(&throttle_key);
             return Err(AuthError::InvalidCredentials);
         }
     };
+
+    // Correct password — clear any accumulated failures for this username.
+    crate::throttle::login_throttle().record_success(&throttle_key);
 
     // Mint session
     let sid = generate_session_id();
