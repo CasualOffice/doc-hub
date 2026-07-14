@@ -386,6 +386,58 @@ pub(crate) async fn complete(
     // mirrors back whatever the client sent at PUT; same untrusted source).
     let authoritative_ct = kind.mime_type();
 
+    // Authoritative quota gate. Presign checked the *declared* size against
+    // the then-current usage, but that gate leaks two ways: (a) concurrent
+    // presigns race — each runs its check before inserting its `uploading`
+    // row, so neither counts the other's in-flight bytes — and (b) the client
+    // can PUT more bytes to the signed URL than it declared. Re-check here
+    // against `meta.size` (the real bytes the bucket holds) before committing;
+    // roll back the object + row on breach so the workspace isn't billed for
+    // bytes it can't keep. Best-effort like the presign gate — not fully
+    // atomic under simultaneous completes — but it closes the declared-size
+    // and over-presign holes.
+    let me = dochub_db::UserRepo::new(&s.db)
+        .find_by_id(&session.user_id)
+        .await
+        .map_err(|e| DirectError::Internal(e.to_string()))?;
+    if let Some(quota) = me.quota_bytes {
+        let used_incl = repo
+            .workspace_used_bytes(&workspace_id)
+            .await
+            .map_err(|e| DirectError::Internal(e.to_string()))?;
+        // `used_incl` already counts THIS still-`uploading` row via its
+        // `expected_size`; subtract it so we compare the projected post-commit
+        // total, not double-count.
+        let used = used_incl.saturating_sub(row.expected_size.unwrap_or(0));
+        if used + meta.size > quota {
+            // Mirror the forbidden-content rollback: object + row both go away.
+            let s2 = s.clone();
+            let key2 = key.clone();
+            let row_id = row.id.clone();
+            tokio::spawn(async move {
+                let _ = storage.delete(&key2).await;
+                let _ = FileRepo::new(&s2.db).delete_by_id(&row_id).await;
+            });
+            AuditRepo::emit(
+                &s.db,
+                NewAuditEvent {
+                    actor_id: Some(session.user_id.clone()),
+                    actor_username: Some(session.username.clone()),
+                    action: "files.upload_rejected".into(),
+                    target_kind: Some("file".into()),
+                    target_id: Some(row.id.clone()),
+                    target_name: Some(row.name.clone()),
+                    ip_address: None,
+                    metadata: Some(format!(
+                        r#"{{"reason":"quota","used_bytes":{used},"quota_bytes":{quota},"size":{},"direct":true}}"#,
+                        meta.size
+                    )),
+                },
+            );
+            return Err(DirectError::QuotaExceeded { used, quota });
+        }
+    }
+
     let finalized = repo
         .mark_uploaded(
             &row.id,

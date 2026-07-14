@@ -63,7 +63,9 @@ A committed document is a hash-chained version. Direct upload introduces a pendi
    └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Filtering.** Every list/search/editor path excludes `status != 'ready'` rows — an `uploading` object has no committed version yet. Quota math counts uploading rows against the workspace cap (committed at presign) so two parallel uploads can't both squeeze under the limit.
+**Filtering.** Every list/search/editor path excludes `status != 'ready'` rows — an `uploading` object has no committed version yet. Quota math counts uploading rows against the workspace cap via `expected_size`.
+
+**Quota is gated twice — the second gate is authoritative.** The presign check (`used + declared_size <= quota`) is best-effort only: it runs *before* the `uploading` row is inserted, so two concurrent presigns each pass without seeing the other, and the client can `PUT` more bytes to the signed URL than it declared — critically, those bytes go straight to storage and bypass the app's `RequestBodyLimitLayer`, so the declared-vs-actual gap is unbounded on this path. `complete` therefore re-checks against `stat().size` (the real bytes the bucket holds), subtracting the row's own `expected_size` so it isn't double-billed, and rolls back the object + row on breach (`413`). This is still best-effort under simultaneous *completes* (no cross-row lock), but it closes the over-presign and lied-about-size holes. Covered by `tests/direct_upload.rs::complete_rechecks_quota_against_real_size`.
 
 **Stale uploads.** A background janitor (already scheduled hourly by `sessions::delete_expired`) sweeps `status='uploading' AND created_at < now() - 1h`, deleting the row + best-effort the object. The hook is in place; v0 ships it active because a failed sniff or dropped client leaves orphans that must not linger.
 
@@ -126,9 +128,10 @@ Workspace-member scoped. Body empty.
 2. `storage.stat(key)` against the resolved adapter.
    - 404 → row stays `uploading`, return 404 (client retries the PUT).
 3. **Decrypt-and-sniff (mandatory).** Read the first ~4 KiB via the adapter, unwrap the content key, decrypt, run `infer` magic-byte sniff + extension allowlist. On mismatch → delete the object, mark the row rejected (or delete it), emit `files.upload_rejected`, return `415`.
-4. Compute `content_hash = SHA-256(ciphertext)` (streaming read) and **append version v1** to `file_versions` (`prev_hash = NULL`, the chain root). Update the row: `size = stat.size`, `etag = stat.etag`, `content_type` = sniffed type, `status = 'ready'`, clear `expected_size`.
-5. Emit `files.upload_completed` audit event.
-6. Return the standard `FileDto`.
+4. **Authoritative quota re-check.** With the real `stat().size` known, verify `used_bytes(workspace) − this_row.expected_size + stat.size <= quota`. On breach → delete the object + row, emit `files.upload_rejected` (`reason=quota`), return `413`. This is the gate that actually holds: the presign check is racy and trusts the declared size (see *Quota is gated twice*).
+5. Compute `content_hash = SHA-256(ciphertext)` (streaming read) and **append version v1** to `file_versions` (`prev_hash = NULL`, the chain root). Update the row: `size = stat.size`, `etag = stat.etag`, `content_type` = sniffed type, `status = 'ready'`, clear `expected_size`.
+6. Emit `files.upload_completed` audit event.
+7. Return the standard `FileDto`.
 
 ### `POST /api/files/{id}/abort` — cancel
 
