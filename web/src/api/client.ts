@@ -692,6 +692,37 @@ export async function getAdminSystem(): Promise<AdminSystem> {
   return request<AdminSystem>("/api/admin/system");
 }
 
+// ─── Admin: audit log export (Phase 4) ────────────────────────────────
+// `GET /api/admin/audit/export` — the complete hash-chained audit log as a
+// self-verifiable report. Verify offline with `dochub verify-audit`.
+
+export interface AuditExportRow {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  action: string;
+  target_kind: string | null;
+  target_id: string | null;
+  target_name: string | null;
+  ip_address: string | null;
+  metadata: string | null;
+  prev_hash: string | null;
+  entry_hash: string;
+}
+
+export interface AuditExport {
+  generated_at: string;
+  count: number;
+  /** `"intact"` or `"broken_at_<index>"` — the server's verdict at export. */
+  chain_status: string;
+  events: AuditExportRow[];
+}
+
+export async function getAuditExport(): Promise<AuditExport> {
+  return request<AuditExport>("/api/admin/audit/export");
+}
+
 // ─── Admin: user management + quota allocation ────────────────────────
 
 export interface AdminUser {
