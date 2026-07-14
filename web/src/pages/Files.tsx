@@ -44,7 +44,7 @@ import {
 import { useActiveWorkspaceId } from "../state/WorkspaceContext.tsx";
 import { SearchToolbar } from "../components/SearchToolbar.tsx";
 import { generateThumbnail } from "../api/thumbnail.ts";
-import { forbiddenUploadExtension } from "../api/uploadPolicy.ts";
+import { disallowedUploadExtension } from "../api/uploadPolicy.ts";
 import { EmptyState, EmptyStateButton } from "../components/EmptyState.tsx";
 import { SkeletonRow, VAULT_GRID } from "../components/ds/SkeletonRow.tsx";
 import { EntryContextMenu, EntryKebab, type Entry as MenuEntry, type EntryMenuHandlers } from "../components/EntryMenu.tsx";
@@ -701,17 +701,23 @@ export function Files({
       const all = Array.from(files);
       if (all.length === 0) return;
 
-      // Client-side blocklist — save the round-trip when we already know
-      // the server will refuse. The server enforces the same list.
-      const blocked = all.filter((f) => forbiddenUploadExtension(f.name) !== null);
-      const list = all.filter((f) => forbiddenUploadExtension(f.name) === null);
+      // Client-side allowlist — save the round-trip when we already know the
+      // server will refuse. Doc-Hub is documents-only; the server enforces the
+      // same allowlist (plus a byte-level sniff we can't do here).
+      const blocked = all.filter((f) => disallowedUploadExtension(f.name) !== null);
+      const list = all.filter((f) => disallowedUploadExtension(f.name) === null);
       if (blocked.length > 0) {
         const exts = Array.from(
-          new Set(blocked.map((f) => `.${forbiddenUploadExtension(f.name)}`)),
+          new Set(
+            blocked.map((f) => {
+              const ext = disallowedUploadExtension(f.name);
+              return ext ? `.${ext}` : "(no extension)";
+            }),
+          ),
         ).join(", ");
         toast.error(
-          `${blocked.length} blocked: ${exts}`,
-          { description: "These file types can't be uploaded for security reasons." },
+          `${blocked.length} not supported: ${exts}`,
+          { description: "Only documents can go in the hub — spreadsheets, docs, PDFs, and text." },
         );
       }
       if (list.length === 0) return;

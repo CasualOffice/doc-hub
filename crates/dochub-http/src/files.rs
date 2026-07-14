@@ -45,6 +45,11 @@ pub(crate) enum FilesError {
     Conflict(String),
     #[error("forbidden extension: {0}")]
     ForbiddenExtension(String),
+    /// 415 / 400 — the documents-only ingest allowlist rejected this upload
+    /// (disallowed extension, content not matching the extension, missing
+    /// extension, or empty body). See `dochub_core::ingest`.
+    #[error(transparent)]
+    Ingest(#[from] dochub_core::ingest::IngestError),
     #[error("editor not configured: {0}")]
     EditorUnconfigured(&'static str),
     /// 413 — would exceed the per-user storage cap. Carries the cap so
@@ -90,6 +95,47 @@ impl IntoResponse for FilesError {
                 }),
             )
                 .into_response(),
+            Self::Ingest(e) => {
+                use dochub_core::ingest::IngestError as I;
+                match e {
+                    // A disallowed / missing extension is a rejected *type*: 415,
+                    // carrying the offending extension so the SPA can say
+                    // "we don't accept .mp4" inline.
+                    I::DisallowedExtension(ext) => (
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        Json(ExtErrBody {
+                            error: "file type not allowed",
+                            extension: ext,
+                        }),
+                    )
+                        .into_response(),
+                    I::MissingExtension => (
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        Json(ExtErrBody {
+                            error: "file type not allowed",
+                            extension: String::new(),
+                        }),
+                    )
+                        .into_response(),
+                    // Extension is allowlisted but the bytes don't match it — a
+                    // disguised file. Also 415, distinct message.
+                    I::ContentMismatch => (
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        Json(ErrBody {
+                            error: "file content does not match its extension",
+                        }),
+                    )
+                        .into_response(),
+                    // Empty upload is a malformed request, not a type problem.
+                    I::EmptyInput => (
+                        StatusCode::BAD_REQUEST,
+                        Json(ErrBody {
+                            error: "empty file",
+                        }),
+                    )
+                        .into_response(),
+                }
+            }
             Self::EditorUnconfigured(app) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(ExtErrBody {
@@ -475,69 +521,13 @@ async fn open_in_editor(
     }))
 }
 
-/// Extensions refused at upload time. See docs/ux/07-preview-surface.md
-/// §"Upload restrictions". Office macro-enabled formats (.docm/.xlsm/.pptm)
-/// are intentionally NOT here — per CLAUDE.md they're allowed as opaque
-/// blobs and never auto-opened in an editor.
-const FORBIDDEN_UPLOAD_EXTENSIONS: &[&str] = &[
-    // Windows scripts / executables
-    "exe", "com", "scr", "bat", "cmd", "msi", "msp", "ps1", "psm1", "vbs", "vbe", "wsf", "wsh",
-    "jse", "reg", "lnk", "scf", // POSIX shells / runnable bundles
-    "sh", "bash", "zsh", "fish", "csh", "ksh", "command", "app", "dmg", "pkg",
-    // Runtime artefacts
-    "jar", "class", "dll", "so", "dylib", // Shortcut-style files that resolve elsewhere
-    "url", "desktop",
-];
-
-/// Magic-byte sniff. Catches files lying about their extension by
-/// inspecting the first ~few bytes. Returns the detected MIME type (which
-/// the caller should store as authoritative content-type, not what the
-/// client claimed), or `None` when the bytes don't match any known type
-/// (plain text / unknown binary).
-///
-/// Returns `Err(FilesError::ForbiddenExtension)` when the detected type
-/// is an executable / runnable artefact — independent of filename.
-pub(crate) fn sniff_and_check_content_type(
-    bytes: &[u8],
-) -> Result<Option<&'static str>, FilesError> {
-    let Some(kind) = infer::get(bytes) else {
-        return Ok(None);
-    };
-    // The executable matcher set in `infer`'s `app` namespace covers PE
-    // (Windows .exe), Mach-O (macOS), ELF (Linux), Java .class, .wasm,
-    // installers (msi/dmg/pkg), and a few cousins. Reject all.
-    if infer::app::is_exe(bytes)
-        || infer::app::is_dll(bytes)
-        || infer::app::is_elf(bytes)
-        || infer::app::is_mach(bytes)
-        || infer::app::is_java(bytes)
-        || infer::app::is_dex(bytes)
-        || infer::app::is_dey(bytes)
-        || infer::app::is_wasm(bytes)
-        || infer::app::is_coff(bytes)
-        || infer::app::is_llvm(bytes)
-    {
-        return Err(FilesError::ForbiddenExtension(kind.extension().into()));
-    }
-    Ok(Some(kind.mime_type()))
-}
-
-/// Returns `Err(FilesError::ForbiddenExtension)` if the last dotted
-/// extension of `filename` is in the upload blocklist. Case-insensitive.
-pub(crate) fn check_upload_extension(filename: &str) -> Result<(), FilesError> {
-    let lower = filename.to_ascii_lowercase();
-    let Some(idx) = lower.rfind('.') else {
-        return Ok(());
-    };
-    let ext = &lower[idx + 1..];
-    if ext.is_empty() {
-        return Ok(());
-    }
-    if FORBIDDEN_UPLOAD_EXTENSIONS.contains(&ext) {
-        return Err(FilesError::ForbiddenExtension(ext.to_string()));
-    }
-    Ok(())
-}
+// Ingest validation is the authoritative documents-only allowlist +
+// magic-byte sniff in `dochub_core::ingest`. Both upload paths funnel through
+// it: the proxy multipart handler below calls `ingest::guard` (extension +
+// sniff in one shot, bytes in hand); the direct-to-storage path calls
+// `ingest::allowed_extension` at presign (no bytes yet) and the full
+// `ingest::guard` at finalize. There is no per-handler copy of the list — see
+// CLAUDE.md "Ingest is allowlisted + sniffed".
 
 // ─── Handlers ───────────────────────────────────────────────────────────
 
@@ -802,13 +792,13 @@ async fn upload_file(
         .ok_or_else(|| FilesError::Validation("missing file field with filename".into()))?;
     let bytes = file_bytes.ok_or_else(|| FilesError::Validation("missing file bytes".into()))?;
     let name = sanitise_display_name(&filename)?;
-    check_upload_extension(&name)?;
-    // Magic-byte sniff: rejects executables masquerading as .txt and
-    // overrides the client-asserted content_type with what the bytes
-    // actually are. `None` (e.g. plain text or unknown binary) keeps
-    // the client header — extension-based MIME guess from the browser
-    // is the next-best signal there.
-    let sniffed = sniff_and_check_content_type(&bytes)?;
+    // Documents-only ingest gate: extension must be on the allowlist AND the
+    // leading bytes must match the format the extension claims (executables
+    // disguised as .txt, a .docx that isn't a ZIP, etc. are rejected — never
+    // quarantined). The resolved kind's canonical MIME is the authoritative
+    // content-type we store, not the client-asserted header the user can fake.
+    let kind = dochub_core::ingest::guard(&name, &bytes)?;
+    let sniffed = Some(kind.mime_type());
 
     if let Some(pid) = &parent_id {
         FolderRepo::new(&s.db)

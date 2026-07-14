@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use crate::{
-    files::{sniff_and_check_content_type, storage_key, FileDto, FilesError},
+    files::{storage_key, FileDto},
     HttpState,
 };
 
@@ -169,8 +169,16 @@ pub(crate) async fn presign(
 ) -> Result<(StatusCode, Json<PresignResp>), DirectError> {
     let name = crate::files::sanitise_display_name(&body.name)
         .map_err(|e| DirectError::Validation(e.to_string()))?;
-    crate::files::check_upload_extension(&name)
-        .map_err(|e| DirectError::Validation(e.to_string()))?;
+    // Documents-only allowlist — extension half only, since no bytes exist at
+    // presign time. The full magic-byte sniff runs at `complete` once the
+    // object has landed (§13.6a). A disallowed extension is a rejected type
+    // (415); a name with no extension is a malformed request (400).
+    dochub_core::ingest::allowed_extension(&name).map_err(|e| match e {
+        dochub_core::ingest::IngestError::DisallowedExtension(ext) => {
+            DirectError::ForbiddenContent(ext)
+        }
+        other => DirectError::Validation(other.to_string()),
+    })?;
 
     if body.size == 0 {
         return Err(DirectError::Validation("size must be > 0".into()));
@@ -315,13 +323,13 @@ pub(crate) async fn complete(
         other => DirectError::Internal(format!("stat: {other}")),
     })?;
 
-    // §13.6a — post-finalize magic-byte sniff. The bucket received
+    // §13.6a — post-finalize documents-only guard. The bucket received
     // the bytes directly from the client; the server never inspected
     // them until now. Fetch the first 4 KB via the same adapter (one
-    // extra range-GET; sub-100 ms on S3 / fs / memory), run `infer`,
-    // and either reject (executables) or update the authoritative
-    // content_type when the sniff disagrees with what the client
-    // claimed at presign time.
+    // extra range-GET; sub-100 ms on S3 / fs / memory) and run the full
+    // allowlist + magic-byte sniff. This closes the presign gap: the
+    // extension was checked at presign, but only here can we confirm the
+    // bytes actually match a documents-only format.
     let sniff_end = SNIFF_BYTES.min(meta.size.max(1));
     let head_bytes = if meta.size == 0 {
         Vec::new()
@@ -340,8 +348,10 @@ pub(crate) async fn complete(
         buf.to_vec()
     };
 
-    let sniffed = sniff_and_check_content_type(&head_bytes).map_err(|e| match e {
-        FilesError::ForbiddenExtension(ext) => {
+    let kind = match dochub_core::ingest::guard(&row.name, &head_bytes) {
+        Ok(k) => k,
+        Err(e) => {
+            let reason = ingest_reason(&e);
             // Roll back: object + row both go away so the caller sees
             // a clean failure and the workspace isn't billed for the
             // bytes still in the bucket.
@@ -363,30 +373,25 @@ pub(crate) async fn complete(
                     target_name: Some(row.name.clone()),
                     ip_address: None,
                     metadata: Some(format!(
-                        r#"{{"reason":"forbidden_content","kind":"{ext}","direct":true}}"#
+                        r#"{{"reason":"forbidden_content","kind":"{reason}","direct":true}}"#
                     )),
                 },
             );
-            DirectError::ForbiddenContent(ext)
+            return Err(DirectError::ForbiddenContent(reason));
         }
-        FilesError::Internal(m) => DirectError::Internal(m),
-        other => DirectError::Internal(format!("sniff: {other:?}")),
-    })?;
+    };
 
-    // Sniffed type wins over both the client's claim AND the storage
-    // adapter's response. (S3 mirrors back whatever the client sent
-    // as Content-Type at PUT; that's the same untrusted source.)
-    let authoritative_ct = sniffed
-        .map(str::to_string)
-        .or_else(|| meta.content_type.clone())
-        .or_else(|| row.content_type.clone());
+    // The guard's canonical MIME is authoritative — it wins over both the
+    // client's claim AND the storage adapter's echoed Content-Type (S3
+    // mirrors back whatever the client sent at PUT; same untrusted source).
+    let authoritative_ct = kind.mime_type();
 
     let finalized = repo
         .mark_uploaded(
             &row.id,
             meta.size,
             meta.etag.as_deref(),
-            authoritative_ct.as_deref(),
+            Some(authoritative_ct),
         )
         .await
         .map_err(|e| DirectError::Internal(e.to_string()))?;
@@ -404,7 +409,7 @@ pub(crate) async fn complete(
             metadata: Some(format!(
                 r#"{{"size":{},"sniffed_mime":{},"direct":true}}"#,
                 finalized.size,
-                serde_json::to_string(sniffed.unwrap_or("")).unwrap_or_else(|_| "\"\"".into()),
+                serde_json::to_string(authoritative_ct).unwrap_or_else(|_| "\"\"".into()),
             )),
         },
     );
@@ -492,6 +497,20 @@ async fn require_membership(
         return Err(DirectError::Forbidden);
     }
     Ok(())
+}
+
+/// A short, stable machine token for why the finalize guard rejected an
+/// upload — surfaced to the SPA in `ForbiddenContent` and recorded in the
+/// `files.upload_rejected` audit metadata. For a disallowed extension it's the
+/// extension itself (e.g. `mp4`); otherwise a fixed slug.
+fn ingest_reason(e: &dochub_core::ingest::IngestError) -> String {
+    use dochub_core::ingest::IngestError as I;
+    match e {
+        I::EmptyInput => "empty".into(),
+        I::MissingExtension => "no_extension".into(),
+        I::DisallowedExtension(ext) => ext.clone(),
+        I::ContentMismatch => "content_mismatch".into(),
+    }
 }
 
 pub(crate) fn router(state: HttpState) -> Router {

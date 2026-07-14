@@ -78,6 +78,33 @@ impl DocKind {
         })
     }
 
+    /// The canonical, authoritative MIME type for this kind. Handlers store
+    /// this on the file row rather than trusting the client-asserted
+    /// `Content-Type` — the extension has already been validated against the
+    /// allowlist and (for OOXML/PDF) confirmed by the magic-byte sniff, so this
+    /// is the only content-type the uploader cannot forge.
+    ///
+    /// OOXML disambiguation is by extension (the sniff only proves "ZIP"), so
+    /// `xlsm` carries the macro-enabled Excel type; `docm`/`pptm` are not on the
+    /// allowlist at all and never reach this function.
+    #[must_use]
+    pub fn mime_type(self) -> &'static str {
+        match self {
+            Self::Docx => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            Self::Xlsx => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            Self::Xlsm => "application/vnd.ms-excel.sheet.macroEnabled.12",
+            Self::Pptx => {
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            }
+            Self::Pdf => "application/pdf",
+            Self::Md => "text/markdown",
+            Self::Txt => "text/plain",
+            Self::Csv => "text/csv",
+            Self::Json => "application/json",
+            Self::Yaml => "application/yaml",
+        }
+    }
+
     /// The magic-byte family this kind is sniffed against.
     fn sniff(self) -> Sniff {
         match self {
@@ -135,9 +162,7 @@ pub fn guard(name: &str, head_bytes: &[u8]) -> Result<DocKind, IngestError> {
         return Err(IngestError::EmptyInput);
     }
 
-    let ext = extension(name).ok_or(IngestError::MissingExtension)?;
-    let kind = DocKind::from_extension(&ext)
-        .ok_or_else(|| IngestError::DisallowedExtension(ext.clone()))?;
+    let kind = allowed_extension(name)?;
 
     let matches = match kind.sniff() {
         // OOXML formats share the ZIP `PK` magic; the extension disambiguates.
@@ -152,6 +177,25 @@ pub fn guard(name: &str, head_bytes: &[u8]) -> Result<DocKind, IngestError> {
     } else {
         Err(IngestError::ContentMismatch)
     }
+}
+
+/// Extension-only half of [`guard`]: validates `name`'s extension against the
+/// documents-only allowlist and resolves it to a [`DocKind`], **without** a
+/// magic-byte sniff.
+///
+/// This exists for ingest paths that must decide before any bytes are in hand —
+/// notably presigning a direct-to-storage PUT, where the extension is the only
+/// signal available. Such paths **must** still run the full [`guard`] once the
+/// bytes land (e.g. at finalize) so the content is confirmed to match; the
+/// extension check alone is not sufficient enforcement.
+///
+/// # Errors
+///
+/// - [`IngestError::MissingExtension`] — `name` has no usable extension.
+/// - [`IngestError::DisallowedExtension`] — extension not on [`ALLOWED_EXTENSIONS`].
+pub fn allowed_extension(name: &str) -> Result<DocKind, IngestError> {
+    let ext = extension(name).ok_or(IngestError::MissingExtension)?;
+    DocKind::from_extension(&ext).ok_or(IngestError::DisallowedExtension(ext))
 }
 
 /// Extracts the lowercase extension from a filename, or `None` when there is no
@@ -266,6 +310,52 @@ mod tests {
                 guard(name, bytes),
                 Err(expected.clone()),
                 "expected {name} to be rejected with {expected:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn allowed_extension_accepts_allowlist_and_rejects_rest() {
+        // Extension-only gate (presign path): resolves allowlisted names,
+        // rejects everything else — no bytes involved.
+        assert_eq!(allowed_extension("report.pdf"), Ok(DocKind::Pdf));
+        assert_eq!(allowed_extension("macro.xlsm"), Ok(DocKind::Xlsm));
+        assert_eq!(allowed_extension("Notes.MD"), Ok(DocKind::Md));
+        assert_eq!(
+            allowed_extension("clip.mp4"),
+            Err(IngestError::DisallowedExtension("mp4".into()))
+        );
+        // Macro-enabled Word/PowerPoint are NOT on the allowlist (only xlsm is).
+        assert_eq!(
+            allowed_extension("doc.docm"),
+            Err(IngestError::DisallowedExtension("docm".into()))
+        );
+        assert_eq!(
+            allowed_extension("deck.pptm"),
+            Err(IngestError::DisallowedExtension("pptm".into()))
+        );
+        assert_eq!(
+            allowed_extension("README"),
+            Err(IngestError::MissingExtension)
+        );
+    }
+
+    #[test]
+    fn mime_type_is_canonical_per_kind() {
+        // Every kind has a stable, non-empty canonical MIME; the OOXML trio is
+        // distinct and xlsm is the macro-enabled Excel type.
+        assert_eq!(DocKind::Pdf.mime_type(), "application/pdf");
+        assert_eq!(DocKind::Txt.mime_type(), "text/plain");
+        assert_eq!(DocKind::Json.mime_type(), "application/json");
+        assert_eq!(
+            DocKind::Xlsm.mime_type(),
+            "application/vnd.ms-excel.sheet.macroEnabled.12"
+        );
+        for ext in ALLOWED_EXTENSIONS {
+            let kind = DocKind::from_extension(ext).unwrap();
+            assert!(
+                kind.mime_type().contains('/'),
+                "`{ext}` has a malformed mime",
             );
         }
     }

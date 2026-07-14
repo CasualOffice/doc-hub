@@ -45,7 +45,7 @@ The version being previewed is labelled (`v4`) so a viewer knows which point in 
 
 ## Ingest — allowlist first (the actual product rule)
 
-Two layers of defense. The **allowlist is the gate**; the blocklist and byte-sniff are complementary hardening. Client-side checks are for UX (immediate toast); the **server-side check is authoritative** and runs on every path (proxy and direct-to-storage).
+Two checks, one gate. The **allowlist decides the type**; the **magic-byte sniff confirms the bytes match it**. Both live in `dochub_core::ingest` (`guard`) — there is no per-handler copy. Client-side checks are for UX (immediate toast); the **server-side check is authoritative** and runs on every path (proxy multipart and direct-to-storage).
 
 ### Allowlist (authoritative — `CLAUDE.md` scope)
 
@@ -59,21 +59,15 @@ Notes:
 
 - `.xlsm` / `.pptx` are allowed but **opaque** — they never auto-open in an editor and preview only as a glyph + Download.
 - The check is on the **last** dotted extension of the filename — `report.tar.gz` → `gz` (rejected, not a document), `budget.xlsx.exe` → `exe` (rejected).
-- **Magic-byte sniffing** runs alongside: even an allowlisted extension is rejected if the bytes disagree (a `.pdf` that's actually a PE/ELF/Mach-O/zip-bomb is refused). The sniffed MIME overrides the client-asserted `content_type`, so the stored row is trustworthy.
+- **Magic-byte sniffing** runs alongside: even an allowlisted extension is rejected if the bytes disagree (a `.pdf` that's actually a PE/ELF/Mach-O, a `.docx` that isn't a ZIP, a `.txt` that isn't valid UTF-8). The resolved kind's canonical MIME is what gets stored — never the client-asserted `content_type`, which the uploader can fake — so the stored row is trustworthy.
 
-### Blocklist (belt-and-suspenders)
+### No separate blocklist — the allowlist subsumes it
 
-Executable and script extensions are additionally, explicitly refused before the allowlist even applies, so an obviously-bad name fails fast:
-
-```
-exe, com, scr, bat, cmd, msi, msp, ps1, psm1, vbs, vbe, wsf, wsh, jse,
-reg, lnk, scf, sh, bash, zsh, fish, csh, ksh, command,
-app, dmg, pkg, jar, class, dll, so, dylib, url, desktop
-```
+There is no executable/script denylist to maintain. An `.exe`, `.sh`, `.dll`, `.dmg`, etc. is rejected simply because it isn't on the allowlist, and a document-typed name carrying executable bytes (e.g. `report.pdf` with PE/ELF magic) is rejected by the sniff. A closed allowlist is strictly stronger than any denylist could be: nothing off-list gets in, so there is no obviously-bad name to enumerate.
 
 ### Server response
 
-`POST /api/files` (or `/api/projects/{id}/files`) with a non-document type returns **415 Unsupported Media Type** with `{"error":"file type not allowed","extension":"mp4"}`. The SPA shows a toast: *"Only documents can go in the hub — `.mp4` isn't supported."* For blocklisted executables: *"`.exe` files can't be uploaded for security reasons."*
+`POST /api/files` (or `/api/projects/{id}/files`) with a non-document type returns **415 Unsupported Media Type** with `{"error":"file type not allowed","extension":"mp4"}`. A document-typed name whose bytes don't match returns **415** with `{"error":"file content does not match its extension"}`. The SPA shows a toast: *"Only documents can go in the hub — `.mp4` isn't supported."* — or, for a content mismatch, *"That file's contents don't match its `.pdf` extension."*
 
 ## Security notes
 
