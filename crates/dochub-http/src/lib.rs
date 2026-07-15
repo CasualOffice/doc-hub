@@ -368,6 +368,33 @@ fn panic_detail(err: &(dyn std::any::Any + Send)) -> String {
     }
 }
 
+/// How often the reaper runs, and how long a bucket may sit idle before it's
+/// dropped. The TTL is well past the full-refill time of every limiter
+/// (upload: 60s, AI: 100s), so an evicted bucket is always full — eviction is
+/// lossless, the next request for that key just recreates it at capacity.
+const LIMITER_REAP_INTERVAL: Duration = Duration::from_secs(300);
+const LIMITER_IDLE_TTL: Duration = Duration::from_secs(900);
+
+/// Periodically evict idle rate-limiter buckets so the in-memory maps don't
+/// grow without bound on a long-running multi-user instance — otherwise one
+/// bucket per distinct user/key lingers for the life of the process. Mirrors
+/// [`spawn_indexer`] / `PresenceHub::spawn_sweep`; the caller holds the handle
+/// to abort it on shutdown.
+#[must_use]
+pub fn spawn_limiter_reaper(state: HttpState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(LIMITER_REAP_INTERVAL);
+        // The first `interval` tick fires immediately; skip it — nothing has
+        // accumulated at boot.
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            crate::ai::ai_limiter().evict_idle(LIMITER_IDLE_TTL);
+            state.upload_limiter.evict_idle(LIMITER_IDLE_TTL);
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{on_panic, panic_detail, probe_ok, READYZ_PROBE_TIMEOUT};
