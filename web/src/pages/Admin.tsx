@@ -9,7 +9,7 @@
  * affordances — never fabricated counts. Read-only system data is unchanged
  * (getAdminSystem → /api/admin/system).
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Activity as ActivityIcon,
   Download,
@@ -19,6 +19,7 @@ import {
   KeyRound,
   Link as LinkIcon,
   Lock,
+  RotateCw,
   ScrollText,
   ShieldCheck,
   Users,
@@ -40,7 +41,8 @@ type State =
 export function Admin({ onNavigate }: { onNavigate: (target: "activity") => void }) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setState({ kind: "loading" });
     void getAdminSystem()
       .then((system) => setState({ kind: "ready", system }))
       .catch((err: ApiError) => {
@@ -48,6 +50,10 @@ export function Admin({ onNavigate }: { onNavigate: (target: "activity") => void
         else setState({ kind: "error", message: err.message ?? "Couldn't load admin." });
       });
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div style={{ flex: 1, overflowY: "auto", background: "var(--bg-canvas)", padding: "var(--space-6)" }}>
@@ -57,7 +63,13 @@ export function Admin({ onNavigate }: { onNavigate: (target: "activity") => void
         {state.kind === "loading" && <Skeletons />}
         {state.kind === "forbidden" && <ForbiddenNotice />}
         {state.kind === "error" && (
-          <div role="alert" style={errBox}>{state.message}</div>
+          <div role="alert" style={errBox}>
+            <span>{state.message}</span>
+            <Button variant="secondary" size="sm" onClick={() => load()} style={{ alignSelf: "flex-start" }}>
+              <RotateCw size={14} strokeWidth={STROKE} />
+              Try again
+            </Button>
+          </div>
         )}
         {state.kind === "ready" && <Body system={state.system} onNavigate={onNavigate} />}
       </div>
@@ -541,7 +553,10 @@ function Row({
 }
 
 const errBox: React.CSSProperties = {
-  padding: "var(--space-2) var(--space-3)",
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-2)",
+  padding: "var(--space-3)",
   background: "rgba(220,38,38,0.06)",
   border: "var(--border-w) solid var(--status-danger-700)",
   borderRadius: "var(--radius-md)",

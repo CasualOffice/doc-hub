@@ -1107,6 +1107,8 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
 
   if (p === "/api/admin/system" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
+    // Force the admin overview to fail when the demo error flag is set.
+    if (forceErrorEnabled()) throw makeError(503, "demo: forced load error");
     const recent = state.events
       .filter((e) => e.action === "auth.sign_in" || e.action === "auth.sign_in_failed")
       .slice(0, 10)
@@ -1166,16 +1168,8 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
 
   if (p === "/api/activity" && method === "GET") {
     if (!state.signedIn) throw makeError(401, "not signed in");
-    // `cd-demo-force-error=1` makes the activity listing fail so the surface's
-    // load-error state (and its "Try again" retry) can be exercised in e2e.
-    // A retry after clearing the flag recovers. Shared with the Files listing.
-    let forceError = false;
-    try {
-      forceError = window.localStorage.getItem("cd-demo-force-error") === "1";
-    } catch {
-      /* storage blocked — proceed normally */
-    }
-    if (forceError) throw makeError(503, "demo: forced load error");
+    // Force the activity listing to fail when the demo error flag is set.
+    if (forceErrorEnabled()) throw makeError(503, "demo: forced load error");
     const before = url.searchParams.get("before");
     const limit = Math.max(
       1,
@@ -1203,16 +1197,8 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
 
   // ─── Folders ─────────────────────────────────────────────────────────
   if (p === "/api/folders/root/children" && method === "GET") {
-    // `cd-demo-force-error=1` makes the root listing fail so the Files
-    // load-error state (and its "Try again" retry) can be exercised in e2e.
-    // A retry after clearing the flag recovers.
-    let forceError = false;
-    try {
-      forceError = window.localStorage.getItem("cd-demo-force-error") === "1";
-    } catch {
-      /* storage blocked — proceed normally */
-    }
-    if (forceError) throw makeError(503, "demo: forced load error");
+    // Force the Files listing to fail when the demo error flag is set.
+    if (forceErrorEnabled()) throw makeError(503, "demo: forced load error");
     return listChildren(null) as unknown as T;
   }
   const folderMatch = p.match(/^\/api\/folders\/([^/]+)$/);
@@ -1927,4 +1913,17 @@ function makeError(status: number, message: string) {
   err.status = status;
   err.body = { error: message };
   return err;
+}
+
+/** `cd-demo-force-error=1` makes select GET listings fail so the SPA's
+ *  load-error + "Try again" retry surfaces can be exercised in e2e. A retry
+ *  after the flag is cleared recovers. Shared by the Files, Activity, and
+ *  Admin listings. */
+function forceErrorEnabled(): boolean {
+  try {
+    return window.localStorage.getItem("cd-demo-force-error") === "1";
+  } catch {
+    /* storage blocked — proceed normally */
+    return false;
+  }
 }
