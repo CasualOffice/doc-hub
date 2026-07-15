@@ -24,7 +24,12 @@
 
 use std::time::Instant;
 
-use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Response};
+use axum::{
+    extract::Request,
+    http::{HeaderMap, StatusCode},
+    middleware::Next,
+    response::Response,
+};
 use dochub_auth::AuthSession;
 
 /// Wrap every request with a timer + emit a structured access-log event
@@ -53,6 +58,15 @@ pub async fn access_log(req: Request, next: Next) -> Response {
 
     let status = resp.status();
     crate::metrics::record_end(status.as_u16());
+
+    // Orchestrators and scrapers hit the probe endpoints every few seconds;
+    // logging each successful one buries real traffic and inflates log cost.
+    // Suppress successful probes only — a failing probe is still logged (below),
+    // which is exactly what an operator needs to see. Metrics already counted it.
+    if is_noisy_probe(uri.path(), status) {
+        return resp;
+    }
+
     let duration_us = start.elapsed().as_micros();
     let path_redacted = redact_query(uri.path(), uri.query());
     // Post-handler chance to pick up the user (handlers can set it
@@ -99,6 +113,16 @@ pub async fn access_log(req: Request, next: Next) -> Response {
     }
 
     resp
+}
+
+/// The liveness/readiness/metrics endpoints are polled by orchestrators
+/// and scrapers on a tight interval (Kubernetes defaults to every 10s per
+/// probe; Prometheus every 15s). At steady state they'd dominate the
+/// access log with zero diagnostic value. Suppress them — but only when
+/// they *succeed*: a 5xx from `/readyz` is exactly the signal an operator
+/// is looking for, so those still fall through to the log block.
+fn is_noisy_probe(path: &str, status: StatusCode) -> bool {
+    matches!(path, "/healthz" | "/readyz" | "/metrics") && !status.is_server_error()
 }
 
 /// Use the upstream `X-Request-Id` if the reverse proxy sets one
@@ -190,6 +214,32 @@ mod tests {
     fn redact_handles_empty_value() {
         let out = redact_query("/x", Some("token=&q=foo"));
         assert_eq!(out, "/x?token=***&q=foo");
+    }
+
+    #[test]
+    fn noisy_probe_suppresses_successful_probes() {
+        for path in ["/healthz", "/readyz", "/metrics"] {
+            assert!(is_noisy_probe(path, StatusCode::OK));
+            assert!(is_noisy_probe(path, StatusCode::NO_CONTENT));
+        }
+    }
+
+    #[test]
+    fn noisy_probe_keeps_failing_probes() {
+        // A 5xx from a probe is the whole point of having logs — never suppress.
+        assert!(!is_noisy_probe("/readyz", StatusCode::SERVICE_UNAVAILABLE));
+        assert!(!is_noisy_probe(
+            "/healthz",
+            StatusCode::INTERNAL_SERVER_ERROR
+        ));
+    }
+
+    #[test]
+    fn noisy_probe_ignores_non_probe_paths() {
+        assert!(!is_noisy_probe("/api/files", StatusCode::OK));
+        assert!(!is_noisy_probe("/", StatusCode::OK));
+        // Not a prefix match — only the exact probe paths qualify.
+        assert!(!is_noisy_probe("/healthz/deep", StatusCode::OK));
     }
 
     #[test]
