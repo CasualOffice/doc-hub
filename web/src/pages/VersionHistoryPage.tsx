@@ -7,8 +7,8 @@
  * fetched via GET /api/files/{id} on refresh / deep-link) so the header
  * can name the document, then hands off to <VersionHistory>.
  */
-import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, RotateCw } from "lucide-react";
 
 import { getFile, type FileDto } from "../api/client.ts";
 import { VersionHistory } from "../components/VersionHistory.tsx";
@@ -48,21 +48,19 @@ export function VersionHistoryPage({ fileId }: { fileId: string }) {
     return seeded ? { kind: "ready", file: seeded } : { kind: "loading" };
   });
 
+  const load = useCallback(async () => {
+    setState({ kind: "loading" });
+    try {
+      const file = await getFile(fileId);
+      setState({ kind: "ready", file });
+    } catch (err) {
+      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [fileId]);
+
   useEffect(() => {
-    if (state.kind !== "loading") return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const file = await getFile(fileId);
-        if (!cancelled) setState({ kind: "ready", file });
-      } catch (err) {
-        if (!cancelled)
-          setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    // Cold path only — the hot path seeds `ready` from history.state.
+    if (state.kind === "loading") void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
 
@@ -140,7 +138,29 @@ export function VersionHistoryPage({ fileId }: { fileId: string }) {
         <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", minHeight: 0 }}>
           {state.kind === "error" ? (
             <div role="alert" style={{ fontSize: "var(--text-sm)", color: "var(--fg-default)" }}>
-              Couldn't open version history — {state.message}
+              <p style={{ margin: 0 }}>Couldn't open version history — {state.message}</p>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="press-sink"
+                style={{
+                  marginTop: 12,
+                  padding: "8px 14px",
+                  border: "var(--border-w) solid var(--border)",
+                  background: "var(--bg-surface)",
+                  color: "var(--ink)",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "var(--text-sm)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <RotateCw size={14} strokeWidth={1.5} />
+                Try again
+              </button>
             </div>
           ) : (
             <VersionHistory fileId={fileId} fileName={fileName} variant="full" />

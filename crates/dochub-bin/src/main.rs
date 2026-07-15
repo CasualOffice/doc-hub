@@ -145,12 +145,67 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(addr = %bind, "listening");
     // Graceful shutdown: on SIGTERM (rolling deploy / `docker stop`) or SIGINT
     // (Ctrl-C), stop accepting new connections and let in-flight requests finish
-    // instead of cutting them mid-flight.
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
-    tracing::info!("shutdown complete");
+    // instead of cutting them mid-flight — but only up to `DRAIN_TIMEOUT`, so a
+    // single hung connection can't hold the process open past the orchestrator's
+    // grace period (see `run_with_drain_cap`).
+    let server = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal());
+    match run_with_drain_cap(server, shutdown_signal(), DRAIN_TIMEOUT).await? {
+        DrainOutcome::Drained => tracing::info!("shutdown complete"),
+        DrainOutcome::TimedOut => tracing::warn!(
+            timeout_s = DRAIN_TIMEOUT.as_secs(),
+            "drain timeout exceeded; exiting with in-flight requests still open"
+        ),
+    }
     Ok(())
+}
+
+/// How long we wait for in-flight requests to finish after a termination
+/// signal before giving up and exiting anyway. Kept comfortably under the
+/// common 30s orchestrator grace period (k8s `terminationGracePeriodSeconds`)
+/// so we exit 0 on our own terms rather than being SIGKILLed mid-drain.
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(25);
+
+/// Outcome of a bounded graceful shutdown.
+#[derive(Debug, PartialEq, Eq)]
+enum DrainOutcome {
+    /// The server drained all in-flight requests on its own.
+    Drained,
+    /// The drain cap elapsed first; some requests were still in flight.
+    TimedOut,
+}
+
+/// Run a server's graceful-shutdown future, but cap the post-signal drain.
+///
+/// `serve_fut` resolves only once the server has stopped accepting connections
+/// **and** every in-flight request has finished. Without a bound, one stuck
+/// connection (a slow client, a wedged long-poll) blocks that indefinitely
+/// until the orchestrator's grace period expires and SIGKILL cuts *everything*
+/// — including healthy requests that were about to complete. `signal_fut`
+/// resolves the moment we're asked to terminate; only then does the
+/// `drain_timeout` clock start. Whichever finishes first wins.
+async fn run_with_drain_cap<A>(
+    serve_fut: A,
+    signal_fut: impl std::future::Future<Output = ()>,
+    drain_timeout: Duration,
+) -> std::io::Result<DrainOutcome>
+where
+    // `IntoFuture` (not `Future`) so axum's `WithGracefulShutdown` — which
+    // implements the former — is accepted directly; every `Future` satisfies
+    // it too via the standard-library blanket impl, so the tests' async blocks
+    // work unchanged.
+    A: std::future::IntoFuture<Output = std::io::Result<()>>,
+{
+    let serve_fut = serve_fut.into_future();
+    let drain_cap = async {
+        signal_fut.await;
+        tokio::time::sleep(drain_timeout).await;
+    };
+    tokio::pin!(serve_fut);
+    tokio::pin!(drain_cap);
+    tokio::select! {
+        res = &mut serve_fut => { res?; Ok(DrainOutcome::Drained) }
+        () = &mut drain_cap => Ok(DrainOutcome::TimedOut),
+    }
 }
 
 /// Resolves when the process is asked to terminate — SIGINT (Ctrl-C) or, on
@@ -453,6 +508,57 @@ mod tests {
         let joined = tokio::time::timeout(Duration::from_secs(5), server).await;
         assert!(joined.is_ok(), "serve did not shut down within 5s");
         assert!(joined.unwrap().unwrap().is_ok(), "serve returned an error");
+    }
+
+    /// A server that drains on its own (before any signal-triggered cap) is
+    /// reported as a clean drain — the cap must not fire while it's idle.
+    #[tokio::test]
+    async fn drain_cap_reports_clean_drain() {
+        let out = super::run_with_drain_cap(
+            async { Ok(()) },             // server drains immediately
+            std::future::pending::<()>(), // no termination signal
+            Duration::from_millis(50),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out, super::DrainOutcome::Drained);
+    }
+
+    /// When a connection is stuck (server future never resolves) and the signal
+    /// has fired, the drain cap trips instead of hanging forever.
+    #[tokio::test]
+    async fn drain_cap_trips_on_hung_connection() {
+        let out = super::run_with_drain_cap(
+            std::future::pending::<std::io::Result<()>>(), // never drains
+            async {},                                      // signal already fired
+            Duration::from_millis(20),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out, super::DrainOutcome::TimedOut);
+    }
+
+    /// The cap clock only starts *after* the signal — a slow-to-signal shutdown
+    /// still lets the server drain cleanly once it finally gets the chance.
+    #[tokio::test]
+    async fn drain_cap_does_not_start_before_signal() {
+        let (tx, rx) = oneshot::channel::<()>();
+        let out = super::run_with_drain_cap(
+            async {
+                // Server only finishes after it observes the signal, and takes
+                // longer than the cap *from process start* — but the cap is armed
+                // by the signal, not by start, so this still counts as drained.
+                let _ = rx.await;
+                Ok(())
+            },
+            async move {
+                tx.send(()).unwrap();
+            },
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out, super::DrainOutcome::Drained);
     }
 
     #[test]
