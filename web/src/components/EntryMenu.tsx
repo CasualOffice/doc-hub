@@ -5,11 +5,16 @@
  *   - <EntryContextMenu /> wraps a target to enable right-click.
  *   - <EntryKebab />       renders a button that opens the same items.
  *
- * Wired in v0:                 Open, Preview, Rename, Download, See details,
- *                              Version history, Move to trash.
- * Stubbed (toast "Coming…"):   Share, Move, Make a copy.
+ * Wired in v0:                 Open, Preview, Share, Rename, Download,
+ *                              See details, Version history, Move to trash.
+ * Stubbed (toast "Coming…"):   Move, Make a copy.
  *
- * Folders get a trimmed menu (no Preview / Download / Details / Share).
+ * Each OPTIONAL item renders only when the caller wires its handler. A surface
+ * that doesn't provide one (e.g. the fullscreen kebab, which owns Share/Details
+ * in its header and has no use for Preview) simply omits that item — never a
+ * lying "coming soon" toast or a silent no-op for a feature that actually ships.
+ * Folders get a trimmed menu (no Preview / Download / Details / Share) for free,
+ * since Files only wires those handlers for files.
  */
 import {
   Copy,
@@ -63,42 +68,52 @@ function buildGroups(entry: Entry, h: EntryMenuHandlers): Group[] {
   const primary: ItemDef[] = [
     { label: "Open", icon: <ExternalLink size={14} strokeWidth={1.8} />, onSelect: h.onOpen, shortcut: "↵" },
   ];
-  if (isFile) {
+  if (isFile && h.onPreview) {
     primary.push({
       label: "Preview",
       icon: <Eye size={14} strokeWidth={1.8} />,
-      onSelect: h.onPreview ?? (() => {}),
+      onSelect: h.onPreview,
       shortcut: "Space",
     });
   }
 
-  const collab: ItemDef[] = [
-    {
+  // Share is a shipped feature — show it only where the caller wires it (never
+  // a "coming soon" stub). Move / Make a copy are genuinely unbuilt, so they
+  // keep the honest stub toast.
+  const collab: ItemDef[] = [];
+  if (h.onShare) {
+    collab.push({
       label: "Share…",
       icon: <Share2 size={14} strokeWidth={1.8} />,
-      onSelect: h.onShare ?? (() => stub("Sharing")),
-    },
-    { label: "Move…", icon: <FolderInput size={14} strokeWidth={1.8} />, onSelect: () => stub("Move") },
-    { label: "Make a copy", icon: <Copy size={14} strokeWidth={1.8} />, onSelect: () => stub("Make a copy") },
-    { label: "Rename", icon: <Pencil size={14} strokeWidth={1.8} />, onSelect: h.onRename, shortcut: "F2" },
-  ];
+      onSelect: h.onShare,
+    });
+  }
+  collab.push({ label: "Move…", icon: <FolderInput size={14} strokeWidth={1.8} />, onSelect: () => stub("Move") });
+  collab.push({ label: "Make a copy", icon: <Copy size={14} strokeWidth={1.8} />, onSelect: () => stub("Make a copy") });
+  collab.push({ label: "Rename", icon: <Pencil size={14} strokeWidth={1.8} />, onSelect: h.onRename, shortcut: "F2" });
 
+  // Download / See details / Version history all ship — render each only when
+  // wired, so an unwired surface hides it instead of showing a dead no-op.
   const meta: ItemDef[] = [];
-  if (isFile) {
+  if (isFile && h.onDownload) {
     meta.push({
       label: "Download",
       icon: <Download size={14} strokeWidth={1.8} />,
-      onSelect: h.onDownload ?? (() => {}),
+      onSelect: h.onDownload,
     });
+  }
+  if (isFile && h.onDetails) {
     meta.push({
       label: "See details",
       icon: <Info size={14} strokeWidth={1.8} />,
-      onSelect: h.onDetails ?? (() => {}),
+      onSelect: h.onDetails,
     });
+  }
+  if (isFile && h.onHistory) {
     meta.push({
       label: "Version history",
       icon: <History size={14} strokeWidth={1.8} />,
-      onSelect: h.onHistory ?? (() => stub("Version history")),
+      onSelect: h.onHistory,
       shortcut: "H",
     });
   }

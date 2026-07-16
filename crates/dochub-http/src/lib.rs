@@ -73,7 +73,7 @@ use tower_http::{catch_panic::CatchPanicLayer, set_header::SetResponseHeaderLaye
 
 use crate::{
     headers::{
-        APP_CSP, HSTS, H_CSP, H_HSTS, H_PP, H_REF, H_XCTO, PERMISSIONS_POLICY, REFERRER_POLICY,
+        app_csp, HSTS, H_CSP, H_HSTS, H_PP, H_REF, H_XCTO, PERMISSIONS_POLICY, REFERRER_POLICY,
         UCN_CSP,
     },
     host_dispatch::{host_dispatch, Origin},
@@ -282,10 +282,14 @@ fn app_origin_router(state: HttpState) -> Router {
         // instead of dropping the connection with no response. Innermost of the
         // response layers so the security headers below still decorate the 500.
         .layer(CatchPanicLayer::custom(on_panic))
-        // Security headers (app-origin profile).
+        // Security headers (app-origin profile). The CSP is computed from
+        // config so `connect-src` can name the (usually cross-origin) collab
+        // WebSocket origin; the header value is pure ASCII so `try_from` can't
+        // realistically fail.
         .layer(SetResponseHeaderLayer::overriding(
             H_CSP,
-            HeaderValue::from_static(APP_CSP),
+            HeaderValue::try_from(app_csp(state.config.collab_url.as_ref()))
+                .expect("app CSP is a valid header value"),
         ))
         .layer(SetResponseHeaderLayer::overriding(
             H_XCTO,

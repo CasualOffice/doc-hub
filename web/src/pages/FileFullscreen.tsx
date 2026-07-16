@@ -500,6 +500,12 @@ function FullscreenHeader({
               },
               onTrash,
               onDownload,
+              // Wire Share + Details to the same surfaces the header buttons
+              // open, so the kebab isn't a dead "Sharing is coming in v0.2"
+              // stub / no-op next to working buttons. Preview is intentionally
+              // omitted — you're already viewing the file.
+              onShare: () => setShareOpen(true),
+              onDetails: onOpenDetails,
               onHistory: () => {
                 const url = `/document/${encodeURIComponent(file.id)}/history`;
                 window.history.pushState({ file }, "", url);
