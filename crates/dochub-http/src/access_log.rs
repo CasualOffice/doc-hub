@@ -39,7 +39,7 @@ pub async fn access_log(req: Request, next: Next) -> Response {
     let start = Instant::now();
     let method = req.method().clone();
     let uri = req.uri().clone();
-    let request_id = request_id(req.headers());
+    let request_id = resolve_request_id(req.headers());
     // Same extractor the auth handlers use for audit source IPs — one source
     // of truth for "who is the client" (see dochub_auth::client_ip).
     let client_ip = dochub_auth::client_ip(req.headers());
@@ -54,7 +54,17 @@ pub async fn access_log(req: Request, next: Next) -> Response {
         .map(|s| s.user_id.clone());
 
     crate::metrics::record_start();
-    let resp = next.run(req).await;
+    let mut resp = next.run(req).await;
+
+    // Echo the request id back so a client can quote it when reporting a
+    // failure and an operator can grep for it. Don't clobber one an inner
+    // handler already set. `request_id` is a ULID or a validated upstream
+    // header, so `from_str` won't fail — but guard anyway.
+    if !resp.headers().contains_key("x-request-id") {
+        if let Ok(v) = axum::http::HeaderValue::from_str(&request_id) {
+            resp.headers_mut().insert("x-request-id", v);
+        }
+    }
 
     let status = resp.status();
     crate::metrics::record_end(status.as_u16());
@@ -94,7 +104,7 @@ pub async fn access_log(req: Request, next: Next) -> Response {
             user_id = user_id.as_deref().unwrap_or(""),
             workspace_id = workspace_id.unwrap_or(""),
             client_ip = client_ip.as_deref().unwrap_or(""),
-            request_id = request_id.as_deref().unwrap_or(""),
+            request_id = %request_id,
             "access",
         );
     } else {
@@ -107,7 +117,7 @@ pub async fn access_log(req: Request, next: Next) -> Response {
             user_id = user_id.as_deref().unwrap_or(""),
             workspace_id = workspace_id.unwrap_or(""),
             client_ip = client_ip.as_deref().unwrap_or(""),
-            request_id = request_id.as_deref().unwrap_or(""),
+            request_id = %request_id,
             "access",
         );
     }
@@ -125,14 +135,22 @@ fn is_noisy_probe(path: &str, status: StatusCode) -> bool {
     matches!(path, "/healthz" | "/readyz" | "/metrics") && !status.is_server_error()
 }
 
-/// Use the upstream `X-Request-Id` if the reverse proxy sets one
-/// (Cloudflare / Fly / Nginx all do); otherwise None — the operator
-/// can correlate by (timestamp, user_id, path).
-fn request_id(headers: &HeaderMap) -> Option<String> {
+/// Longest upstream `X-Request-Id` we'll trust verbatim. A trusted proxy sets
+/// a short id; a direct client could inject a huge one to bloat every log line,
+/// so anything over this is dropped in favour of a fresh id.
+const MAX_UPSTREAM_REQUEST_ID: usize = 128;
+
+/// Resolve the request id: reuse a sane upstream `X-Request-Id` (Cloudflare /
+/// Fly / Nginx all set one) so a trace spans the proxy hop; otherwise mint a
+/// fresh ULID so every request is correlatable even without a proxy. Always
+/// returns a value — the id is logged and echoed back on the response.
+fn resolve_request_id(headers: &HeaderMap) -> String {
     headers
         .get("x-request-id")
         .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= MAX_UPSTREAM_REQUEST_ID)
+        .map_or_else(|| ulid::Ulid::new().to_string(), str::to_string)
 }
 
 /// Best-effort extract `workspace_id` from common URL patterns. Returns
@@ -183,6 +201,71 @@ const SENSITIVE_PARAMS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn headers_with(id: Option<&str>) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        if let Some(v) = id {
+            h.insert("x-request-id", v.parse().unwrap());
+        }
+        h
+    }
+
+    #[test]
+    fn resolve_request_id_reuses_sane_upstream() {
+        assert_eq!(
+            resolve_request_id(&headers_with(Some("abc-123"))),
+            "abc-123"
+        );
+    }
+
+    #[test]
+    fn resolve_request_id_mints_a_ulid_when_absent_or_bad() {
+        // No header → a fresh 26-char ULID.
+        let fresh = resolve_request_id(&headers_with(None));
+        assert_eq!(fresh.len(), 26);
+        // Blank / whitespace-only → also minted.
+        assert_eq!(resolve_request_id(&headers_with(Some("   "))).len(), 26);
+        // Absurdly long upstream id → ignored, minted instead.
+        let huge = "x".repeat(MAX_UPSTREAM_REQUEST_ID + 1);
+        assert_eq!(resolve_request_id(&headers_with(Some(&huge))).len(), 26);
+        // Two mints differ.
+        assert_ne!(
+            resolve_request_id(&headers_with(None)),
+            resolve_request_id(&headers_with(None))
+        );
+    }
+
+    #[tokio::test]
+    async fn access_log_echoes_a_request_id_on_the_response() {
+        use axum::{body::Body, http::Request, routing::get, Router};
+        use tower::ServiceExt;
+
+        let app = Router::new()
+            .route("/x", get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(access_log));
+
+        // No upstream id → the response carries a freshly-minted one.
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri("/x").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let minted = resp.headers().get("x-request-id").expect("id echoed");
+        assert_eq!(minted.to_str().unwrap().len(), 26);
+
+        // Upstream id → echoed verbatim so the trace spans the proxy hop.
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/x")
+                    .header("x-request-id", "trace-42")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.headers().get("x-request-id").unwrap(), "trace-42");
+    }
 
     #[test]
     fn redact_replaces_sensitive_values_only() {
