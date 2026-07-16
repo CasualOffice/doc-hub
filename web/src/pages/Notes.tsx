@@ -533,7 +533,17 @@ function TreeView({
             <div
               className={`notes-tree-row${activeId === c.id ? " active" : ""}`}
               style={{ paddingLeft: 8 + depth * 14 }}
+              role="button"
+              tabIndex={0}
+              aria-current={activeId === c.id ? "true" : undefined}
+              aria-label={`Open ${c.title || "Untitled"}`}
               onClick={() => onPick(c.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onPick(c.id);
+                }
+              }}
             >
               <span className="notes-tree-bullet" aria-hidden="true" />
               <span className="notes-tree-title">{c.title || "Untitled"}</span>
@@ -597,7 +607,17 @@ function SearchResults({
           <div
             className={`notes-tree-row${activeId === r.id ? " active" : ""}`}
             style={{ paddingLeft: 8 }}
+            role="button"
+            tabIndex={0}
+            aria-current={activeId === r.id ? "true" : undefined}
+            aria-label={`Open ${r.title}`}
             onClick={() => onPick(r.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPick(r.id);
+              }
+            }}
           >
             <Search size={11} strokeWidth={1.7} style={{ color: "var(--muted-2)" }} />
             <span className="notes-tree-title">{r.title}</span>

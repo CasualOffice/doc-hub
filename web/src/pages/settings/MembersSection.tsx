@@ -36,9 +36,11 @@ export function MembersSection() {
   const [members, setMembers] = useState<WorkspaceMember[] | null>(null);
   const [invitations, setInvitations] = useState<InvitationListEntry[] | null>(null);
   const [confirming, setConfirming] = useState<InvitationListEntry | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!workspaceId) return;
+    setLoadError(false);
     try {
       const [wsList, m, invs] = await Promise.all([
         listWorkspaces(),
@@ -51,6 +53,9 @@ export function MembersSection() {
       setInvitations(invs);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Couldn't load workspace members";
+      // Surface it in-place too — a toast fades, but the cards would otherwise
+      // sit on "Loading…" forever and read as hung.
+      setLoadError(true);
       toast.error(message);
     }
   }, [workspaceId]);
@@ -86,6 +91,23 @@ export function MembersSection() {
             This is your personal workspace — it's just for you. To collaborate, switch to a team
             workspace or create one from the workspace switcher in the sidebar.
           </p>
+        </SettingsCard>
+      ) : loadError && members === null ? (
+        <SettingsCard title="Active">
+          <div
+            role="alert"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+              fontSize: "var(--text-sm)",
+              color: "var(--fg-muted)",
+            }}
+          >
+            <span>Couldn't load members.</span>
+            <Button onClick={() => void refresh()}>Try again</Button>
+          </div>
         </SettingsCard>
       ) : (
         <>

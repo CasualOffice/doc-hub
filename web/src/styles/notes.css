@@ -167,6 +167,15 @@
   background: var(--bg-hover);
 }
 
+/* Keyboard focus — the row is a `role="button"` (Enter/Space opens the note),
+   so keyboard users need a visible focus ring. Mouse clicks don't trigger
+   `:focus-visible`, so it stays out of the pointer path. */
+.notes-tree-row:focus-visible {
+  outline: 2px solid var(--violet-500);
+  outline-offset: -2px;
+  background: var(--bg-hover);
+}
+
 /* Active row — violet tint fill + a 2px violet left marker + bold label
    (neobrutalist nav identity, spec §5). */
 .notes-tree-row.active {
