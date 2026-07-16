@@ -184,13 +184,13 @@ Each H2 carries **Rule / Why / How / Phase**. The threat model, OWASP walkthroug
 
 ## 11. HTTP-level hardening
 
-**Rule.** Every app-origin response carries `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`, `X-Content-Type-Options: nosniff`, and a strict CSP.
+**Rule.** Every app-origin response carries `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Opener-Policy: same-origin-allow-popups`, `Cross-Origin-Resource-Policy: same-site`, and a strict CSP.
 
-**Why.** HSTS pins HTTPS; `nosniff` blocks MIME confusion; CSP `frame-ancestors` replaces legacy `X-Frame-Options`; `Permissions-Policy` shrinks the powerful-features surface ([OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)).
+**Why.** HSTS pins HTTPS; `nosniff` blocks MIME confusion; CSP `frame-ancestors` replaces legacy `X-Frame-Options`; `Permissions-Policy` shrinks the powerful-features surface ([OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)). COOP isolates the app's browsing-context group (XS-Leak / tab-napping hardening) and CORP blocks cross-*site* embedding of app resources — bringing the app origin to parity with the user-content origin (§9), which already carries both. COOP is the `-allow-popups` variant so interactive auth that opens a login popup keeps its `window.opener` handle; we deliberately do **not** add COEP (`require-corp`) — it would demand every cross-origin subresource (Google's Material Symbols font, the collab handshake) advertise CORP/CORS, which they don't reliably, breaking the SPA. Cross-origin *isolation* is off by design; this is browsing-context isolation only.
 
 **The framing catch.** Embedded editors run inside the SPA on the app origin (same-origin iframes) — `frame-ancestors 'self'` covers them. Only the **optional** WOPI interop path needs an editor-owned iframe; those interop routes get a configurable `frame-ancestors <editor origins>` override. The user-content origin allows `frame-ancestors 'self' <editor origins>` for inline previews.
 
-**How.** `tower-http::set_header` stack (`SetResponseHeaderLayer`) on the app-origin router in `crates/dochub-http/src/lib.rs`, header values in `crates/dochub-http/src/headers.rs`, + per-route overrides for the WOPI interop routes. HSTS is **production-gated** (`config.is_prod`): the layer's make returns `None` outside prod, so a plain-http dev/test server never emits it and can't wedge a browser onto a non-existent localhost TLS endpoint. Covered by `tests/two_origin.rs` (`app_origin_sets_hsts_in_production`, `app_origin_omits_hsts_outside_production`).
+**How.** `tower-http::set_header` stack (`SetResponseHeaderLayer`) on the app-origin router in `crates/dochub-http/src/lib.rs`, header values in `crates/dochub-http/src/headers.rs`, + per-route overrides for the WOPI interop routes. HSTS is **production-gated** (`config.is_prod`): the layer's make returns `None` outside prod, so a plain-http dev/test server never emits it and can't wedge a browser onto a non-existent localhost TLS endpoint. Covered by `tests/two_origin.rs` (`app_origin_carries_strict_csp` asserts CSP + COOP + CORP; `app_origin_sets_hsts_in_production`, `app_origin_omits_hsts_outside_production`).
 
 **Phase.** v0 must-have.
 
@@ -307,7 +307,7 @@ From [OWASP Top 10 2021](https://owasp.org/Top10/2021/):
 - [ ] Editor access tokens scoped + short-TTL + per-call validation; document-id matches claim
 - [ ] HMAC-signed short-TTL `/raw/{token}` URLs for fs/memory shares; constant-time verify
 - [ ] `tracing` redaction allowlist; auth/document/share/retention events logged; no body/token/key/plaintext logging
-- [ ] HSTS, Referrer-Policy, Permissions-Policy on app origin
+- [ ] HSTS, Referrer-Policy, Permissions-Policy, COOP, CORP on app origin
 - [ ] `cargo audit` + `cargo deny` in CI; audited crypto crates only
 - [ ] `.env.example` complete; boot rejects default/short secrets; `DOCHUB_MASTER_KEY` required
 

@@ -73,8 +73,8 @@ use tower_http::{catch_panic::CatchPanicLayer, set_header::SetResponseHeaderLaye
 
 use crate::{
     headers::{
-        app_csp, HSTS, H_CSP, H_HSTS, H_PP, H_REF, H_XCTO, PERMISSIONS_POLICY, REFERRER_POLICY,
-        UCN_CSP,
+        app_csp, COOP_APP, CORP_APP, HSTS, H_COOP, H_CORP, H_CSP, H_HSTS, H_PP, H_REF, H_XCTO,
+        PERMISSIONS_POLICY, REFERRER_POLICY, UCN_CSP,
     },
     host_dispatch::{host_dispatch, Origin},
 };
@@ -302,6 +302,19 @@ fn app_origin_router(state: HttpState) -> Router {
         .layer(SetResponseHeaderLayer::overriding(
             H_PP,
             HeaderValue::from_static(PERMISSIONS_POLICY),
+        ))
+        // Cross-origin isolation of the app's browsing context + resources.
+        // The user-content origin already carries these (raw.rs); the app
+        // origin now matches so both origins are symmetrically hardened. See
+        // the `COOP_APP` / `CORP_APP` doc comments for the value rationale
+        // (notably why COOP is `-allow-popups` and why COEP stays off).
+        .layer(SetResponseHeaderLayer::overriding(
+            H_COOP,
+            HeaderValue::from_static(COOP_APP),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            H_CORP,
+            HeaderValue::from_static(CORP_APP),
         ))
         // HSTS — production only. `None` makes the layer a no-op so the dev/test
         // http server never pins localhost to HTTPS. `overriding` with an
