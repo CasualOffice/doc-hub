@@ -11,6 +11,33 @@ test.beforeEach(async ({ page }) => {
   await signInDemo(page);
 });
 
+test("grid exposes exactly one roving tab stop that follows focus", async ({ page }) => {
+  const items = page.locator("[data-entry-id]");
+  await expect(items.first()).toBeVisible();
+  // Roving tabindex (WAI-ARIA listbox): only one item is in the Tab order at a
+  // time — the rest are -1 and reached via the arrow keys. On load that's the
+  // first item.
+  await expect(page.locator('[data-entry-id][tabindex="0"]')).toHaveCount(1);
+  const firstId = await items.first().getAttribute("data-entry-id");
+  await expect(page.locator('[data-entry-id][tabindex="0"]')).toHaveAttribute(
+    "data-entry-id",
+    firstId ?? "",
+  );
+
+  // Moving focus moves the single tab stop with it.
+  await items.first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('[data-entry-id][tabindex="0"]')).toHaveCount(1);
+  const movedId = await page.evaluate(
+    () => document.activeElement?.getAttribute("data-entry-id") ?? null,
+  );
+  expect(movedId).not.toBe(firstId);
+  await expect(page.locator('[data-entry-id][tabindex="0"]')).toHaveAttribute(
+    "data-entry-id",
+    movedId ?? "",
+  );
+});
+
 test("arrow keys move focus between grid items", async ({ page }) => {
   const items = page.locator("[data-entry-id]");
   await expect(items.first()).toBeVisible();

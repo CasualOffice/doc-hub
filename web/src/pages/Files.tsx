@@ -255,6 +255,10 @@ export function Files({
   // Multi-select.
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  // Roving-tabindex focus: the id of the item that currently holds the single
+  // Tab stop (WAI-ARIA listbox pattern). Null until the user first focuses an
+  // item, at which point `activeEntryId` falls back to the first entry.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   // Track whether the latest load was a search vs a folder listing so we
   // know if the user's `query` is "live" against the rendered set.
@@ -1062,6 +1066,25 @@ export function Files({
     items[nextIdx]?.focus();
   }
 
+  // Keep the roving Tab stop on whichever item last held focus (arrow-move,
+  // click, or Tab-in). `onFocus` bubbles, so one handler on the container
+  // catches focus landing on any descendant item.
+  function onItemsFocus(e: React.FocusEvent<HTMLDivElement>) {
+    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-entry-id]");
+    if (el?.dataset.entryId) setFocusedId(el.dataset.entryId);
+  }
+
+  // Exactly one item carries `tabIndex=0`; the rest are `-1` and reachable
+  // only via the arrow keys. The active item is the last-focused one, or the
+  // first entry when nothing's been focused yet or the focused id has left the
+  // set (e.g. after a search narrows the list) — so Tab always has a target.
+  const activeEntryId =
+    filteredEntries.length === 0
+      ? null
+      : focusedId && filteredEntries.some((x) => entryId(x) === focusedId)
+        ? focusedId
+        : entryId(filteredEntries[0]);
+
   function handlersFor(entry: MenuEntry): EntryMenuHandlers {
     // `Open` → editor route for every file type. The FileFullscreen
     // page already branches on inferKind to mount the right SDK
@@ -1484,6 +1507,8 @@ export function Files({
               }}
               onEntryDoubleClick={openInEditorRoute}
               onItemsKeyDown={onItemsKeyDown}
+              onItemsFocus={onItemsFocus}
+              activeId={activeEntryId}
               handlersFor={handlersFor}
               drag={dragProps}
             />
@@ -1514,6 +1539,8 @@ export function Files({
                 setSelectionAnchor(id);
               }}
               onItemsKeyDown={onItemsKeyDown}
+              onItemsFocus={onItemsFocus}
+              activeId={activeEntryId}
               handlersFor={handlersFor}
               drag={dragProps}
             />
@@ -2541,18 +2568,22 @@ function GridView({
   entries,
   uploading,
   selection,
+  activeId,
   onEntryClick,
   onEntryDoubleClick,
   onItemsKeyDown,
+  onItemsFocus,
   handlersFor,
   drag,
 }: {
   entries: Entry[];
   uploading: string[];
   selection: Set<string>;
+  activeId?: string | null;
   onEntryClick: (e: React.MouseEvent, entry: Entry) => void;
   onEntryDoubleClick?: (entry: Entry) => void;
   onItemsKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onItemsFocus?: (e: React.FocusEvent<HTMLDivElement>) => void;
   handlersFor: (entry: MenuEntry) => EntryMenuHandlers;
   drag?: DragProps;
 }) {
@@ -2562,6 +2593,7 @@ function GridView({
       aria-label="Documents"
       aria-multiselectable="true"
       onKeyDown={onItemsKeyDown}
+      onFocus={onItemsFocus}
       style={{
         display: "grid",
         gridTemplateColumns: "var(--files-grid)",
@@ -2576,7 +2608,7 @@ function GridView({
             selected={selection.has(e.folder.id)}
             itemProps={{
               "data-entry-id": e.folder.id,
-              tabIndex: 0,
+              tabIndex: e.folder.id === activeId ? 0 : -1,
               role: "option",
               "aria-selected": selection.has(e.folder.id),
             }}
@@ -2598,7 +2630,7 @@ function GridView({
             selected={selection.has(e.file.id)}
             itemProps={{
               "data-entry-id": e.file.id,
-              tabIndex: 0,
+              tabIndex: e.file.id === activeId ? 0 : -1,
               role: "option",
               "aria-selected": selection.has(e.file.id),
             }}
@@ -3017,20 +3049,24 @@ function ListView({
   entries,
   uploading,
   selection,
+  activeId,
   onEntryClick,
   onEntryDoubleClick,
   onToggleSelect,
   onItemsKeyDown,
+  onItemsFocus,
   handlersFor,
   drag,
 }: {
   entries: Entry[];
   uploading: string[];
   selection: Set<string>;
+  activeId?: string | null;
   onEntryClick: (e: React.MouseEvent, entry: Entry) => void;
   onEntryDoubleClick?: (entry: Entry) => void;
   onToggleSelect: (entry: Entry) => void;
   onItemsKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onItemsFocus?: (e: React.FocusEvent<HTMLDivElement>) => void;
   handlersFor: (entry: MenuEntry) => EntryMenuHandlers;
   drag?: DragProps;
 }) {
@@ -3040,6 +3076,7 @@ function ListView({
       aria-label="Documents"
       className="glass"
       onKeyDown={onItemsKeyDown}
+      onFocus={onItemsFocus}
       style={{
         overflow: "hidden",
       }}
@@ -3054,6 +3091,7 @@ function ListView({
             <EntryContextMenu key={e.folder.id} entry={entry} handlers={handlers}>
               <VaultRow
                 data-entry-id={e.folder.id}
+                tabIndex={e.folder.id === activeId ? 0 : -1}
                 name={e.folder.name}
                 kind="fold"
                 version={null}
@@ -3082,6 +3120,7 @@ function ListView({
           <EntryContextMenu key={e.file.id} entry={entry} handlers={handlers}>
             <VaultRow
               data-entry-id={e.file.id}
+              tabIndex={e.file.id === activeId ? 0 : -1}
               fileId={e.file.id}
               name={e.file.name}
               kind={kind}
