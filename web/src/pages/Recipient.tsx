@@ -277,6 +277,7 @@ function PasswordGate({
         value={password}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Password"
+        aria-label="Password"
         disabled={submitting}
         aria-invalid={wrongPwd || undefined}
         style={{

@@ -24,7 +24,8 @@ type State =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "answered"; answer: string; citations: AskCitation[] }
-  | { kind: "empty" };
+  | { kind: "empty" }
+  | { kind: "error" };
 
 export function AskPanel({
   query,
@@ -55,7 +56,10 @@ export function AskPanel({
             : { kind: "empty" },
         );
       } catch {
-        if (!controller.signal.aborted) setState({ kind: "idle" });
+        // A real failure (not an abort from the user typing on) should say so —
+        // silently dropping back to `idle` hid the panel and looked like the
+        // question was ignored.
+        if (!controller.signal.aborted) setState({ kind: "error" });
       }
     }, 350);
     return () => {
@@ -106,6 +110,17 @@ export function AskPanel({
           }}
         >
           Reading your documents…
+        </p>
+      ) : state.kind === "error" ? (
+        <p
+          role="alert"
+          style={{
+            margin: 0,
+            fontSize: "var(--text-sm)",
+            color: "var(--muted)",
+          }}
+        >
+          Couldn't answer just now — try again in a moment.
         </p>
       ) : (
         <>
