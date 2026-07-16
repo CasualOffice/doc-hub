@@ -377,6 +377,31 @@ async fn workspace_scoped_hold_covers_all_files() {
 }
 
 #[tokio::test]
+async fn absurd_min_age_days_is_rejected() {
+    let (state, db) = fixture().await;
+    let app = router(state);
+    let cookie = sign_in(&app, "admin", "hunter2").await;
+    let ws = personal_ws(&db, "admin").await;
+
+    // A huge min_age_days would later panic `now - Duration::days(...)` on every
+    // purge check; the policy setter must reject it up front.
+    let r = app
+        .clone()
+        .oneshot(auth_req(
+            "POST",
+            "/api/retention",
+            &cookie,
+            Some("application/json"),
+            Body::from(format!(
+                r#"{{"workspace_id":"{ws}","min_age_days":9223372036854775807}}"#
+            )),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
 async fn retention_blocks_purge_but_allows_trash() {
     let (state, db) = fixture().await;
     let app = router(state);
