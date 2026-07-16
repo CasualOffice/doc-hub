@@ -6,6 +6,29 @@ All notable changes to Doc-Hub land here. Format follows
 
 ## [Unreleased]
 
+Post-0.0.1 production-hardening sweep — resilience, resource bounding, and
+failure traceability. No behaviour change for well-formed requests.
+
+### Added
+
+- **Request correlation id.** Every response carries an `X-Request-Id` header — a sane upstream id when a proxy sets one (so a trace spans the hop), otherwise a freshly-minted ULID — and the same id appears on the access-log line. A user can quote it in a bug report; an operator can grep for it. Upstream ids over 128 chars are dropped so a direct client can't bloat every log line. The SPA captures it onto `ApiError.requestId` and appends `· ref <id>` to the full-page load-error surfaces.
+- **Load-error recovery ("Try again").** The Version history route + component, the File view, the Settings → Tokens list, and the Notes tree now render a retry affordance on a failed load instead of a dead-end error (or, for Notes, silently masquerading as an empty notebook).
+
+### Changed
+
+- **Access log: successful probes suppressed.** `/healthz`, `/readyz`, and `/metrics` no longer emit a log line on success (orchestrators/scrapers poll them every few seconds); a 5xx from a probe is still logged. Metrics counters are unaffected.
+- **Bounded graceful-shutdown drain.** After SIGTERM/SIGINT the server waits for in-flight requests up to a 25s cap (under the common 30s orchestrator grace period), so a single hung connection can't hold the process open until SIGKILL cuts everything.
+- **Note append no longer loads the whole tree.** Appending a note now runs a targeted sibling-keys query instead of loading the entire workspace note tree to compute the next order-key.
+
+### Fixed
+
+- **Handler panics return a structured 500** instead of dropping the connection with no response; the panic is logged and the server keeps serving.
+- **Unknown `/api/*` routes return a JSON 404** instead of the SPA's HTML shell, so a programmatic client gets a parseable error.
+- **Untrusted expiry + text inputs are bounded** on share, invitation, legal-hold, and retention creation. Absurd numeric expiries (e.g. `i64::MAX`) that would panic the date arithmetic are rejected with a 4xx; oversized passwords/reasons are capped.
+- **Share-link redirect no longer panics** on a malformed `Location` header — it routes to the existing 500 path.
+- **In-memory limiter maps are reaped.** The AI/upload rate limiters and the sign-in brute-force throttle periodically evict idle buckets, so their maps don't grow unbounded on a long-running multi-user instance.
+- **Retention `min_age_days` is capped** (~100 years) at write time and defensively clamped at read time, preventing a purge-check panic from a huge stored value.
+
 ## [0.0.1] - 2026-07-16
 
 First tagged release and first published container image
