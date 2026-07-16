@@ -79,6 +79,30 @@ pub const UCN_CSP: &str = "sandbox; default-src 'none'";
 pub const REFERRER_POLICY: &str = "strict-origin-when-cross-origin";
 pub const PERMISSIONS_POLICY: &str = "camera=(), microphone=(), geolocation=(), interest-cohort=()";
 
+/// Cross-Origin-Opener-Policy for the **app** origin. Isolates the app's
+/// browsing-context group so a cross-origin page can't retain a `window`
+/// handle to it (XS-Leak / tab-napping hardening).
+///
+/// `same-origin-allow-popups` — NOT the plain `same-origin` used on the inert
+/// user-content origin (`raw.rs`). The app runs interactive auth; if any flow
+/// opens a login popup that reports back via `window.opener`, plain
+/// `same-origin` would sever that handle. The `-allow-popups` variant keeps
+/// popups this document opens working while still isolating *inbound*
+/// cross-origin openers, which is where the XS-Leak risk lives. We intentionally
+/// do **not** pair this with COEP (`require-corp`) — that would demand every
+/// cross-origin subresource (Google's Material Symbols font, the collab
+/// handshake) advertise CORP/CORS, which they don't reliably, and would break
+/// the SPA. Cross-origin *isolation* is therefore off by design; this is
+/// browsing-context isolation only.
+pub const COOP_APP: &str = "same-origin-allow-popups";
+
+/// Cross-Origin-Resource-Policy for the **app** origin. `same-site` lets
+/// same-site subdomains (typically the collab server, e.g.
+/// `collab.example.org` alongside `app.example.org`) reference app resources,
+/// while blocking cross-*site* embedding of them (Spectre-adjacent hardening).
+/// Matches the user-content origin's CORP value.
+pub const CORP_APP: &str = "same-site";
+
 /// HSTS for the app origin — two years, subdomains, preload-eligible (docs/
 /// research/06-security.md §11). Emitted **only in production**: it pins HTTPS,
 /// so sending it in a local http dev session would wedge the browser onto a

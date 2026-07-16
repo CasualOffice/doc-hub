@@ -336,6 +336,19 @@ async fn app_origin_carries_strict_csp() {
         .unwrap();
     assert!(csp.contains("frame-ancestors 'none'"));
     assert!(csp.contains("default-src 'self'"));
+
+    // The app origin is symmetrically hardened with the user-content origin:
+    // it isolates its browsing-context group and resources cross-origin. COOP
+    // is the `-allow-popups` variant (interactive auth may open a login popup),
+    // where the user-content origin uses plain `same-origin`.
+    assert_eq!(
+        r.headers().get("cross-origin-opener-policy").unwrap(),
+        "same-origin-allow-popups"
+    );
+    assert_eq!(
+        r.headers().get("cross-origin-resource-policy").unwrap(),
+        "same-site"
+    );
 }
 
 #[tokio::test]
