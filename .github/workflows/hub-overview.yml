@@ -1,0 +1,39 @@
+name: Sync Docker Hub overview
+
+# Pushes `.docker/README.md` to the Docker Hub repo's overview (long
+# description) + short description. The release workflow already does this as
+# its final step, but that runs only on a version tag and is skipped if an
+# earlier step fails (e.g. a GitHub API blip after the image is already
+# pushed). This lets us refresh the Hub page on demand — no new release, no
+# image rebuild — and also auto-syncs whenever the source README changes.
+#
+# Uses the same `release` environment secrets as release.yml:
+#   DOCKERHUB_USERNAME  — Docker Hub namespace (image is <username>/dochub)
+#   DOCKERHUB_TOKEN     — access token with write scope
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".docker/README.md"
+      - ".github/workflows/hub-overview.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  overview:
+    name: push Docker Hub description
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Docker Hub overview
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/dochub
+          short-description: "Encrypted, tamper-evident self-hosted document hub — a single Rust binary."
+          readme-filepath: ./.docker/README.md
