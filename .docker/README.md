@@ -6,8 +6,8 @@ Documents go in; a permanent, hash-chained, content-searchable history comes out
 
 A single Rust binary. SQLite by default, Postgres for production. Runs as a non-root user.
 
-- **Source & docs:** https://github.com/CasualOffice/drive
-- **Architecture:** https://github.com/CasualOffice/drive/blob/main/docs/ARCHITECTURE.md
+- **Source & docs:** https://github.com/CasualOffice/doc-hub
+- **Architecture:** https://github.com/CasualOffice/doc-hub/blob/main/docs/ARCHITECTURE.md
 - **License:** Apache-2.0
 
 ---

@@ -7,7 +7,7 @@
 `.docx` · `.xlsx` · `.pdf` · `.md` · `.txt` · `.csv` · `.json` · `.yaml` — edited natively in the browser, versioned forever, encrypted at rest, searchable by content.
 
 [![Status](https://img.shields.io/badge/status-0.0.1_released-brightgreen)](./CHANGELOG.md)
-[![CI](https://img.shields.io/github/actions/workflow/status/CasualOffice/drive/ci.yml?branch=main&label=CI)](./.github/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/CasualOffice/doc-hub/ci.yml?branch=main&label=CI)](./.github/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?logo=rust)](https://www.rust-lang.org/)
 

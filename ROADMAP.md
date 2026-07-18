@@ -2,7 +2,7 @@
 
 The public, phase-gated plan for turning this repo from **Casual Drive** into **Doc-Hub**. Read [`VISION.md`](./VISION.md) for the why, [`PLAN.md`](./PLAN.md) for the detailed scope + acceptance tests, and [`PIPELINE.md`](./PIPELINE.md) for shipped-vs-deferred status.
 
-Live tracking is on the **[Doc-Hub Roadmap project board](https://github.com/orgs/CasualOffice/projects/1)**; discussion and requests go to **[Discussions](https://github.com/CasualOffice/drive/discussions)**.
+Live tracking is on the **[Doc-Hub Roadmap project board](https://github.com/orgs/CasualOffice/projects/1)**; discussion and requests go to **[Discussions](https://github.com/CasualOffice/doc-hub/discussions)**.
 
 ## How we ship
 
@@ -46,4 +46,4 @@ The live web demo will be revamped alongside the **server + web-app** implementa
 
 ## Feedback shapes this
 
-The order above is a default, not a contract. If your use-case needs Phase 4 compliance before Phase 3 search, say so in [Discussions](https://github.com/CasualOffice/drive/discussions) — priorities move with real needs.
+The order above is a default, not a contract. If your use-case needs Phase 4 compliance before Phase 3 search, say so in [Discussions](https://github.com/CasualOffice/doc-hub/discussions) — priorities move with real needs.
