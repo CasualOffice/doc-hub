@@ -2,7 +2,7 @@
 
 > Deep, per-capability build plan for the Drive → **encrypted, tamper-evident document registry** revamp.
 > Complements [`PIPELINE.md`](../PIPELINE.md) (phase-level status) and [`PLAN.md`](../PLAN.md) (phase scope) with a **capability-by-capability pipeline**: goal, milestone checklist, acceptance tests, and dependencies for each.
-> **Status: Phase 0 foundations shipped; first releases cut.** The registry core is complete and tested — mandatory at-rest encryption (boot refuses without a master key), immutable hash-chained version history, documents-only ingest, and two-origin isolation. Published as `casualoffice/dochub` (multi-arch `linux/amd64` + `linux/arm64`): **v0.0.1** (2026-07-16) is live; **v0.0.2** (the post-0.0.1 hardening sweep) is tagged. Later phases (native co-editing, full compliance workflows) continue.
+> **Status: Phase 0 foundations shipped; first releases cut.** The registry core is complete and tested — mandatory at-rest encryption (boot refuses without a master key), immutable hash-chained version history, documents-only ingest, and two-origin isolation. Published as `casualoffice/dochub` (multi-arch `linux/amd64` + `linux/arm64`): **v0.0.1** (2026-07-16) and **v0.0.2** (2026-07-18, the post-0.0.1 hardening sweep) are live. Later phases (native co-editing, full compliance workflows) continue.
 
 **Status legend:** `Shipped` (merged + tested on `main`) · `Partial` (real code, incomplete) · `In progress` (active this phase) · `Design-only` (spec exists, no code) · `Not-started` (nothing yet).
 
