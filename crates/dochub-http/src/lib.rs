@@ -151,7 +151,16 @@ async fn readyz(State(s): State<HttpState>) -> impl IntoResponse {
 /// the Prometheus norm; only non-sensitive aggregates are exposed. Counters are
 /// fed by the [`access_log`] middleware, so they reflect real served traffic.
 async fn metrics_endpoint(State(s): State<HttpState>) -> impl IntoResponse {
-    let body = metrics::render(s.uptime_seconds());
+    let mut body = metrics::render(s.uptime_seconds());
+    // Background-job SLIs are DB-derived; read them at scrape time. A DB blip
+    // must not fail the scrape — skip the job gauges and still serve HTTP metrics.
+    match dochub_db::JobsRepo::new(&s.db)
+        .queue_stats(time::OffsetDateTime::now_utc())
+        .await
+    {
+        Ok(stats) => body.push_str(&metrics::render_job_gauges(&stats)),
+        Err(e) => tracing::warn!(error = %e, "metrics: job queue stats unavailable"),
+    }
     (
         [(
             axum::http::header::CONTENT_TYPE,

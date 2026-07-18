@@ -153,6 +153,31 @@ pub(crate) fn render(uptime_seconds: u64) -> String {
     metrics().expose(uptime_seconds)
 }
 
+/// Render background-job SLIs as Prometheus gauges. Unlike the HTTP counters
+/// (process-global atomics) these are read from the DB at scrape time and passed
+/// in, so `/metrics` reflects the live queue. Lets an operator alert on backlog
+/// (`queued`), stuck work (`oldest_queued_age_seconds`), or parked failures
+/// (`failed`) before they surface as stale search results.
+pub(crate) fn render_job_gauges(stats: &dochub_db::QueueStats) -> String {
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "# HELP dochub_jobs Background jobs by state.\n\
+         # TYPE dochub_jobs gauge\n\
+         dochub_jobs{{state=\"queued\"}} {}\n\
+         dochub_jobs{{state=\"running\"}} {}\n\
+         dochub_jobs{{state=\"failed\"}} {}\n\
+         # HELP dochub_jobs_oldest_queued_age_seconds Age of the oldest queued job (processing lag); 0 when the queue is empty.\n\
+         # TYPE dochub_jobs_oldest_queued_age_seconds gauge\n\
+         dochub_jobs_oldest_queued_age_seconds {}\n",
+        stats.queued,
+        stats.running,
+        stats.failed,
+        stats.oldest_queued_age_secs.unwrap_or(0),
+    );
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +198,26 @@ mod tests {
         assert!(text.contains("dochub_uptime_seconds 42"));
         // Every series carries a HELP + TYPE line (4 now, incl. the histogram).
         assert_eq!(text.matches("# TYPE").count(), 4);
+    }
+
+    #[test]
+    fn job_gauges_render_expected_series() {
+        let stats = dochub_db::QueueStats {
+            queued: 7,
+            running: 2,
+            failed: 1,
+            oldest_queued_age_secs: Some(42),
+        };
+        let text = render_job_gauges(&stats);
+        assert!(text.contains("dochub_jobs{state=\"queued\"} 7"));
+        assert!(text.contains("dochub_jobs{state=\"running\"} 2"));
+        assert!(text.contains("dochub_jobs{state=\"failed\"} 1"));
+        assert!(text.contains("dochub_jobs_oldest_queued_age_seconds 42"));
+        assert_eq!(text.matches("# TYPE").count(), 2);
+        // Empty queue → lag renders 0, not a missing series.
+        let empty = render_job_gauges(&dochub_db::QueueStats::default());
+        assert!(empty.contains("dochub_jobs_oldest_queued_age_seconds 0"));
+        assert!(empty.contains("dochub_jobs{state=\"queued\"} 0"));
     }
 
     #[test]

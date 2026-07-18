@@ -72,6 +72,8 @@ Scrape `GET /metrics`. Series exposed (all non-sensitive aggregates):
 - `dochub_http_requests_in_flight` — concurrency gauge.
 - `dochub_http_request_duration_seconds` — latency histogram (`_bucket`/`_sum`/`_count`), 5 ms–10 s buckets.
 - `dochub_uptime_seconds` — process uptime (resets on restart → deploy detector).
+- `dochub_jobs{state="queued|running|failed"}` — background-job queue gauges (indexing + embedding). `queued` = backlog depth; `failed` = jobs parked after exhausting retries (need attention).
+- `dochub_jobs_oldest_queued_age_seconds` — age of the oldest queued job = processing lag; `0` when the queue is drained. The earliest signal that indexing is falling behind (before search results go stale).
 
 Starter alert expressions (PromQL):
 
@@ -83,6 +85,12 @@ sum(rate(dochub_http_requests_total{class="5xx"}[5m]))
 # p99 latency over 1s (5m window)
 histogram_quantile(0.99,
   sum(rate(dochub_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+
+# Indexing/embedding backlog is stuck — oldest queued job waiting >10m
+dochub_jobs_oldest_queued_age_seconds > 600
+
+# Jobs are dying — anything parked in the failed state needs a look
+dochub_jobs{state="failed"} > 0
 
 # Readiness flapping / dependency down — alert on the probe from your prober.
 ```
