@@ -37,6 +37,29 @@ use crate::ingest::DocKind;
 /// body and bounds memory on a pathological input.
 const MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
 
+/// Cap on the *decompressed* size of a single OOXML zip entry. `read_to_end`
+/// inflates a compressed entry fully into memory before we ever look at it, so
+/// an unbounded read is a zip-bomb OOM: a few-KB `.docx`/`.xlsx` whose inner
+/// part is a highly-compressible gigabyte would exhaust the worker. 64 MiB is
+/// far beyond any real document part yet bounds a hostile one. See
+/// [`read_capped`].
+const MAX_ZIP_ENTRY_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Cap on the PDF bytes handed to `pdf-extract`. The parser's memory/CPU can
+/// amplify well beyond the input on a crafted file, and `catch_unwind` traps
+/// only panics — not runaway allocation. Above this we index title-only rather
+/// than risk the worker; 64 MiB covers essentially every real document PDF.
+const MAX_PDF_BYTES: usize = 64 * 1024 * 1024;
+
+/// Read at most `cap` bytes from `r` (a decompressing zip entry), so a
+/// zip-bomb entry can't inflate unbounded into memory. A truncated part still
+/// yields useful indexable text; a read error yields what was read so far.
+fn read_capped<R: Read>(r: R, cap: u64) -> Vec<u8> {
+    let mut buf = Vec::new();
+    let _ = r.take(cap).read_to_end(&mut buf);
+    buf
+}
+
 /// Errors from text extraction. None carry document content.
 #[derive(Debug, Error)]
 pub enum ExtractError {
@@ -99,6 +122,14 @@ pub fn extract_text(kind: DocKind, bytes: &[u8]) -> Result<String, ExtractError>
 /// panic must degrade to a title-only index, never crash the task. Truncation
 /// to [`MAX_TEXT_BYTES`] is applied by the caller.
 fn pdf_text(bytes: &[u8]) -> Result<String, ExtractError> {
+    // Bound the input: the parser's memory/CPU can amplify well beyond the file
+    // on a crafted PDF, and catch_unwind traps panics but not runaway
+    // allocation. Oversized PDFs index title-only rather than risk the worker.
+    if bytes.len() > MAX_PDF_BYTES {
+        return Err(ExtractError::Pdf(format!(
+            "PDF exceeds {MAX_PDF_BYTES}-byte extraction cap; indexed title-only"
+        )));
+    }
     let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         pdf_extract::extract_text_from_mem(bytes)
     }));
@@ -136,13 +167,10 @@ fn ooxml_text(bytes: &[u8], exact_parts: &[&str], slides: bool) -> Result<String
 
     let mut out = String::new();
     for name in wanted {
-        let Ok(mut entry) = archive.by_name(&name) else {
+        let Ok(entry) = archive.by_name(&name) else {
             continue; // absent part (e.g. no shared strings) — skip.
         };
-        let mut xml = Vec::new();
-        if entry.read_to_end(&mut xml).is_err() {
-            continue;
-        }
+        let xml = read_capped(entry, MAX_ZIP_ENTRY_BYTES);
         append_xml_text(&xml, &mut out);
         if out.len() >= MAX_TEXT_BYTES {
             break;
@@ -168,11 +196,9 @@ fn xlsx_text(bytes: &[u8]) -> Result<String, ExtractError> {
     let mut out = String::new();
 
     // Shared strings first (the common case). All text nodes are body text.
-    if let Ok(mut entry) = archive.by_name("xl/sharedStrings.xml") {
-        let mut xml = Vec::new();
-        if entry.read_to_end(&mut xml).is_ok() {
-            append_xml_text(&xml, &mut out);
-        }
+    if let Ok(entry) = archive.by_name("xl/sharedStrings.xml") {
+        let xml = read_capped(entry, MAX_ZIP_ENTRY_BYTES);
+        append_xml_text(&xml, &mut out);
     }
 
     // Inline strings from each worksheet — `<t>` elements only.
@@ -185,13 +211,11 @@ fn xlsx_text(bytes: &[u8]) -> Result<String, ExtractError> {
         if out.len() >= MAX_TEXT_BYTES {
             break;
         }
-        let Ok(mut entry) = archive.by_name(&name) else {
+        let Ok(entry) = archive.by_name(&name) else {
             continue;
         };
-        let mut xml = Vec::new();
-        if entry.read_to_end(&mut xml).is_ok() {
-            append_element_text(&xml, &mut out, b"t");
-        }
+        let xml = read_capped(entry, MAX_ZIP_ENTRY_BYTES);
+        append_element_text(&xml, &mut out, b"t");
     }
 
     Ok(collapse_ws(&out))
@@ -444,6 +468,27 @@ mod tests {
             "inline string missing: {text:?}"
         );
         assert!(!text.contains("4242"), "numeric cell leaked: {text:?}");
+    }
+
+    #[test]
+    fn read_capped_bounds_the_decompressed_stream() {
+        // A stream inflating to 1000 bytes with a 100-byte cap yields 100 — the
+        // whole thing never lands in memory (the zip-bomb defense).
+        let out = read_capped(Cursor::new(vec![b'a'; 1000]), 100);
+        assert_eq!(out.len(), 100);
+        // Under the cap, everything is read.
+        let out = read_capped(Cursor::new(vec![b'b'; 50]), 100);
+        assert_eq!(out.len(), 50);
+    }
+
+    #[test]
+    fn oversized_pdf_is_indexed_title_only() {
+        // A PDF past the extraction cap returns a Pdf error → caller title-only.
+        let big = vec![0u8; MAX_PDF_BYTES + 1];
+        assert!(matches!(
+            extract_text(DocKind::Pdf, &big),
+            Err(ExtractError::Pdf(_))
+        ));
     }
 
     #[test]
