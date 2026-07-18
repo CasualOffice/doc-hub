@@ -1,6 +1,15 @@
-//! `/raw/{token}` on the user-content origin. Verifies the HMAC token
-//! (issued by `Storage::signed_get` for fs/memory backends) and streams the
-//! requested bytes with the documented security headers.
+//! `/raw/{token}` on the user-content origin. Verifies the HMAC token and
+//! streams the requested bytes with the documented security headers.
+//!
+//! Two token shapes flow through here:
+//! - **`share:{file_id}`** — a file-capability token minted by the share path
+//!   after its expiry/password gates ([`share::download_share`]). We resolve the
+//!   file, decrypt the head version server-side (the server holds the keys), and
+//!   stream the plaintext. Object storage holds only the AES-GCM blob, so this
+//!   decrypt step is the whole point — a bucket-direct URL can't do it
+//!   (finding #9).
+//! - **a bare storage key** — a legacy self-minted signed URL; read as-is with
+//!   no decryption. Retained for backward compatibility during rollout.
 
 use axum::{
     body::Body,
@@ -8,6 +17,7 @@ use axum::{
     http::{header, header::HeaderName, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
 };
+use dochub_db::FileRepo;
 use dochub_storage::StorageError;
 use futures::TryStreamExt;
 use thiserror::Error;
@@ -48,12 +58,18 @@ pub(crate) async fn raw_get(
     if method != "GET" {
         return Err(RawError::MethodNotAllowed);
     }
+
+    // File-capability token → decrypt + serve the file's current plaintext.
+    if let Some(file_id) = key.strip_prefix("share:") {
+        return serve_share(&state, file_id).await;
+    }
+
+    // Legacy bare-key signed URL → stream the stored bytes as-is (no decrypt).
     let (meta, stream) = state
         .storage
         .get(&key, None)
         .await
         .map_err(|_| RawError::NotFound)?;
-
     let content_type = meta
         .content_type
         .as_deref()
@@ -61,19 +77,56 @@ pub(crate) async fn raw_get(
         .to_string();
     let filename = key.rsplit('/').next().unwrap_or("file").to_string();
     let body = Body::from_stream(stream.map_err(|e| std::io::Error::other(e.to_string())));
+    Ok(document_response(&content_type, &filename, body))
+}
 
+/// Decrypt the head version of `file_id` server-side and serve its plaintext.
+/// The capability token has already been verified by the caller; this is the
+/// sole authorization on the cookieless user-content origin. Read-only — a
+/// recipient's download never mutates history (uses `read_head_readonly`).
+async fn serve_share(state: &HttpState, file_id: &str) -> Result<Response, RawError> {
+    let file = FileRepo::new(&state.db)
+        .find_by_id(file_id)
+        .await
+        .map_err(|_| RawError::NotFound)?;
+    // A trashed file's shares don't resolve (mirrors `download_share`).
+    if file.trashed_at.is_some() {
+        return Err(RawError::NotFound);
+    }
+
+    let bytes = crate::files::version_registry(state)
+        .read_head_readonly(file_id)
+        .await
+        .map_err(|_| RawError::NotFound)?;
+
+    let content_type = file
+        .content_type
+        .as_deref()
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    Ok(document_response(
+        &content_type,
+        &file.name,
+        Body::from(bytes),
+    ))
+}
+
+/// Build the `/raw` response with the isolated-content security headers: the
+/// content type, an `attachment` disposition (never inline — the origin is
+/// untrusted), `nosniff`, CORP, and COOP.
+fn document_response(content_type: &str, filename: &str, body: Body) -> Response {
     let mut r = Response::new(body);
     let h = r.headers_mut();
     h.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&content_type)
+        HeaderValue::from_str(content_type)
             .unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
     h.insert(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_str(&format!(
             "attachment; filename*=UTF-8''{}",
-            url_encode(&filename)
+            url_encode(filename)
         ))
         .unwrap_or(HeaderValue::from_static("attachment")),
     );
@@ -93,7 +146,7 @@ pub(crate) async fn raw_get(
         crate::headers::H_COOP,
         HeaderValue::from_static("same-origin"),
     );
-    Ok(r)
+    r
 }
 
 fn map_storage(e: StorageError) -> RawError {

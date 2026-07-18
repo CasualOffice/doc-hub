@@ -154,11 +154,11 @@ Each H2 carries **Rule / Why / How / Phase**. The threat model, OWASP walkthroug
 
 ---
 
-## 9. Signed URL tokens for fs / memory share serving
+## 9. Signed capability tokens for share serving (all backends)
 
-**Rule.** When `usercontent_origin` serves share-link bytes from an fs/memory backend, the `/raw/{token}` URL carries an HMAC-signed token: payload = `{key, exp, method}`, verified in constant time.
+**Rule.** A share download **always** routes through `/raw/{token}` on the user-content origin — **never** a native presigned bucket URL, on any backend (review #9). Object storage holds only the AES-GCM ciphertext, so a bucket-direct URL would hand the recipient undecryptable bytes; only the app has the per-workspace DEK. After the app-origin share gate (expiry + password) passes, `share::download_share` mints a short-lived (120 s) HMAC **file-capability** token — payload `{method="GET", "share:{file_id}", exp}`, verified in constant time (`Storage::mint_get_token` / `verify_token`). `raw::raw_get` verifies it, resolves the file, and decrypts the head version server-side (`Registry::read_head_readonly` → workspace DEK → `get_blob`), streaming the plaintext with `attachment` + `nosniff` + sandbox CSP + CORP + COOP. The read is side-effect-free — a recipient's download never commits or mutates history. Legacy bare-key signed tokens (payload `{method, key, exp}`) still stream stored bytes as-is for backward compatibility during rollout. Covered by `tests/share.rs::share_download_serves_decrypted_plaintext` (byte round-trip + at-rest-ciphertext proof) and `::raw_rejects_invalid_token`.
 
-**Why.** The user-content origin must not read session cookies (origin separation) and must not accept unauthenticated reads. Signed URLs let the app origin grant time-limited access without sharing session state.
+**Why.** The user-content origin must not read session cookies (origin separation) and must not accept unauthenticated reads. The capability token is the sole authorization on that origin: it grants time-limited access to exactly one file's plaintext without sharing session state, and — because the app decrypts in-process — it works identically across fs/memory and S3/MinIO/R2/B2 without ever exposing ciphertext or writing plaintext to storage.
 
 **How.** Sign `hmac-sha256(secret, "{key}|{exp_unix}|{method}")` → base64url, verify with `subtle::ConstantTimeEq`. TTL 5 min default. S3/MinIO/R2/B2 use native pre-signed GETs where available. Share bytes are decrypted server-side before serving (the user-content origin still gets plaintext of a document the share explicitly exposes — the share is the authorisation).
 
