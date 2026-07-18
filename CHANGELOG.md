@@ -11,6 +11,10 @@ All notable changes to Doc-Hub land here. Format follows
 - **PDF content search.** PDF text is now extracted into the content index (`dochub-core::extract` via the pure-Rust `pdf-extract`), so full-text search, semantic search/RAG, AI summaries, and PII detection all cover `.pdf` — previously PDFs were indexed by title/extension only. Extraction runs behind `catch_unwind` (it parses untrusted upload bytes on the background worker, so a malformed PDF degrades to title-only, never a crashed task). Scanned/image-only PDFs carry no text layer and remain title-only (no OCR). `.xlsm` stays opaque by policy.
 - **Spreadsheet inline-string coverage.** `.xlsx` extraction now reads per-worksheet **inline strings** (`<is><t>` cells) in addition to the shared-strings table, so spreadsheets written by streaming writers (which skip the shared table) are searchable by content. A `<t>`-scoped worksheet pass captures cell text without indexing cell numbers or formulas.
 
+### Fixed
+
+- **Extraction is bounded against decompression bombs.** Text extraction ran `read_to_end` on each OOXML zip entry with no cap, so a few-KB `.docx`/`.xlsx` whose inner part inflates to gigabytes could OOM the indexing worker. Each entry is now read through a 64 MiB cap, and PDFs above 64 MiB are indexed title-only (the `pdf-extract` parser can amplify memory/CPU beyond the input, and `catch_unwind` traps only panics). Found by an adversarial code-review pass.
+
 ## [0.0.2] - 2026-07-18
 
 Post-0.0.1 production-hardening sweep — resilience, resource bounding, failure
