@@ -18,6 +18,7 @@ mod authz;
 mod collab;
 mod compliance;
 mod content_search;
+mod csrf;
 mod diff;
 mod direct_upload;
 mod embedding;
@@ -323,6 +324,11 @@ fn app_origin_router(state: HttpState) -> Router {
             H_HSTS,
             state.config.is_prod.then(|| HeaderValue::from_static(HSTS)),
         ))
+        // CSRF: reject cross-origin state-changing requests that ride a session
+        // cookie (audit finding — the minted double-submit token was never
+        // verified). Inner to host-dispatch, so it only guards app-origin
+        // requests; see `csrf::guard` for the Origin/Referer policy.
+        .layer(middleware::from_fn_with_state(state.clone(), csrf::guard))
         // Host-header dispatch (421 on wrong origin) — outermost so even
         // wrong-host requests get rejected before any other middleware fires.
         .layer(middleware::from_fn_with_state(
