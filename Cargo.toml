@@ -169,5 +169,11 @@ too_many_lines              = "allow"
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
-panic = "abort"
+# MUST stay "unwind" (the default): the server relies on catching panics to
+# stay up. `dochub-core::extract` wraps the untrusted PDF parser in
+# `catch_unwind` (a crafted PDF panics pdf-extract), and the HTTP layer wraps
+# handlers in tower's `CatchPanicLayer`. Both are no-ops under `panic = "abort"`,
+# which would turn any parser/handler panic into a whole-process crash — a
+# poison-pill DoS (upload one bad PDF → worker abort → re-claim → crash loop).
+panic = "unwind"
 opt-level = 3

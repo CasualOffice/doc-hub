@@ -280,7 +280,11 @@ Release profile (root `Cargo.toml`):
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
-panic = "abort"
+panic = "unwind"  # NOT "abort": the server catches panics to survive them —
+                  # `dochub-core::extract` traps the untrusted PDF parser with
+                  # `catch_unwind`, and the HTTP layer uses tower `CatchPanicLayer`.
+                  # `abort` makes both no-ops → one crafted PDF crashes the whole
+                  # process (poison-pill DoS). Keep the default unwind.
 ```
 
 Multi-stage Dockerfile with `cargo-chef` (≈5x faster rebuilds):
