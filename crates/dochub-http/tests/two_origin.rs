@@ -272,6 +272,100 @@ async fn sign_in_sets_session_cookie_and_returns_csrf() {
     assert!(body_s.contains("csrf_token"));
 }
 
+/// Sign in as admin and return the raw session-cookie pair (`dh_sid=…`).
+async fn sign_in_cookie(app: &axum::Router) -> String {
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/sign-in")
+                .header("host", APP)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"username":"admin","password":"hunter2"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    r.headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+async fn sign_out(app: &axum::Router, cookie: &str, origin: Option<&str>) -> StatusCode {
+    let mut b = Request::builder()
+        .method("POST")
+        .uri("/api/auth/sign-out")
+        .header("host", APP)
+        .header("cookie", cookie);
+    if let Some(o) = origin {
+        b = b.header("origin", o);
+    }
+    app.clone()
+        .oneshot(b.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn csrf_blocks_cross_origin_cookie_mutation() {
+    // A cookie-authenticated state-changing request whose Origin is NOT the app
+    // origin is a forgery — refused with 403 before the handler runs.
+    let app = router(fixture().await);
+    let cookie = sign_in_cookie(&app).await;
+    let st = sign_out(&app, &cookie, Some("https://evil.example")).await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn csrf_allows_same_origin_cookie_mutation() {
+    // Same Origin as the app → the guard passes and sign-out proceeds.
+    let app = router(fixture().await);
+    let cookie = sign_in_cookie(&app).await;
+    let st = sign_out(&app, &cookie, Some("http://drive.test")).await;
+    assert_ne!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn csrf_allows_when_origin_absent() {
+    // No Origin/Referer → not a browser cross-site request (a forgery always
+    // carries Origin). Allowed, so header-free API/test clients keep working.
+    let app = router(fixture().await);
+    let cookie = sign_in_cookie(&app).await;
+    let st = sign_out(&app, &cookie, None).await;
+    assert_ne!(st, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn csrf_ignores_safe_methods() {
+    // A GET with a cookie and a hostile Origin is never a mutation → allowed.
+    let app = router(fixture().await);
+    let cookie = sign_in_cookie(&app).await;
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/me")
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("origin", "https://evil.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(r.status(), StatusCode::FORBIDDEN);
+}
+
 #[tokio::test]
 async fn sign_in_with_wrong_password_returns_401() {
     let app = router(fixture().await);
