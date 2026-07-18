@@ -115,9 +115,9 @@ quick-xml         = "0.38"
 # (lopdf + font-table glyph decode) — no native lib, so it cross-compiles for
 # the amd64+arm64 release image. Pulls `ttf-parser` (unmaintained-but-not-vuln,
 # RUSTSEC-2026-0192 ignored in deny.toml); runs behind catch_unwind since it
-# parses untrusted upload bytes. `lopdf` is a dev-dep to synthesize test PDFs.
+# parses untrusted upload bytes. The PDF test uses a checked-in fixture rather
+# than a PDF-authoring dev-dep (which pulled an unmaintained proc-macro tree).
 pdf-extract       = "0.12"
-lopdf             = "0.42"
 
 # Server-side image-only thumbnail decoder (pipeline §5.4). PDF / video
 # decoders are deferred to v0.2 — they require a sandboxed subprocess

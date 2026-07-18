@@ -360,61 +360,15 @@ mod tests {
         assert!(supports(DocKind::Docx));
     }
 
-    /// Build a one-page PDF whose text layer is `text`, using `lopdf` (dev-dep).
-    fn pdf_with_text(text: &str) -> Vec<u8> {
-        use lopdf::content::{Content, Operation};
-        use lopdf::{dictionary, Document, Object, Stream, StringFormat};
-
-        let mut doc = Document::with_version("1.5");
-        let pages_tree_id = doc.new_object_id();
-        let font_id = doc.add_object(dictionary! {
-            "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
-        });
-        let resources_id = doc.add_object(dictionary! {
-            "Font" => dictionary! { "F1" => font_id },
-        });
-        let content = Content {
-            operations: vec![
-                Operation::new("BT", vec![]),
-                Operation::new("Tf", vec![Object::Name(b"F1".to_vec()), 24.into()]),
-                Operation::new("Td", vec![72.into(), 720.into()]),
-                Operation::new(
-                    "Tj",
-                    vec![Object::String(
-                        text.as_bytes().to_vec(),
-                        StringFormat::Literal,
-                    )],
-                ),
-                Operation::new("ET", vec![]),
-            ],
-        };
-        let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
-        let page_id = doc.add_object(dictionary! {
-            "Type" => "Page",
-            "Parent" => pages_tree_id,
-            "Contents" => content_id,
-            "Resources" => resources_id,
-            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
-        });
-        doc.objects.insert(
-            pages_tree_id,
-            Object::Dictionary(dictionary! {
-                "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1,
-            }),
-        );
-        let catalog_id = doc.add_object(dictionary! {
-            "Type" => "Catalog", "Pages" => pages_tree_id,
-        });
-        doc.trailer.set("Root", catalog_id);
-        let mut buf = Vec::new();
-        doc.save_to(&mut buf).unwrap();
-        buf
-    }
+    /// A one-page PDF whose text layer reads "Encrypted document registry".
+    /// Generated once with `lopdf` (see git history) and checked in as a fixture
+    /// so the test needs no PDF-authoring dev-dependency (which dragged in an
+    /// unmaintained proc-macro sub-tree).
+    const HELLO_PDF: &[u8] = include_bytes!("testdata/hello.pdf");
 
     #[test]
     fn pdf_extracts_text_layer() {
-        let bytes = pdf_with_text("Encrypted document registry");
-        let text = extract_text(DocKind::Pdf, &bytes).unwrap();
+        let text = extract_text(DocKind::Pdf, HELLO_PDF).unwrap();
         assert!(
             text.contains("Encrypted document registry"),
             "extracted: {text:?}"
