@@ -445,7 +445,7 @@ fn help_text() -> String {
          \x20   dochub --help | -h                      print this help and exit\n\
          \n\
          Configuration is via DOCHUB_* environment variables. See\n\
-         https://github.com/CasualOffice/drive/blob/main/.docker/README.md",
+         https://github.com/CasualOffice/doc-hub/blob/main/.docker/README.md",
         v = env!("CARGO_PKG_VERSION"),
     )
 }

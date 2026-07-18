@@ -218,7 +218,7 @@ function seedBlobs() {
           `4. Two-origin model — app bytes and file bytes never share an\n` +
           `   origin, so a malicious upload can't talk back to the SPA.\n\n` +
           `> Self-host the real thing from\n` +
-          `> [github.com/CasualOffice/drive](https://github.com/CasualOffice/drive).\n`,
+          `> [github.com/CasualOffice/doc-hub](https://github.com/CasualOffice/doc-hub).\n`,
       ],
       { type: "text/markdown" },
     ),
@@ -706,7 +706,7 @@ export async function demoRequest<T>(path: string, init: RequestInit & { json?: 
       git_sha: "demo",
       built_at: new Date().toISOString(),
       license: "Apache-2.0",
-      repository: "https://github.com/CasualOffice/drive",
+      repository: "https://github.com/CasualOffice/doc-hub",
       storage_backend: "Browser (localStorage)",
       db_backend: "Browser (localStorage)",
       signed_url_ttl_secs: 300,

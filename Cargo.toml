@@ -30,7 +30,7 @@ version      = "0.0.2"
 edition      = "2021"
 license      = "Apache-2.0"
 authors      = ["Casual Drive contributors"]
-repository   = "https://github.com/CasualOffice/drive"
+repository   = "https://github.com/CasualOffice/doc-hub"
 homepage     = "https://casualoffice.org"
 rust-version = "1.85"
 

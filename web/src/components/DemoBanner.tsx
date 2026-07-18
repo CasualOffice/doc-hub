@@ -28,7 +28,7 @@ export function DemoBanner() {
       <span>
         <strong style={{ fontWeight: 600 }}>Demo</strong> · in-memory only · changes reset on reload ·{" "}
         <a
-          href="https://github.com/CasualOffice/drive"
+          href="https://github.com/CasualOffice/doc-hub"
           target="_blank"
           rel="noreferrer"
           style={{ color: "var(--violet-600)", textDecoration: "underline", textDecorationThickness: 1 }}
