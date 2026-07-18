@@ -9,7 +9,9 @@ use axum::{
 };
 use dochub_auth::{hash_password, AuthState};
 use dochub_core::{Backend, Config};
-use dochub_db::{Db, FileRepo, NewFile, NewUser, UserRepo, WorkspaceKind, WorkspaceRepo};
+use dochub_db::{
+    Db, FileRepo, NewFile, NewUser, Registry, UserRepo, WorkspaceDeks, WorkspaceKind, WorkspaceRepo,
+};
 use dochub_http::{router, HttpState};
 use dochub_storage::Storage;
 use dochub_wopi::WopiState;
@@ -629,6 +631,150 @@ async fn list_and_revoke_shares() {
     let bytes = r.into_body().collect().await.unwrap().to_bytes();
     let list: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(list["shares"].as_array().unwrap().len(), 1);
+}
+
+/// The crux of finding #9: a share download must return the file's DECRYPTED
+/// plaintext, not the AES-GCM ciphertext sitting in object storage. Commits a
+/// real encrypted version, creates a share, follows the download redirect to
+/// `/raw` on the user-content origin, and asserts the bytes equal the original
+/// plaintext. If `/raw` served the stored bytes without decrypting (the bug),
+/// this comparison fails.
+#[tokio::test]
+async fn share_download_serves_decrypted_plaintext() {
+    let state = fixture().await;
+    let oid = owner_id(&state).await;
+    let fid = seed_file(&state, &oid).await;
+
+    // Commit a known plaintext as an encrypted version, using the same DEKs the
+    // request path uses (config.master_kek), so `/raw` can decrypt it.
+    let ws = WorkspaceRepo::new(&state.db)
+        .list_for_user(&oid)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|w| matches!(w.kind, WorkspaceKind::Personal))
+        .unwrap()
+        .id;
+    let plaintext = b"the confidential contents of the shared document".to_vec();
+    let deks = WorkspaceDeks::new(state.db.clone(), state.config.master_kek.clone());
+    Registry::new(state.db.clone(), state.storage.clone(), deks)
+        .commit_version(&ws, &fid, &plaintext, &oid, "edit")
+        .await
+        .unwrap();
+
+    // Prove the bytes at rest are genuinely encrypted (so the round-trip below is
+    // real decryption, not a plaintext passthrough): the stored blob differs from
+    // the plaintext. read_plaintext is the raw read (no decryption); for a version
+    // blob it returns the ciphertext bytes as they sit on disk.
+    let head = dochub_db::FileVersionsRepo::new(&state.db)
+        .head(&fid)
+        .await
+        .unwrap()
+        .unwrap();
+    let at_rest = state
+        .storage
+        .read_plaintext(&head.storage_key)
+        .await
+        .unwrap();
+    assert_ne!(
+        at_rest, plaintext,
+        "the blob at rest must be ciphertext, not plaintext"
+    );
+
+    let app = router(state);
+    let cookie = sign_in(&app).await;
+
+    // Create the share.
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/files/{fid}/share"))
+                .header("host", APP)
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"permissions":"view"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::CREATED);
+    let body: Value =
+        serde_json::from_slice(&r.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let token = body["token"].as_str().unwrap().to_string();
+
+    // Download → 302 redirect to /raw on the user-content origin.
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/share/{token}/download"))
+                .header("host", APP)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::FOUND);
+    let location = r.headers().get("location").unwrap().to_str().unwrap();
+    let loc = Url::parse(location).unwrap();
+    assert_eq!(
+        loc.host_str(),
+        Some(UCN),
+        "download routes to /raw, not a bucket"
+    );
+    let raw_path = format!("{}?{}", loc.path(), loc.query().unwrap_or(""));
+
+    // Fetch /raw on the user-content origin.
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(raw_path.trim_end_matches('?'))
+                .header("host", UCN)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(
+        r.headers()
+            .get("content-disposition")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "attachment; filename*=UTF-8''secret.pdf"
+    );
+    let served = r.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(
+        served.as_ref(),
+        plaintext.as_slice(),
+        "/raw must serve decrypted plaintext, not stored ciphertext"
+    );
+}
+
+/// A tampered / unparseable `/raw` token is rejected (401), never served.
+#[tokio::test]
+async fn raw_rejects_invalid_token() {
+    let state = fixture().await;
+    let app = router(state);
+    let r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/raw/not-a-valid-token")
+                .header("host", UCN)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

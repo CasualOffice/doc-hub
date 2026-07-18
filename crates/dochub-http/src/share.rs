@@ -30,11 +30,10 @@ use dochub_authz::{Permission, ResourceRef};
 use dochub_db::{
     AuditRepo, FileRepo, FolderRepo, NewAuditEvent, NewShareLink, ShareLink, ShareLinkRepo,
 };
-use dochub_storage::SignedUrl;
 use serde::{Deserialize, Serialize};
 
 use crate::authz::gate;
-use crate::{files::storage_key, HttpState};
+use crate::HttpState;
 
 // ── Public DTOs ─────────────────────────────────────────────────────────
 
@@ -608,20 +607,19 @@ async fn download_share(
         return Err(ShareError::NotFound);
     }
 
-    let signed = s
+    // Mint a short-lived file-capability token and route through `/raw` on the
+    // user-content origin, which decrypts the bytes (finding #9). We never hand
+    // out a native presigned bucket URL: object storage holds only the AES-GCM
+    // ciphertext, so a bucket-direct download would serve undecryptable bytes.
+    // The token authorizes exactly this file's plaintext for 120s, and is minted
+    // only after the expiry/password gates above have passed.
+    let token = s
         .storage
-        .signed_get(&storage_key(&file_id), Duration::from_secs(120))
-        .await
+        .mint_get_token(&format!("share:{file_id}"), Duration::from_secs(120))
         .map_err(|e| ShareError::Internal(e.to_string()))?;
-
-    let target = match signed {
-        SignedUrl::Native { url, .. } => url.to_string(),
-        SignedUrl::Token { token, .. } => {
-            let mut base = s.config.usercontent_origin.clone();
-            base.set_path(&format!("/raw/{token}"));
-            base.to_string()
-        }
-    };
+    let mut base = s.config.usercontent_origin.clone();
+    base.set_path(&format!("/raw/{token}"));
+    let target = base.to_string();
 
     let _ = repo.touch(&link.id).await;
 

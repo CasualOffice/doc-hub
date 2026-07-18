@@ -71,3 +71,5 @@ coverage
 
 # --- Claude memory cache (lives outside the repo, but belt) ---
 .claude/cache
+# Agent worktrees are embedded git checkouts — never commit them.
+.claude/worktrees/

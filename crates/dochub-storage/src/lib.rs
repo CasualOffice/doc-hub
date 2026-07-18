@@ -331,6 +331,26 @@ impl Storage {
         }
     }
 
+    /// Mint an app-proxied GET token for `identifier`, **unconditionally** —
+    /// never a native presigned bucket URL. The share path uses this so a
+    /// download routes through `/raw`, where the app decrypts the bytes; handing
+    /// out a bucket-direct presigned URL would serve ciphertext, since object
+    /// storage holds only the AES-GCM blob (finding #9). `identifier` is an
+    /// opaque capability string (e.g. `share:{file_id}`), not necessarily a
+    /// storage key; it is rejected if it contains the payload delimiter (`\n`)
+    /// or a NUL so it can't forge extra token fields.
+    pub fn mint_get_token(
+        &self,
+        identifier: &str,
+        ttl: StdDuration,
+    ) -> Result<String, StorageError> {
+        if identifier.is_empty() || identifier.contains('\n') || identifier.contains('\0') {
+            return Err(StorageError::InvalidKey(identifier.to_string()));
+        }
+        let expires_at = time::OffsetDateTime::now_utc() + ttl;
+        Ok(self.mint_token(identifier, expires_at, "GET"))
+    }
+
     /// Verify a self-minted HMAC token. Returns `(key, method)` on success.
     pub fn verify_token(&self, token: &str) -> Result<(String, String), StorageError> {
         let bytes =

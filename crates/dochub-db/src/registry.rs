@@ -246,6 +246,24 @@ impl Registry {
         self.read_or_backfill(&workspace, file_id, author_id).await
     }
 
+    /// Read a file's current plaintext **without mutating history** — the share
+    /// download path (finding #9). Head present → resolve the workspace DEK and
+    /// `get_blob` the head version (decrypt); a legacy file with no head → read
+    /// its legacy plaintext blob directly and serve it, but do **not**
+    /// backfill-commit a v1. A share recipient's download must never write
+    /// history (contrast [`Registry::read_or_backfill_for_file`], which commits
+    /// a backfill v1 for legacy files). Idempotent and side-effect-free.
+    pub async fn read_head_readonly(&self, file_id: &str) -> Result<Vec<u8>, RegistryError> {
+        let versions = FileVersionsRepo::new(&self.db);
+        if let Some(head) = versions.head(file_id).await? {
+            let workspace = self.workspace_of(file_id).await?;
+            let dek = self.deks.get_or_create(&workspace).await?;
+            let key = StorageKey::from_stored(head.storage_key);
+            return Ok(self.storage.get_blob(&dek, &key).await?);
+        }
+        Ok(self.storage.read_plaintext(&legacy_key(file_id)).await?)
+    }
+
     /// [`Registry::commit_version`] for callers that don't carry the workspace
     /// in hand: resolves it from the file row before committing.
     pub async fn commit_for_file(
