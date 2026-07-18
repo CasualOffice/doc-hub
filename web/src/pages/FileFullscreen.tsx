@@ -918,15 +918,20 @@ function DetailsDrawer({
 
   return (
     <>
+      {/* Transparent click-catcher only — NOT a modal scrim. This is a side
+          panel that sits *alongside* the editor (Google-Docs style), so it must
+          NOT dim the document: `var(--bg-overlay)` here tinted the whole
+          viewport 50–62% dark, which read as the editor "shifting to dark mode"
+          whenever details opened. Click outside still closes; the editor stays
+          at its true light/dark. */}
       <div
         aria-hidden
         onClick={onClose}
         style={{
           position: "fixed",
           inset: 0,
-          background: "var(--bg-overlay)",
+          background: "transparent",
           zIndex: 90,
-          animation: "cd-details-fade 180ms ease-out",
         }}
       />
       <aside
