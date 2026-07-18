@@ -952,6 +952,55 @@ async fn jobs_retry_with_backoff_then_fail() {
 }
 
 #[tokio::test]
+async fn jobs_queue_stats_counts_states_and_lag() {
+    let db = fresh_db().await;
+    let jobs = JobsRepo::new(&db);
+
+    // Empty queue: all zero, no lag.
+    let empty = jobs
+        .queue_stats(time::OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert_eq!(empty, dochub_db::QueueStats::default());
+    assert_eq!(empty.oldest_queued_age_secs, None);
+
+    // Enqueue three; claim one (→ running); park one (→ failed).
+    for i in 0..3 {
+        jobs.enqueue(&NewJob {
+            kind: "index_file".into(),
+            payload: format!(r#"{{"file_id":"f{i}"}}"#),
+            max_attempts: Some(1),
+            run_after: None,
+        })
+        .await
+        .unwrap();
+    }
+    let now = time::OffsetDateTime::now_utc();
+    let running = jobs.claim_next(now).await.unwrap().unwrap();
+    let doomed = jobs.claim_next(now).await.unwrap().unwrap();
+    // max_attempts=1 → first failure parks it in `failed`.
+    jobs.mark_failed(&doomed.id, "boom", time::Duration::seconds(30))
+        .await
+        .unwrap();
+
+    // One left queued, one running, one failed.
+    let stats = jobs
+        .queue_stats(now + time::Duration::seconds(5))
+        .await
+        .unwrap();
+    assert_eq!(stats.queued, 1);
+    assert_eq!(stats.running, 1);
+    assert_eq!(stats.failed, 1);
+    // The lone queued job was created ~5s before the reference `now`.
+    let lag = stats
+        .oldest_queued_age_secs
+        .expect("a queued job → some lag");
+    assert!((4..=7).contains(&lag), "lag ~5s, got {lag}");
+
+    let _ = running; // keep it running (unclaimed cleanup not needed for the test)
+}
+
+#[tokio::test]
 async fn embeddings_replace_list_and_vector_roundtrip() {
     let db = fresh_db().await;
     let repo = EmbeddingRepo::new(&db);

@@ -109,6 +109,13 @@ async fn metrics_reflects_served_traffic() {
     // are counted (>= 1 each; other tests don't share this binary's globals).
     assert!(text.contains("dochub_http_requests_total{class=\"2xx\"}"));
     assert!(text.contains("dochub_uptime_seconds"));
+    // Background-job SLIs are present (DB-derived, empty queue → all zero).
+    assert!(
+        text.contains("dochub_jobs{state=\"queued\"} 0"),
+        "job gauges missing:\n{text}"
+    );
+    assert!(text.contains("dochub_jobs{state=\"failed\"} 0"));
+    assert!(text.contains("dochub_jobs_oldest_queued_age_seconds 0"));
     let count = |series: &str| -> u64 {
         text.lines()
             .find(|l| l.starts_with(series))

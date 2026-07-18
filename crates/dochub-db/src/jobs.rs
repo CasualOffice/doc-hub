@@ -53,6 +53,21 @@ pub struct Job {
     pub updated_at: time::OffsetDateTime,
 }
 
+/// Aggregate queue health for observability (`/metrics`). Cheap — two indexed
+/// aggregate reads, no per-job scan.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct QueueStats {
+    /// Jobs waiting to run — the backlog depth.
+    pub queued: i64,
+    /// Jobs a worker is currently executing.
+    pub running: i64,
+    /// Jobs parked after exhausting `max_attempts` — need operator attention.
+    pub failed: i64,
+    /// Seconds the oldest still-`queued` job has waited (by `created_at`), or
+    /// `None` when nothing is queued — the processing-lag SLI.
+    pub oldest_queued_age_secs: Option<i64>,
+}
+
 /// Fields a caller supplies to enqueue a job.
 #[derive(Debug, Clone)]
 pub struct NewJob {
@@ -138,6 +153,42 @@ impl<'a> JobsRepo<'a> {
             // Lost the race — try the next candidate.
         }
         Ok(None)
+    }
+
+    /// Aggregate queue health for `/metrics` (see [`QueueStats`]). `now` is
+    /// passed in (not read from the clock) so the caller controls the reference
+    /// point and the query stays deterministic in tests.
+    pub async fn queue_stats(&self, now: time::OffsetDateTime) -> Result<QueueStats, DbError> {
+        let mut stats = QueueStats::default();
+        let rows = sqlx::query(
+            &self
+                .db
+                .sql("SELECT state, COUNT(*) AS n FROM jobs GROUP BY state"),
+        )
+        .fetch_all(self.db.pool())
+        .await?;
+        for r in &rows {
+            let n: i64 = r.get("n");
+            match r.get::<String, _>("state").as_str() {
+                state::QUEUED => stats.queued = n,
+                state::RUNNING => stats.running = n,
+                state::FAILED => stats.failed = n,
+                _ => {}
+            }
+        }
+        // Age of the oldest queued job = processing lag. NULL (empty queue) → None.
+        let oldest: Option<String> = sqlx::query_scalar(
+            &self
+                .db
+                .sql("SELECT MIN(created_at) FROM jobs WHERE state='queued'"),
+        )
+        .fetch_one(self.db.pool())
+        .await?;
+        if let Some(created_s) = oldest {
+            let age = (now - parse_ts(created_s)?).whole_seconds().max(0);
+            stats.oldest_queued_age_secs = Some(age);
+        }
+        Ok(stats)
     }
 
     async fn next_candidate_id(&self, now_s: &str) -> Result<Option<String>, DbError> {
