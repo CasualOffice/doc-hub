@@ -29,7 +29,7 @@ A dedicated security + operability campaign hardened the released backend. Five 
 - **Observability:** background-job SLIs on `/metrics` — queue depth, running/failed counts, oldest-queued-age (processing lag) — with RUNBOOK alert rules (#222).
 - **Verification posture:** ~613 test fns; CI gate per PR = rustfmt + `clippy -Dwarnings` + workspace/postgres tests + playwright + `cargo audit` + `cargo deny` + docker build.
 
-**Still open (honest):** verified DNS-rebinding protection for BYO SSRF (needs socket-level IP pinning); Tantivy index-writer durability on SIGKILL (recoverable via idempotent reindex, undocumented); RUNBOOK backup/restore + KEK-rotation drill completeness; frontend state layer + UI primitives.
+**Still open (honest):** Tantivy index-writer durability on SIGKILL (recoverable via idempotent reindex, undocumented); frontend state layer + UI primitives. **Addressed since:** RUNBOOK backup/restore + zero-downtime KEK-rotation drill (#227); BYO SSRF DNS-rebinding residual — closed at the network layer via a **required** egress policy (RUNBOOK → *Network egress hardening*); an app-level socket resolver guard was evaluated and rejected as unverifiable-in-CI surgery on the storage data path (the guard blocks localhost, so the S3 happy path can't be smoke-tested) — network policy is the robust control and covers all egress (AI/OIDC/BYO), not just one client.
 
 ---
 

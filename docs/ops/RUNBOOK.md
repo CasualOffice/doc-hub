@@ -106,6 +106,33 @@ Every response carries an `X-Request-Id` header (a minted ULID when no upstream
 proxy sets one), echoed on the access-log line. When a user reports a failure,
 ask for that id and grep the logs for it.
 
+## Network egress hardening (required)
+
+The server makes **outbound** requests to operator- or user-influenced targets:
+BYO storage endpoints (`workspace_storage`), the AI provider, the OIDC IdP. That
+is an SSRF surface. The app enforces defense-in-depth at the application layer —
+`ssrf_guard`/`ssrf_guard_resolving` reject BYO endpoints that resolve to
+loopback/RFC1918/link-local/metadata IPs — but the **authoritative** control is
+network policy, because it covers *every* egress path and is immune to DNS
+rebinding (a hostname that passes the app's resolve-check, then re-resolves to an
+internal IP at connect time):
+
+- **Deny the app's egress to internal ranges** it never legitimately needs:
+  `169.254.0.0/16` (cloud metadata — the prime target), `127.0.0.0/8`,
+  `10/8`, `172.16/12`, `192.168/16`, `100.64/10`, IPv6 `::1`, `fc00::/7`,
+  `fe80::/10`. Allow only what it does need (your object store, IdP, AI endpoint).
+- **Cloud metadata specifically:** on AWS require **IMDSv2** and set the
+  instance **hop limit to 1** so a proxied/SSRF'd request can't reach
+  `169.254.169.254`; GCP/Azure have equivalents.
+- **Kubernetes:** a `NetworkPolicy` (or Cilium/Calico egress rule) restricting the
+  pod's egress to the DB, object store, IdP, and AI endpoint CIDRs.
+- **VM/bare metal:** an egress firewall (iptables/nftables/security-group) with
+  the same deny list.
+
+With this in place, the BYO SSRF residual (DNS rebinding) is closed at the
+network layer regardless of what a workspace owner configures. Treat it as a
+deploy prerequisite, not optional.
+
 ## Backups
 
 Three things must be captured for a complete, restorable backup:
